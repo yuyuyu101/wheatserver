@@ -223,7 +223,7 @@ struct list *createResHeader(struct client *client)
     char *connection = NULL;
     char buf[256];
     struct list *headers = createList();
-    if (wsgi_data->upgrade)
+    if (http_data->upgrade)
         connection = "upgrade";
     else if (http_data->keep_live)
         connection = "close";
@@ -366,6 +366,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
 {
     PyObject *status, *headers, *exc_info = NULL;
     struct wsgiData *data = self->client->app_private_data;
+    struct httpData *http_data = self->client->protocol_data;
 
     if (!PyArg_ParseTuple(args, "SO!|O:start_response", &status,
                 &PyList_Type, &headers,
@@ -412,7 +413,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             data->response_length = atoi(field);
         else if (!strcasecmp(field, "connection")){
             if (!strcasecmp(value, "upgrade"))
-                data->upgrade = 1;
+                http_data->upgrade = 1;
         }
         ret = dictAdd(data->headers, wstrDup(field), wstrDup(value));
         Py_DECREF(item);

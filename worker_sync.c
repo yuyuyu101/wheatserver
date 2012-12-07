@@ -20,8 +20,7 @@ void dispatchRequest(int fd, char *ip, int port)
             return ;
         }
     }while(ret != 1);
-    appCallback callback = applicantion->constructor(c);
-    void *response = callback(NULL, NULL);
+    applicantion->constructor(c);
     close(fd);
     freeClient(c);
 }

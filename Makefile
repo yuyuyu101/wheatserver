@@ -1,12 +1,13 @@
-WORKER_OBJECTS = wheatworker.o config.o net.o log.o wstr.o list.o dict.o hook.o sig.o networking.o worker_process.o worker_sync.o util.o protocol.o application.o http_parser.o
-SERVER_OBJECTS = wheatserver.o config.o net.o log.o wstr.o list.o dict.o hook.o sig.o networking.o worker_process.o worker_sync.o util.o protocol.o application.o http_parser.o
+WORKER_OBJECTS = wheatworker.o config.o net.o log.o wstr.o list.o dict.o hook.o sig.o networking.o worker_process.o worker_sync.o util.o protocol.o application.o http_parser.o wsgi.o
+SERVER_OBJECTS = wheatserver.o config.o net.o log.o wstr.o list.o dict.o hook.o sig.o networking.o worker_process.o worker_sync.o util.o protocol.o application.o http_parser.o wsgi.o
+LIBS = -L/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/config -lpython2.7
 
 all: wheatserver testso wheatworker
 
 wheatserver: $(SERVER_OBJECTS)
-	cc -o wheatserver $(SERVER_OBJECTS) -g
+	cc -o wheatserver $(SERVER_OBJECTS) -g $(LIBS)
 wheatserver.o: wheatserver.c wheatserver.h
-	cc -c wheatserver.c wheatserver.h -g
+	cc -c wheatserver.c wheatserver.h -g $(LIBS)
 config.o: config.c wheatserver.h
 	cc -c config.c wheatserver.h -g
 net.o: net.c net.h
@@ -31,8 +32,10 @@ util.o: util.c util.h
 	cc -c util.c util.h -g
 protocol.o: protocol.c wheatserver.h
 	cc -c protocol.c wheatserver.h -g
-application.o: application.c wheatserver.h
+application.o: application.c wheatserver.h wsgi.o
 	cc -c application.c wheatserver.h
+wsgi.o: wsgi.c wheatserver.h
+	cc -c wsgi.c wheatserver.h
 
 
 http_parser.o: http_parser.c http_parser.h
@@ -41,7 +44,7 @@ http_parser.o: http_parser.c http_parser.h
 ################
 
 wheatworker: $(WORKER_OBJECTS)
-	cc -o wheatworker $(WORKER_OBJECTS) -g
+	cc -o wheatworker $(WORKER_OBJECTS) -g $(LIBS)
 
 wheatworker.o: wheatserver.c wheatserver.h
 	cc -o wheatworker.o -c wheatserver.c -g -DWHEAT_DEBUG_WORKER
@@ -63,7 +66,7 @@ test_dict: dict.c dict.h
 	./test_dict
 
 testso: $(SERVER_OBJECTS)
-	cc $(SERVER_OBJECTS) -fPIC -shared -o tests/tests.so
+	cc $(SERVER_OBJECTS) -fPIC -shared -o tests/tests.so $(LIBS)
 
 clean:
 	rm $(SERVER_OBJECTS) wheatserver a.out
