@@ -1,5 +1,7 @@
 # Object files
 *.o
+*.pyc
+*.plist
 
 # Libraries
 *.lib
