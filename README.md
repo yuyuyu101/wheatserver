@@ -7,6 +7,7 @@ Install
 ===========
 
 shell > cd wheatserver
+
 shell > make
 
 Design
