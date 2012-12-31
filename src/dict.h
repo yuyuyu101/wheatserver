@@ -48,7 +48,7 @@ struct dictIterator {
 #define dictOwnValue(d) ((d)->type->valDup != NULL)
 
 #define dictFreeVal(d, entry) \
-    if ((d)->type->valDestructor) \
+    if ((d)->type->valDestructor && (entry)->v.val) \
         (d)->type->valDestructor((entry)->v.val)
 
 #define dictSetVal(d, entry, _val_) do { \
@@ -66,7 +66,7 @@ struct dictIterator {
 } while(0)
 
 #define dictFreeKey(d, entry) \
-    if ((d)->type->keyDestructor) \
+    if ((d)->type->keyDestructor && entry->key) \
         (d)->type->keyDestructor((entry)->key)
 
 #define dictCompareKeys(d, key1, key2) \

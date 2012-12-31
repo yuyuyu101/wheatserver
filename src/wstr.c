@@ -24,7 +24,7 @@ wstr wstrNewLen(const void *init, int init_len)
 wstr wstrNew(const void *init)
 {
     size_t len = (init == NULL) ? 0: strlen(init);
-    return wstrNewLen(init, len);
+    return wstrNewLen(init, (int)len);
 }
 
 wstr wstrEmpty()
@@ -39,23 +39,13 @@ wstr wstrMakeRoom(wstr s, size_t add_size)
         return s;
 
     int old_len = wstrlen(s);
-    int new_len = (old_len + add_size) * 2;
+    int new_len = (old_len + (int)add_size) * 2;
     if (new_len > MAX_STR)
         return s;
     struct wstrhd *new_sh = realloc(sh, sizeof(struct wstrhd)+new_len+1); // +1 for '\0'
     if (new_sh == NULL)
         return NULL;
     new_sh->free = new_len - old_len;
-    return new_sh->buf;
-}
-
-static wstr wstrRemoveFreeSpace(wstr s)
-{
-    struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));
-    struct wstrhd *new_sh = realloc(sh, sizeof(struct wstrhd)+sh->len+1); // +1 for '\0'
-    if (new_sh == NULL)
-        return NULL;
-    new_sh->free = 0;
     return new_sh->buf;
 }
 
@@ -128,7 +118,7 @@ void wstrFreeSplit(wstr *slots, int count)
 
 int wstrCmp(const wstr s1, const wstr s2)
 {
-    size_t l1, l2, minlen;
+    int l1, l2, minlen;
     int cmp;
     l1 = wstrlen(s1);
     l2 = wstrlen(s2);
@@ -142,7 +132,7 @@ int wstrCmp(const wstr s1, const wstr s2)
 
 int wstrCmpChars(const wstr s1, const char *s2, size_t len)
 {
-    wstr s = wstrNewLen(s2, len);
+    wstr s = wstrNewLen(s2, (int)len);
     if (s == NULL)
         return 1;
     return wstrCmp(s1, s);
@@ -171,7 +161,7 @@ wstr wstrCatLen(wstr s, const char *t, size_t tlen)
     if (new_s == NULL)
         return NULL;
     memcpy(new_s+slen, t, tlen);
-    wstrupdatelen(new_s, tlen+slen);
+    wstrupdatelen(new_s, (int)tlen+slen);
     return new_s;
 
 }
@@ -216,7 +206,6 @@ wstr wstrRange(wstr str, int left, int right)
 wstr wstrStrip(wstr str, const char *chars)
 {
     int left, right, len = wstrlen(str);
-    int i;
 
     left = 0;
     right = len - 1;

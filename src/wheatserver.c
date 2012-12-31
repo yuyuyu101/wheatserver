@@ -22,7 +22,6 @@ void initGlobalServerConfig()
     nonBlockCloseOnExecPipe(&Server.pipe_readfd, &Server.pipe_writefd);
 }
 
-
 void initServer()
 {
     if (Server.port != 0) {
@@ -31,6 +30,11 @@ void initServer()
             wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
             halt(1);
         }
+        if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+            wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+            halt(1);
+        }
+
         wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
     }
 }
@@ -46,7 +50,7 @@ static void removeWorker(struct workerProcess *worker)
 
 void wakeUp()
 {
-    int n;
+    ssize_t n;
     n = write(Server.pipe_writefd, ".", 1);
     if (n <= 0) {
         if (errno == EAGAIN || errno == EINTR)
@@ -76,7 +80,7 @@ void fakeSleep()
         wheatLog(WHEAT_WARNING, "fakeSleep() select failed: %s", strerror(errno));
         halt(1);
     } else {
-        int n;
+        ssize_t n;
         char buf[2];
         while ((n = read(Server.pipe_readfd, buf, 1)) <= 0){
             if (errno == EAGAIN || errno == EINTR)
@@ -153,7 +157,6 @@ void killWorker(struct workerProcess *worker, int sig)
 void reapWorkers()
 {
     int status, result;
-    pid_t pid;
 
     result = waitpid(-1, &status, WNOHANG);
     if (result == 0)
@@ -234,7 +237,7 @@ void stopWorkers(int graceful)
         sig = SIGQUIT;
     else
         sig = SIGTERM;
-    int seconds = time(NULL) + Server.graceful_timeout;
+    long seconds = time(NULL) + Server.graceful_timeout;
     while (seconds < time(NULL)) {
         killAllWorkers(sig);
         sleep(0.2);
@@ -270,7 +273,7 @@ int main(int argc, const char *argv[])
     if (argc >= 2) {
         int j = 1;
         wstr options = wstrEmpty();
-        if (argv[j][0] != '-' || argv[j][1] != '-')
+        if (argv[j][0] != '-' && argv[j][1] != '-')
             strncpy(Server.configfile_path, argv[j], WHEATSERVER_MAX_NAMELEN);
         while(j != argc) {
             if (argv[j][0] == '-' && argv[j][1] == '-') {
@@ -288,16 +291,11 @@ int main(int argc, const char *argv[])
     } else {
         wheatLog(WHEAT_NOTICE, "No config file specified, use the default settings");
     }
+    wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
+
+    printServerConfig();
 
     initServer();
     run();
-//    for (;;)
-//    {
-//        char ip[46]; //http://stackoverflow.com/questions/1076714/max-length-for-client-ip-address
-//        int port;
-//        int clifd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
-//        write(clifd, "hello from wheatserver", 23);
-//        close(clifd);
-//    }
     return 0;
 }

@@ -1,9 +1,11 @@
 #include "sig.h"
 #include "wheatserver.h"
 
-#define SIGNAL_COUNT 10
-static int signals[10] = {SIGHUP, SIGQUIT, SIGINT, SIGTERM,
-    SIGTTIN, SIGTTOU, SIGUSR1, SIGUSR2, SIGWINCH, SIGCHLD};
+#define SIGNAL_COUNT 11
+static int signals[11] = {SIGHUP, SIGQUIT, SIGINT, SIGTERM,
+    SIGTTIN, SIGTTOU, SIGUSR1, SIGUSR2, SIGWINCH, SIGCHLD,
+    SIGSEGV
+};
 
 /* int list */
 void *dupInt(void *ptr)
@@ -40,16 +42,20 @@ void initWorkerSignals()
     int i;
 
     for (i = 0; i < SIGNAL_COUNT; i++) {
+        act.sa_flags = 0;
         if (signals[i] == SIGQUIT)
             act.sa_handler = handleWorkerUsr1;
         else if (signals[i] == SIGTERM || signals[i] == SIGINT)
             act.sa_handler = handleWorkerAbort;
         else if (signals[i] == SIGUSR1)
             act.sa_handler = handleWorkerUsr1;
+        else if (signals[i] == SIGSEGV) {
+            act.sa_flags = (int)SA_RESETHAND;
+            act.sa_handler = handleSegv;
+        }
         else
             act.sa_handler = SIG_DFL;
         sigemptyset(&act.sa_mask);
-        act.sa_flags = 0;
         if (sigaction(signals[i], &act, &oact) != 0) {
             wheatLog(WHEAT_NOTICE, "sigaction error on %d : %s", signals[i], strerror(errno));
         }
@@ -95,6 +101,8 @@ void signalGenericHandle(int sig)
         handleUsr2();
     else if (sig == SIGWINCH)
         handleWinch();
+    else if (sig == SIGSEGV)
+        handleSegv();
 }
 
 void signalProc(int signal)
@@ -193,4 +201,11 @@ void handleWorkerAbort(int sig)
 void handleWorkerQuit(int sig)
 {
     WorkerProcess->alive = 0;
+}
+
+void handleSegv()
+{
+    wheat_stacktrace(1);
+    wheatLogRaw(WHEAT_NOTICE, "Signal SEGV received, core dump");
+    raise(SIGSEGV);
 }

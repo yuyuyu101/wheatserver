@@ -2,11 +2,8 @@
 
 struct workerProcess *WorkerProcess;
 
-extern void setupSync();
-extern void syncWorkerCron();
-
 struct worker workerTable[] = {
-    {"SyncWorker", setupSync, syncWorkerCron}
+    {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRecvData}
 };
 
 /* ========== Worker Area ========== */

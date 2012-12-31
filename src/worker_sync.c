@@ -3,13 +3,13 @@
 void dispatchRequest(int fd, char *ip, int port)
 {
     struct protocol *ptcol = spotProtocol(ip, port, fd);
-    struct app *applicantion = spotAppInterface();
-    struct client *c = initClient(fd, ip, port, ptcol, applicantion);
+    struct app *application = spotAppInterface();
+    struct client *c = initClient(fd, ip, port, ptcol, application);
     if (c == NULL)
         return ;
     int ret;
     do {
-        int n = readBulkFrom(fd, &c->buf);
+        int n = syncRecvData(fd, &c->buf);
         if (n == -1) {
             freeClient(c);
             return ;
@@ -20,21 +20,31 @@ void dispatchRequest(int fd, char *ip, int port)
             return ;
         }
     }while(ret != 1);
-    applicantion->constructor(c);
+    ret = application->constructor(c);
+    if (ret != 0) {
+        wheatLog(WHEAT_WARNING, "app faileds");
+    }
+    syncSendData(fd, &c->res_buf);
     close(fd);
     freeClient(c);
 }
 
 void syncWorkerCron()
 {
+    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+        halt(1);
+    }
+
     while (WorkerProcess->alive) {
         int fd, ret;
 
         char ip[46];
         int port;
         fd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
-        if (fd == NET_WRONG)
+        if (fd == NET_WRONG) {
             goto accepterror;
+        }
         if ((ret = wheatNonBlock(Server.neterr, fd)) == NET_WRONG)
             goto accepterror;
         if ((ret = wheatCloseOnExec(Server.neterr, fd)) == NET_WRONG)
@@ -42,7 +52,8 @@ void syncWorkerCron()
         dispatchRequest(fd, ip, port);
         continue;
 accepterror:
-        wheatLog(WHEAT_NOTICE, "workerCron: %s", Server.neterr);
+        if (errno != EAGAIN)
+            wheatLog(WHEAT_NOTICE, "workerCron: %s", Server.neterr);
         if (WorkerProcess->ppid != getppid()) {
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
             return ;
@@ -66,7 +77,16 @@ accepterror:
     }
 }
 
-/* SyncWorker entry */
 void setupSync()
 {
+}
+
+int syncSendData(int fd, wstr *buf)
+{
+    return writeBulkTo(fd, buf);
+}
+
+int syncRecvData(int fd, wstr *buf)
+{
+    return readBulkFrom(fd, buf);
 }

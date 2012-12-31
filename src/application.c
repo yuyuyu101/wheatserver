@@ -2,39 +2,49 @@
 #include "application.h"
 
 struct app appTable[] = {
-    {"wsgi", wsgiConstructor, NULL, initWsgiAppData, freeWsgiAppData}
+    {"wsgi", wsgiConstructor, initWsgi, deallocWsgi, initWsgiAppData, freeWsgiAppData}
 };
 
 struct app *spotAppInterface()
 {
+    static int is_init = 0;
+    if (!is_init) {
+        appTable[0].initApp();
+        is_init = 1;
+    }
     return &appTable[0];
 }
 
 
 /* ========== wsgi callback ========== */
+static PyObject *pApp = NULL;
 
 int wsgiConstructor(struct client *client)
 {
-    struct wsgiData *wsgi_data = client->app_private_data;
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
-    PyObject *env = create_environ(client);
     /* Create Request object, passing it the context as a CObject */
     PyObject *res = PyCObject_FromVoidPtr(client, NULL);
-    PyObject *start_resp, *result, *args;
+    PyObject *start_resp, *result, *args, *env;
     struct response *req_obj;
     if (res == NULL)
         goto out;
 
-    args = Py_BuildValue("(O)", res);
+    env = create_environ(client);
+    if (env == NULL)
+        goto out;
+
+    args = Py_BuildValue("(OO)", res, env);
     Py_DECREF(res);
     if (args == NULL)
         goto out;
 
+    /* env now owned by req_obj */
     req_obj = (struct response *)PyObject_CallObject((PyObject *)&responseType, args);
     Py_DECREF(args);
     if (req_obj == NULL)
         goto out;
+
     /* Get start_response callable */
     start_resp = PyObject_GetAttrString((PyObject *)req_obj, "start_response");
     if (start_resp == NULL)
@@ -46,15 +56,14 @@ int wsgiConstructor(struct client *client)
     if (args == NULL)
         goto out;
 
-    result = PyObject_CallObject(wsgi_data->pApp, args);
+    result = PyObject_CallObject(pApp, args);
     Py_DECREF(args);
     if (result != NULL) {
-        /* Handle the application response */
-        char *r;
-        if (!PyArg_ParseTuple(result, "s", &r))
-            return -1;
-        client->res_buf = wstrCat(client->res_buf, r);
         /* result now owned by req_obj */
+        req_obj->result = result;
+
+        /* Handle the application response */
+        wsgiSendResponse(req_obj, result); /* ignore return */
         wsgiCallClose(result);
     }
 
@@ -64,7 +73,7 @@ out:
 
         /* Display HTTP 500 error, if possible */
         if (req_obj == NULL || !req_obj->headers_sent)
-            sendResponse500((struct response *)res);
+            sendResponse500((struct response *)req_obj);
     }
 
     if (req_obj != NULL) {
@@ -86,12 +95,39 @@ void *initWsgiAppData()
     data->environ = NULL;
     data->response = NULL;
     data->status = 0;
+    data->status_msg = wstrEmpty();
     data->send = 0;
     data->response_length = 0;
-    data->headers = NULL;
+    data->headers = dictCreate(&wstrDictType);
     data->err = NULL;
 
-    PyObject *pModule, *pName = PyString_FromString("sample");
+    return data;
+}
+
+void freeWsgiAppData(void *data)
+{
+    struct wsgiData *d = data;
+    dictRelease(d->headers);
+    free(d);
+}
+
+void initWsgi()
+{
+    char *app_t;
+    char buf[WHEATSERVER_PATH_LEN];
+    struct configuration *conf;
+    Py_Initialize();
+
+    conf = getConfiguration("app-module-path");
+    snprintf(buf, WHEATSERVER_PATH_LEN, "import sys, os\n"
+            "sys.path.append(os.getcwd())\nsys.path.append('%s')", conf->target.ptr);
+    PyRun_SimpleString(buf);
+
+    init_wsgisup();
+    conf = getConfiguration("app-module-name");
+    app_t = conf->target.ptr;
+
+    PyObject *pModule, *pName = PyString_FromString(app_t);
     if (pName == NULL)
         goto err;
 
@@ -100,22 +136,24 @@ void *initWsgiAppData()
     if (pModule == NULL)
         goto err;
 
-    data->pApp = PyObject_GetAttrString(pModule, (char *)"sample");
+    conf = getConfiguration("app-name");
+    app_t = conf->target.ptr;
+    pApp = PyObject_GetAttrString(pModule, app_t);
     Py_DECREF(pModule);
-    if (data->pApp == NULL || !PyCallable_Check(data->pApp)) {
-        Py_XDECREF(data->pApp);
+    if (pApp == NULL || !PyCallable_Check(pApp)) {
+        Py_XDECREF(pApp);
         goto err;
     }
 
-    return data;
+    return ;
 err:
     PyErr_Print();
-    return NULL;
+    wheatLog(WHEAT_WARNING, "initWsgi failed");
+    halt(1);
 }
 
-void freeWsgiAppData(void *data)
+void deallocWsgi()
 {
-    struct wsgiData *d = data;
-    dictRelease(d->headers);
-    free(d);
+    Py_DECREF(pApp);
+    Py_Finalize();
 }

@@ -38,6 +38,8 @@ struct worker {
     char *name;
     void (*setup)();
     void (*cron)();
+    int (*sendData)(int fd, wstr *buf);
+    int (*recvData)(int fd, wstr *buf);
 };
 
 extern struct worker workerTable[];
@@ -45,7 +47,8 @@ extern struct worker workerTable[];
 struct app {
     char *name;
     int (*constructor)(struct client *);
-    void (*app)(struct client *);
+    void (*initApp)();
+    void (*deallocApp)();
     void *(*initAppData)();
     void (*freeAppData)(void *app_data);
 };
@@ -69,17 +72,25 @@ void initWorkerProcess(char *worker_name);
 struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
 void freeClient(struct client *);
 
-/* worker's job:
+/* worker's flow:
  * 0. setup filling workerProcess members
  * 1. accept connection and init client
  * 2. recognize protocol(http or pop3 etc...)
- * 3. read big bulk data from socket
+ * 3. read big bulk data from socket (sync or async)
  * 4. call protocol parser
  * 5. call app constructor and pass the protocol parsed data
- * 6. call app callback and get the response
- * 7. construct response and send to
+ * 6. construct response and send to
+ *
+ * 7. provide with send and receive api
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();
+
+
+/* Sync worker Area */
+void setupSync();
+void syncWorkerCron();
+int syncSendData(int, wstr *);
+int syncRecvData(int, wstr *);
 
 #endif

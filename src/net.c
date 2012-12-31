@@ -61,8 +61,11 @@ static int wheatGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *
     while(1) {
         fd = accept(s, sa, len);
         if (fd == -1) {
-            if (errno == EINTR || errno == EAGAIN)
+            if (errno == EINTR)
                 continue;
+            else if (errno == EAGAIN) {
+                return NET_WRONG;
+            }
             else {
                 wheatSetError(err, "accept: %s", strerror(errno));
                 return NET_WRONG;

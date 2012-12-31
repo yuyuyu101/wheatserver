@@ -15,7 +15,7 @@ void wheatLogRaw(int level, const char *msg) {
     if (rawmode) {
         fprintf(fp,"%s",msg);
     } else {
-        int off;
+        size_t off;
         struct timeval tv;
 
         gettimeofday(&tv,NULL);

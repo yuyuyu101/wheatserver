@@ -27,12 +27,7 @@
  */
 
 #include <python2.7/Python.h>
-
-typedef struct {
-    PyObject_HEAD
-        PyObject *filelike;
-    int blocksize;
-} FileWrapper;
+#include "application.h"
 
 static void FileWrapper_dealloc(FileWrapper *self)
 {
@@ -86,11 +81,11 @@ FileWrapper_iter(FileWrapper *self)
    on the file-like and emits strings according to the blocksize.
    This is only used for compatibility (the normal path uses
    wsgiSendFile()). */
-    static PyObject *
+static PyObject *
 FileWrapper_iternext(FileWrapper *self)
 {
     PyObject *pRead, *args, *data;
-    int len;
+    long len;
 
     if ((pRead = PyObject_GetAttrString(self->filelike, "read")) == NULL)
         return NULL;

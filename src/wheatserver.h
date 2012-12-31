@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <string.h>
 #include <sys/time.h>
 #include <sys/select.h>
@@ -14,6 +15,7 @@
 #include <assert.h>
 #include <time.h>
 
+#include "version.h"
 #include "wstr.h"
 #include "dict.h"
 #include "net.h"
@@ -39,7 +41,10 @@
 #define WHEAT_VERBOSE     1
 #define WHEAT_NOTICE      2
 #define WHEAT_WARNING     3
-#define WHEAT_LOG_RAW     4
+#define WHEAT_LOG_RAW     5
+
+#define VALIDATE_OK       0
+#define VALIDATE_WRONG    1
 
 /* This exists some drawbacks taht globalServer include server configuration
  * and master info */
@@ -75,6 +80,32 @@ struct globalServer {
 
 extern struct globalServer Server;
 
+#define CONFIG_GAIN_RESULT    0
+
+struct enumIdName {
+    int id;
+    char *name;
+};
+
+enum printFormat {
+    INT_FORMAT,
+    STRING_FORMAT,
+    ENUM_FORMAT
+};
+
+struct configuration {
+    char *name;
+    int args;
+    int (*validator)(struct configuration *conf,  const char *key, const char *value);
+    union {
+        int val;
+        char *ptr;
+        struct enumIdName *enum_ptr;
+    } target;
+    void *helper;
+    enum printFormat format;
+};
+
 /* restart */
 void reload();
 void reexec();
@@ -94,7 +125,9 @@ void halt(int exitcode);
 
 /* configuration */
 void loadConfigFile(const char *filename, char *options);
+void fillServerConfig();
 void printServerConfig();
+struct configuration *getConfiguration(const char *name);
 
 /* log */
 void wheatLogRaw(int level, const char *msg);

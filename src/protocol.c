@@ -1,7 +1,6 @@
 #include "wheatserver.h"
 #include "ctype.h"
 
-
 struct protocol protocolTable[] = {
     {"Http", parseHttp, initHttpData, freeHttpData}
 };
@@ -70,16 +69,16 @@ void parserForward(wstr value, wstr *h, wstr *p)
     char *left_side, *right_side;
     if ((left_side = strchr(remote_addr, '[')) != NULL &&
             (right_side = strchr(remote_addr, ']')) != NULL && left_side < right_side) {
-        host = wstrStrip(wstrNewLen(left_side+1, right_side-left_side-1), " ");
+        host = wstrStrip(wstrNewLen(left_side+1, (int)(right_side-left_side-1)), " ");
     } else if ((left_side = strchr(remote_addr, ':')) != NULL && strchr(left_side+1, ':') == NULL && left_side > remote_addr) {
-        host = wstrStrip(wstrNewLen(remote_addr, left_side-remote_addr), " ");
+        host = wstrStrip(wstrNewLen(remote_addr, (int)(left_side-remote_addr)), " ");
         wstrLower(host);
     } else
         host = wstrStrip(wstrDup(remote_addr), " ");
 
     left_side = strrchr(remote_addr, ']');
     if (left_side)
-        remote_addr = wstrRange(remote_addr, left_side-remote_addr+1, -1);
+        remote_addr = wstrRange(remote_addr, (int)(left_side-remote_addr+1), -1);
     right_side = strchr(remote_addr, ':');
     if (right_side && strchr(right_side+1, ':') == NULL)
         port = wstrNew(right_side+1);
@@ -99,7 +98,7 @@ int on_header_field(http_parser *parser, const char *at, size_t len)
     int ret;
     struct httpData *data = parser->data;
     wstr key;
-    if (!data->last_was_value) {
+    if (!data->last_was_value && data->last_entry != NULL) {
         key = data->last_entry->key;
         ret = dictDeleteNoFree(data->headers, key);
         if (ret == DICT_WRONG)
@@ -107,7 +106,7 @@ int on_header_field(http_parser *parser, const char *at, size_t len)
         key = wstrCatLen(key, at, len);
     }
     else
-        key = wstrNewLen(at, len);
+        key = wstrNewLen(at, (int)len);
     data->last_was_value = 0;
     data->last_entry = dictReplaceRaw(data->headers, key);
     if (data->last_entry == NULL)
@@ -124,7 +123,6 @@ int on_header_value(http_parser *parser, const char *at, size_t len)
     int ret;
     struct httpData *data = parser->data;
     wstr value;
-    data->last_was_value = 1;
 
     if (data->last_was_value) {
         value = dictGetVal(data->last_entry);
@@ -133,7 +131,9 @@ int on_header_value(http_parser *parser, const char *at, size_t len)
             return 1;
         value = wstrCatLen(value, at, len);
     } else
-        value = wstrNewLen(at, len);
+        value = wstrNewLen(at, (int)len);
+
+    data->last_was_value = 1;
     if (value == NULL)
         return 1;
     if (dictReplace(data->headers, dictGetKey(data->last_entry), value, NULL) == DICT_WRONG)
@@ -145,7 +145,7 @@ int on_header_value(http_parser *parser, const char *at, size_t len)
 int on_body(http_parser *parser, const char *at, size_t len)
 {
     struct httpData *data = parser->data;
-    data->body = wstrNewLen(at, len);
+    data->body = wstrCatLen(data->body, at, (int)len);
     if (data->body == NULL)
         return 1;
     else
@@ -168,7 +168,7 @@ int on_url(http_parser *parser, const char *at, size_t len)
     struct httpData *data = parser->data;
     struct http_parser_url parser_url;
     memset(&parser_url, 0, sizeof(struct http_parser_url));
-    int ret = http_parser_parse_url(at, len, 1, &parser_url);
+    int ret = http_parser_parse_url(at, len, 0, &parser_url);
     if (ret)
         return 1;
     data->query_string = wstrNewLen(at+parser_url.field_data[UF_QUERY].off, parser_url.field_data[UF_QUERY].len);
@@ -238,6 +238,7 @@ void *initHttpData()
     data->complete = 0;
     data->method = NULL;
     data->protocol_version = NULL;
+    data->body = wstrEmpty();
     if (data && data->parser)
         return data;
     return NULL;

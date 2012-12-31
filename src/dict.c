@@ -40,7 +40,7 @@ static unsigned long _dictNextPower(unsigned long size)
 
 static int _dictKeyIndex(struct dict *d, const void *key)
 {
-    unsigned int h, idx, table;
+    unsigned int h, idx;
     struct dictEntry *he;
 
     /* Expand the hash table if needed */
@@ -68,6 +68,8 @@ struct dict *dictCreate(struct dictType *type)
     d->sizemask = 0;
     d->used = 0;
     d->type = type;
+    d->table = NULL;
+    _dictExpandIfNeeded(d);
     return d;
 }
 
@@ -83,7 +85,11 @@ int dictExpand(struct dict *d, unsigned long size)
     /* Allocate the new hash table and initialize all pointers to NULL */
     d->size = realsize;
     d->sizemask = realsize-1;
-    d->table = realloc(d->table, realsize*sizeof(struct dictEntry*));
+    if (d->table)
+        d->table = realloc(d->table, realsize*sizeof(struct dictEntry*));
+    else
+        d->table = malloc(realsize*sizeof(struct dictEntry*));
+    memset(d->table, 0, realsize*sizeof(struct dictEntry*));
 
     return DICT_OK;
 }
@@ -100,6 +106,7 @@ struct dictEntry *dictAddRaw(struct dict *d, void *key)
 
     /* Allocate the memory and store the new entry */
     entry = malloc(sizeof(struct dictEntry));
+    memset(entry, 0, sizeof(*entry));
     entry->next = d->table[index];
     d->table[index] = entry;
     d->used++;
@@ -157,7 +164,7 @@ int dictReplace(struct dict *d, void *key, void *val, int *replace)
 struct dictEntry *dictFind(struct dict *d, const void *key)
 {
     struct dictEntry *he;
-    unsigned int h, idx, table;
+    unsigned int h, idx;
 
     if (d->size == 0) return NULL;
     h = dictHashKey(d, key);
@@ -176,7 +183,6 @@ static int dictGenericDelete(struct dict *d, const void *key, int nofree)
 {
     unsigned int h, idx;
     struct dictEntry *he, *prevHe;
-    int table;
 
     if (d->size == 0) return DICT_WRONG;
     h = dictHashKey(d, key);

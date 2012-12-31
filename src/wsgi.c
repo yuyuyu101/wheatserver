@@ -2,7 +2,7 @@
 #include "wheatserver.h"
 #include "application.h"
 
-int wsgiPutEnv(PyObject *dict, const void *key, const void *value)
+int envPutString(PyObject *dict, const void *key, const void *value)
 {
     PyObject *val;
     int ret;
@@ -31,7 +31,7 @@ static inline int toxdigit(int c)
 /* Unquote an escaped path */
 const char *wsgiUnquote(const char *s)
 {
-    int len = strlen(s);
+    size_t len = strlen(s);
     char *result, *t;
 
     if ((result = malloc(len + 1)) == NULL)
@@ -70,32 +70,31 @@ PyObject *default_environ(PyObject *env, struct httpData *http_data)
     Py_DECREF(pModule);
     if (wsgiStderr == NULL)
         return NULL;
-    if (wsgiPutEnv(env, "wsgi.errors", wsgiStderr))
+    if (PyDict_SetItemString(env, "wsgi.errors", wsgiStderr) != 0)
         return NULL;
+    Py_DECREF(wsgiStderr);
     if ((val = Py_BuildValue("(ii)", 1, 0)) == NULL)
         return NULL;
-    if (wsgiPutEnv(env, "wsgi.version", val))
+    if (PyDict_SetItemString(env, "wsgi.version", val) != 0)
         return NULL;
     Py_DECREF(val);
-    if (wsgiPutEnv(env, "wsgi.multiprocess", Server.worker_number > 1 ? Py_True: Py_False))
+    if (PyDict_SetItemString(env, "wsgi.multiprocess", Server.worker_number > 1 ? Py_True: Py_False) != 0)
         return NULL;
-    if (wsgiPutEnv(env, "wsgi.multithread", Py_False))
+    if (PyDict_SetItemString(env, "wsgi.multithread", Py_False) != 0)
         return NULL;
-    if (wsgiPutEnv(env, "wsgi.run_once", Py_False))
-        return NULL;
-
-    if (wsgiPutEnv(env, "wsgi.url_scheme", http_data->url_scheme))
+    if (PyDict_SetItemString(env, "wsgi.run_once", Py_False) != 0)
         return NULL;
 
-    //    if (wsgiPutEnv(env, "wsgi.file_wrapper", NULL))
-    //        return NULL;
-    if (wsgiPutEnv(env, "REQUEST_METHOD", http_data->method))
+    if (envPutString(env, "wsgi.url_scheme", http_data->url_scheme))
         return NULL;
 
-    if (wsgiPutEnv(env, "SERVER_PROTOCOL", http_data->protocol_version))
+    if (envPutString(env, "REQUEST_METHOD", http_data->method))
         return NULL;
 
-    if (wsgiPutEnv(env, "QUERY_STRING", http_data->query_string))
+    if (envPutString(env, "SERVER_PROTOCOL", http_data->protocol_version))
+        return NULL;
+
+    if (envPutString(env, "QUERY_STRING", http_data->query_string))
         return NULL;
 
     return env;
@@ -110,7 +109,7 @@ PyObject *create_environ(struct client *client)
     char buf[256];
     int result = 1;
 
-    if (environ)
+    if (!environ)
         return NULL;
     environ = default_environ(environ, http_data);
     if (environ == NULL)
@@ -144,29 +143,29 @@ PyObject *create_environ(struct client *client)
         if (!strcmp(buf, "HTTP_CONTENT_TYPE") ||
                 !strcmp(buf, "HTTP_CONTENT_LENGTH")) {
             /* Strip HTTP_ */
-            if (wsgiPutEnv(environ, &buf[5], value))
+            if (envPutString(environ, &buf[5], value))
                 goto cleanup;
         } else if (!strcmp(buf, "HTTP_X_FORWARDED_FOR")) {
-            if (wsgiPutEnv(environ, buf, value))
+            if (envPutString(environ, buf, value))
                 goto cleanup;
             parserForward(value, &host, &port);
         } else if (!strcmp(buf, "HTTP_EXPECT")) {
-            if (wsgiPutEnv(environ, buf, value))
+            if (envPutString(environ, buf, value))
                 goto cleanup;
             wstrLower(value);
             wstr expect = wstrNew("HTTP/1.1 100 Continue\r\n\r\n");
             if (!strcmp(value, "100-continue"))
-                writeBulkTo(client->clifd, &expect);
+                WorkerProcess->worker->sendData(client->clifd, &expect);
         } else if (!strcmp(buf, "HTTP_HOST")) {
-            if (wsgiPutEnv(environ, buf, value))
+            if (envPutString(environ, buf, value))
                 goto cleanup;
             server = wstrDup(value);
         } else if (!strcmp(buf, "HTTP_SCRIPT_NAME")) {
             script_name = wstrNew(value);
-            if (wsgiPutEnv(environ, "SCRIPT_NAME", ""))
+            if (envPutString(environ, "SCRIPT_NAME", ""))
                 goto cleanup;
         } else {
-            if (wsgiPutEnv(environ, buf, value))
+            if (envPutString(environ, buf, value))
                 goto cleanup;
         }
     }
@@ -176,34 +175,33 @@ PyObject *create_environ(struct client *client)
         snprintf(buf, 255, "%d", client->port);
         port = wstrNew(buf);
     }
-    if (wsgiPutEnv(environ, "REMOTE_ADDR", host))
+    if (envPutString(environ, "REMOTE_ADDR", host))
         goto cleanup;
-    if (wsgiPutEnv(environ, "REMOTE_PORT", port))
+    if (envPutString(environ, "REMOTE_PORT", port))
         goto cleanup;
     char *sep = strchr(server, ':');
     if (sep) {
-        if (wsgiPutEnv(environ, "SERVER_PORT", sep+1))
+        if (envPutString(environ, "SERVER_PORT", sep+1))
             goto cleanup;
-        server = wstrRange(server, sep-server+1, -1);
+        server = wstrRange(server, (int)(sep-server+1), -1);
     } else if (!strcmp(http_data->url_scheme, "HTTP")) {
-        if (wsgiPutEnv(environ, "SERVER_PORT", "80"))
+        if (envPutString(environ, "SERVER_PORT", "80"))
             goto cleanup;
     } else if (!strcmp(http_data->url_scheme, "HTTPS")) {
-        if (wsgiPutEnv(environ, "SERVER_PORT", "443"))
+        if (envPutString(environ, "SERVER_PORT", "443"))
             goto cleanup;
     }
-    if (wsgiPutEnv(environ, "SERVER_NAME", server))
+    if (envPutString(environ, "SERVER_NAME", server))
         goto cleanup;
 
     if ((req_uri = wsgiUnquote(http_data->path)) == NULL) {
         goto cleanup;
     }
-    if (wsgiPutEnv(environ, "PATH_INFO", req_uri))
+    if (envPutString(environ, "PATH_INFO", req_uri))
         goto cleanup;
     result = 0;
 
 cleanup:
-    Py_DECREF(environ);
     free((void *)req_uri);
     if (!host) {
         wstrFree(host);
@@ -212,10 +210,13 @@ cleanup:
 
     if (server)
         wstrFree(server);
-    if (result)
+    if (result) {
+        Py_DECREF(environ);
         return NULL;
+    }
     return environ;
 }
+
 struct list *createResHeader(struct client *client)
 {
     struct wsgiData *wsgi_data = client->app_private_data;
@@ -262,22 +263,28 @@ static int wsgiSendHeaders(struct response *self)
 {
     struct client *client = self->client;
     struct wsgiData *wsgi_data = client->app_private_data;
+    int totallen, sendlen, len;
+    char buf[256];
 
     if (self->headers_sent)
         return 0;
     struct list *headers = createResHeader(client);
-    struct dictIterator *iter = dictGetIterator(wsgi_data->headers);
-    struct dictEntry *entry = NULL;
-    char buf[256];
-    while (entry = dictNext(iter)) {
-        snprintf(buf, 255, "%s: %s\r\n", (char *)dictGetKey(entry), (char *)dictGetVal(entry));
-        if (appendToListTail(headers, wstrNew(buf)) == NULL)
-            goto cleanup;
+    if (wsgi_data->headers) {
+        struct dictIterator *iter = dictGetIterator(wsgi_data->headers);
+        struct dictEntry *entry = NULL;
+        while ((entry = dictNext(iter)) != NULL) {
+            snprintf(buf, 255, "%s: %s\r\n", (char *)dictGetKey(entry), (char *)dictGetVal(entry));
+            if (appendToListTail(headers, buf) == NULL) {
+                freeList(headers);
+                dictReleaseIterator(iter);
+                return -1;
+            }
+        }
     }
 
     struct listIterator *liter = listGetIterator(headers, START_HEAD);
     struct listNode *node = NULL;
-    while (node = listNext(liter)) {
+    while ((node = listNext(liter)) != NULL) {
         client->res_buf = wstrCat(client->res_buf, listNodeValue(node));
         if (client->res_buf == NULL)
             goto cleanup;
@@ -285,10 +292,19 @@ static int wsgiSendHeaders(struct response *self)
     client->res_buf = wstrCat(client->res_buf, "\r\n");
     if (client->res_buf == NULL)
         goto cleanup;
+
+    sendlen = wstrlen(client->res_buf);
+    totallen = 0;
+    while (totallen < sendlen) {
+        if ((len = WorkerProcess->worker->sendData(client->clifd, &client->res_buf)) < 0)
+            goto cleanup;
+        totallen += len;
+    }
+    wheatLog(WHEAT_DEBUG, "response header: %s", client->res_buf);
+    client->res_buf = wstrRange(client->res_buf, totallen, -1);
     self->headers_sent = 1;
 
 cleanup:
-    dictReleaseIterator(iter);
     freeListIterator(liter);
     freeList(headers);
     return 0;
@@ -301,31 +317,43 @@ void responseClear(struct response *self)
     tmp = self->headers;
     self->headers = NULL;
     Py_XDECREF(tmp);
+
+    tmp = self->result;
+    self->result = NULL;
+    Py_XDECREF(tmp);
+
+    tmp = self->env;
+    self->env = NULL;
+    Py_XDECREF(tmp);
+
+    tmp = self->input;
+    self->input = NULL;
+    Py_XDECREF(tmp);
 }
 
 void wsgiCallClose(PyObject *result)
 {
-  PyObject *type, *value, *traceback;
-  PyObject *pClose, *args, *ret;
+    PyObject *type, *value, *traceback;
+    PyObject *pClose, *args, *ret;
 
-  /* Save exception state */
-  PyErr_Fetch(&type, &value, &traceback);
+    /* Save exception state */
+    PyErr_Fetch(&type, &value, &traceback);
 
-  if (PyObject_HasAttrString(result, "close")) {
-    pClose = PyObject_GetAttrString(result, "close");
-    if (pClose != NULL) {
-      args = PyTuple_New(0);
-      if (args != NULL) {
-	ret = PyObject_CallObject(pClose, args);
-	Py_DECREF(args);
-	Py_XDECREF(ret);
-      }
-      Py_DECREF(pClose);
+    if (PyObject_HasAttrString(result, "close")) {
+        pClose = PyObject_GetAttrString(result, "close");
+        if (pClose != NULL) {
+            args = PyTuple_New(0);
+            if (args != NULL) {
+                ret = PyObject_CallObject(pClose, args);
+                Py_DECREF(args);
+                Py_XDECREF(ret);
+            }
+            Py_DECREF(pClose);
+        }
     }
-  }
 
-  /* Restore exception state */
-  PyErr_Restore(type, value, traceback);
+    /* Restore exception state */
+    PyErr_Restore(type, value, traceback);
 }
 
 static void responseDealloc(struct response *self)
@@ -340,8 +368,10 @@ static PyObject * responseNew(PyTypeObject *type, PyObject *args, PyObject *kwds
 
     self = (struct response *)type->tp_alloc(type, 0);
     if (self != NULL) {
-
         self->headers = NULL;
+        self->result = NULL;
+        self->env = NULL;
+        self->input = NULL;
         self->headers_sent = 0;
     }
 
@@ -351,13 +381,28 @@ static PyObject * responseNew(PyTypeObject *type, PyObject *args, PyObject *kwds
 /* Constructor. Accepts the context CObject as its sole argument. */
 static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *context_obj, *args2;
+    PyObject *context_obj, *args2, *env, *body_obj;
+    struct httpData *http_data;
 
-    if (!PyArg_ParseTuple(args, "O!", &PyCObject_Type, &context_obj))
+    if (!PyArg_ParseTuple(args, "O!O!", &PyCObject_Type, &context_obj, &PyDict_Type, &env))
         return -1;
 
     self->client = PyCObject_AsVoidPtr(context_obj);
 
+    // Build InputStream Object
+    http_data = self->client->protocol_data;
+    body_obj = PyCObject_FromVoidPtr(http_data->body, NULL);
+    if ((args2 = Py_BuildValue("(OOi)", self, body_obj, wstrlen(http_data->body))) == NULL)
+        return -1;
+    self->input = PyObject_CallObject((PyObject *)&InputStream_Type, args2);
+    Py_DECREF(args2);
+    if (self->input == NULL)
+        return -1;
+
+    // Add More WSGI Variable To Env
+    self->env = env;
+    if (PyDict_SetItemString(env, "wsgi.input", self->input) != 0)
+        return -1;
     return 0;
 }
 
@@ -367,6 +412,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     PyObject *status, *headers, *exc_info = NULL;
     struct wsgiData *data = self->client->app_private_data;
     struct httpData *http_data = self->client->protocol_data;
+    const char *status_p;
 
     if (!PyArg_ParseTuple(args, "SO!|O:start_response", &status,
                 &PyList_Type, &headers,
@@ -387,14 +433,17 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             return NULL;
         }
     }
-    else if (data->status != 0 || data->headers != NULL) {
+    else if (data->status != 0) {
         data->err = "headers already set";
         return NULL;
     }
 
     /* TODO validation of status and headers */
-    if (!PyArg_ParseTuple(status, "i", &data->status))
+    if ((status_p = PyString_AsString(status)) == NULL)
         return NULL;
+
+    data->status = (int)strtol(status_p, NULL, 10);
+    data->status_msg = wstrNew(&status_p[4]);
 
     PyObject *iterator = PyObject_GetIter(headers);
     PyObject *item;
@@ -404,18 +453,21 @@ static PyObject * startResponse(struct response *self, PyObject *args)
         return NULL;
     }
 
-    while (item = PyIter_Next(iterator)) {
+    while ((item = PyIter_Next(iterator)) != NULL) {
         char *field, *value;
         int ret;
-        if (!PyArg_ParseTuple(status, "(s,s)", &field, &value))
+        if (!PyArg_ParseTuple(item, "ss", &field, &value)) {
+            Py_DECREF(item);
+            Py_DECREF(iterator);
             return NULL;
+        }
         if (!strcasecmp(field, "content-length"))
             data->response_length = atoi(field);
         else if (!strcasecmp(field, "connection")){
             if (!strcasecmp(value, "upgrade"))
                 http_data->upgrade = 1;
         }
-        ret = dictAdd(data->headers, wstrDup(field), wstrDup(value));
+        ret = dictReplace(data->headers, wstrNew(field), wstrNew(value), NULL);
         Py_DECREF(item);
         if (ret == DICT_WRONG) {
             Py_DECREF(iterator);
@@ -433,11 +485,11 @@ static PyObject * startResponse(struct response *self, PyObject *args)
 }
 
 /* Send a chunk of data */
-static int wsgiSendBody(struct response *response, const char *data, int len)
+static int wsgiSendBody(struct response *response, const char *data, size_t len)
 {
     struct wsgiData *wsgi_data = response->client->app_private_data;
     struct httpData *http_data = response->client->protocol_data;
-    int tosend = len, restsend;
+    size_t tosend = len, restsend;
     if (!len)
         return 0;
     if (wsgi_data->response_length != 0) {
@@ -535,16 +587,46 @@ PyTypeObject responseType = {
     responseNew,               /* tp_new */
 };
 
+static PyMethodDef wsgisup_methods[] = {
+    { NULL }
+};
+
+#ifndef PyMODINIT_FUNC
+#define PyMODINIT_FUNC void
+#endif
+    PyMODINIT_FUNC
+init_wsgisup(void)
+{
+    PyObject *m;
+
+    if (PyType_Ready(&responseType) < 0)
+        return;
+    if (PyType_Ready(&FileWrapper_Type) < 0)
+        return;
+    if (PyType_Ready(&InputStream_Type) < 0)
+        return;
+
+    m = Py_InitModule3("_wsgisup", wsgisup_methods,
+            "WSGI C support module");
+
+    if (m == NULL)
+        return;
+
+    Py_INCREF(&responseType);
+    PyModule_AddObject(m, "Request", (PyObject *)&responseType);
+    Py_INCREF(&FileWrapper_Type);
+    PyModule_AddObject(m, "FileWrapper", (PyObject *)&FileWrapper_Type);
+    Py_INCREF(&InputStream_Type);
+    PyModule_AddObject(m, "InputStream", (PyObject *)&InputStream_Type);
+}
+
 void sendResponse500(struct response *response)
 {
     struct wsgiData *wsgi_data = response->client->app_private_data;
-    static const char *headers[] = {
-        "Content-Type", "text/html; charset=iso-8859-1",
-    };
     static const char *body =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
         "<html><head>\n"
-        "<title>500 Internal Error</title>\n"
+        "<title>500 Internal Error --- From Wheatserver</title>\n"
         "</head><body>\n"
         "<h1>Internal Error</h1>\n"
         "<p>The server encountered an unexpected condition which\n"
@@ -553,6 +635,150 @@ void sendResponse500(struct response *response)
     wsgi_data->status = 500;
 
     if (!wsgiSendHeaders(response))
-        wsgiSendBody(response, (uint8_t *)body, strlen(body));
+        wsgiSendBody(response, body, strlen(body));
 }
 
+/* Dumps a file as a stream of SEND_BODY_CHUNK packets.
+   Non-sendfile(2) version. */
+int sendFile(struct client *client, int fd)
+{
+    wstr buf = client->res_buf;
+    int len, readlen = 0, writelen = 0;
+
+    do {
+        if ((len = WorkerProcess->worker->recvData(fd, &buf)) < 0)
+            return -1;
+        readlen += len;
+    } while (len == WHEAT_IOBUF_LEN);
+
+    do {
+        if ((len = WorkerProcess->worker->sendData(fd, &buf)) < 0)
+            return -1;
+        writelen += len;
+    } while (writelen == readlen);
+
+    return 0;
+}
+
+/* Send a file as the HTTP response body. */
+int wsgiSendFile(void *ctxt, int fd)
+{
+    int ret = 0;
+
+    ret = sendFile(ctxt, fd);
+
+    return ret;
+}
+
+/* Send a wrapped file using wsgiSendFile */
+static int wsgiSendFileWrapper(struct response *self, FileWrapper *wrapper)
+{
+    PyObject *pFileno, *args, *pFD;
+    int fd;
+
+    /* file-like must have fileno */
+    if (!PyObject_HasAttrString((PyObject *)wrapper->filelike, "fileno"))
+        return 1;
+
+    if ((pFileno = PyObject_GetAttrString((PyObject *)wrapper->filelike,
+                    "fileno")) == NULL)
+        return -1;
+
+    if ((args = PyTuple_New(0)) == NULL) {
+        Py_DECREF(pFileno);
+        return -1;
+    }
+
+    pFD = PyObject_CallObject(pFileno, args);
+    Py_DECREF(args);
+    Py_DECREF(pFileno);
+    if (pFD == NULL)
+        return -1;
+
+    fd = (int)PyInt_AsLong(pFD);
+    Py_DECREF(pFD);
+    if (PyErr_Occurred())
+        return -1;
+
+    /* Send headers if necessary */
+    if (!self->headers_sent) {
+        if (wsgiSendHeaders(self))
+            return -1;
+        self->headers_sent = 1;
+    }
+
+    if (wsgiSendFile(self->client, fd))
+        return -1;
+
+    return 0;
+}
+
+/* Send the application's response */
+int wsgiSendResponse(struct response *self, PyObject *result)
+{
+    PyObject *iter;
+    PyObject *item;
+    int ret;
+
+    /* Check if it's a FileWrapper */
+    if (result->ob_type == &FileWrapper_Type) {
+        ret = wsgiSendFileWrapper(self, (FileWrapper *)result);
+        if (ret < 0)
+            return -1;
+        if (!ret)
+            return 0;
+        /* Fallthrough */
+    }
+
+    iter = PyObject_GetIter(result);
+    if (iter == NULL)
+        return -1;
+
+    while ((item = PyIter_Next(iter))) {
+        size_t dataLen;
+        const char *data;
+
+        dataLen = PyString_Size(item);
+        if (PyErr_Occurred()) {
+            Py_DECREF(item);
+            break;
+        }
+
+        if (dataLen) {
+            if ((data = PyString_AsString(item)) == NULL) {
+                Py_DECREF(item);
+                break;
+            }
+
+            /* Send headers if necessary */
+            if (!self->headers_sent) {
+                if (wsgiSendHeaders(self)) {
+                    Py_DECREF(item);
+                    break;
+                }
+                self->headers_sent = 1;
+            }
+
+            if (wsgiSendBody(self, data, dataLen)) {
+                Py_DECREF(item);
+                break;
+            }
+            wheatLog(WHEAT_DEBUG, "response body: %s", data);
+        }
+
+        Py_DECREF(item);
+    }
+
+    Py_DECREF(iter);
+
+    if (PyErr_Occurred())
+        return -1;
+
+    /* Send headers if they haven't been sent at this point */
+    if (!self->headers_sent) {
+        if (wsgiSendHeaders(self))
+            return -1;
+        self->headers_sent = 1;
+    }
+    return 0;
+}

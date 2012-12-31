@@ -7,8 +7,8 @@
  * return 0 means EAGAIN */
 int readBulkFrom(int fd, wstr *clientbuf)
 {
-    int nread, readlen;
-    size_t qblen;
+    ssize_t nread, readlen;
+    int qblen;
     wstr buf = *clientbuf;
 
     readlen = WHEAT_IOBUF_LEN;
@@ -34,15 +34,15 @@ int readBulkFrom(int fd, wstr *clientbuf)
         return -1;
     }
     if (nread) {
-        wstrupdatelen(buf, qblen+nread);
+        wstrupdatelen(buf, (int)(qblen+nread));
     }
-    return nread;
+    return (int)nread;
 }
 
 int writeBulkTo(int fd, wstr *clientbuf)
 {
     wstr buf = *clientbuf;
-    int bufpos = 0, nwritten = 0, totalwritten;
+    ssize_t bufpos = 0, nwritten = 0, totalwritten = 0;
     while(bufpos <= wstrlen(buf)) {
         nwritten = write(fd, buf+bufpos, wstrlen(buf)-bufpos);
         if (nwritten <= 0)
@@ -59,5 +59,5 @@ int writeBulkTo(int fd, wstr *clientbuf)
             return -1;
         }
     }
-    return nwritten;
+    return (int)totalwritten;
 }
