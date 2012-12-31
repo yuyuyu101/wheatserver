@@ -1,25 +1,25 @@
--wheatserver(Alpha)
--===========
--
--Full stack sync/asyc(wait) IO Web Framework, like the union of Nginx, Gunicorn, Django.
--
--Build
--===========
--
--shell > cd wheatserver
--
--shell > cd src
--
--shell > make
--
--Run
--===========
--
+wheatserver(Alpha)
+===========
+
+Full stack sync/asyc(wait) IO Web Framework, like the union of Nginx, Gunicorn, Django.
+
+Build
+===========
+
+shell > cd wheatserver
+
+shell > cd src
+
+shell > make
+
+Run
+===========
+
 -./wheatserver --app-module-path {your app path } --app-module-name {app filename} --app-name {callable object}
--
--Example(Sample)
--===========
--
+
+Example(Sample)
+===========
+
 <pre>
 #sample.py which is in the wheatserver/src
 HELLO_WORLD = b"Hello world!\n"
@@ -31,12 +31,12 @@ def simple_app(environ, start_response):
     start_response(status, response_headers)
     return [HELLO_WORLD]
 </pre>
--
+
 -./wheatserver --app-module-name sample --app-name simple_app
--
--Example(Django)
--===========
--
+
+Example(Django)
+===========
+
 -My Django Project Directory:
 <pre>
 |-signup
@@ -80,7 +80,9 @@ def simple_app(environ, start_response):
    |---settings.py
    |---urls.py
 </pre>
--wsgi.py at the top of tree is the entry of Django WSGI.
+
+wsgi.py at the top of tree is the entry of Django WSGI.
+
 <pre>
 import os, sys
 
@@ -92,19 +94,19 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "signup.settings")
 from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 </pre>
--
+
 -shell> ./wheatserver --app-module-path /Users/abcd/signup/ --app-module-name wsgi --app-name application
--
--Design
--===========
--Master-multi Worker mode.
--
--Every worker process contains Worker, Protocol, Application three levels.
--
--##Detail Refer
--
--Worker: worker_process.h worker_sync.c
--
--Protocol: protocol.h http_parser.c
--
--Application: application.h, wsgi.c
+
+Design
+===========
+Master-multi Worker mode.
+
+Every worker process contains Worker, Protocol, Application three levels.
+
+##Detail Refer
+
+Worker: worker_process.h worker_sync.c
+
+Protocol: protocol.h http_parser.c
+
+Application: application.h, wsgi.c
