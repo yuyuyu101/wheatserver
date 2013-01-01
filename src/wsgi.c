@@ -594,7 +594,7 @@ static PyMethodDef wsgisup_methods[] = {
 #ifndef PyMODINIT_FUNC
 #define PyMODINIT_FUNC void
 #endif
-    PyMODINIT_FUNC
+PyMODINIT_FUNC
 init_wsgisup(void)
 {
     PyObject *m;
