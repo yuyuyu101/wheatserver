@@ -20,7 +20,7 @@ Run
 Config
 ===========
 
-See wheatserver.conf
+See [wheatserver.conf](https://github.com/yuyuyu101/wheatserver/blob/master/wheatserver.conf)
 
 Example(Sample)
 ===========
