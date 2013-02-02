@@ -40,8 +40,8 @@
 #define WHEAT_DEBUG       0
 #define WHEAT_VERBOSE     1
 #define WHEAT_NOTICE      2
-#define WHEAT_WARNING     3
-#define WHEAT_LOG_RAW     5
+#define WHEAT_WARNING     4
+#define WHEAT_LOG_RAW     8
 
 #define VALIDATE_OK       0
 #define VALIDATE_WRONG    1

@@ -77,22 +77,17 @@ void removeListNode(struct list *l, struct listNode *node)
     if (node == NULL)
         return ;
 
-    if (isListOwnValue(l))
-        l->free(node->value);
-    if (node == l->first) {
-        l->first = node->next;
-        l->first->prev = NULL;
-    } else if (node == l->last) {
-        l->last = node->prev;
-        l->last->next = NULL;
-    } else {
+    if (node->prev)
         node->prev->next = node->next;
+    else
+        l->first = node->next;
+    if (node->next)
         node->next->prev = node->prev;
-    }
-    l->len--;
-    if (l->len == 0)
-        l->first = l->last = NULL;
+    else
+        l->last = node->prev;
+    if (isListOwnValue(l)) l->free(node->value);
     free(node);
+    l->len--;
 }
 
 struct listNode *searchListKey(struct list *l, void *key)

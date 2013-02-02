@@ -165,12 +165,15 @@ int wheatTcpServer(char *err, char *bind_addr, int port){
     sa.sin_port = htons(port);
     sa.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind_addr && inet_pton(AF_INET, bind_addr, &sa.sin_addr) != 1) {
-        wheatSetError(err, "invalid bind address");
+        wheatSetError(err, "wheatTcpServer: invalid bind address");
         close(s);
         return NET_WRONG;
     }
 
-    if (wheatListen(err, s, (struct sockaddr*)&sa, sizeof(sa)) == NET_WRONG)
+    if (wheatListen(err, s, (struct sockaddr*)&sa, sizeof(sa)) == NET_WRONG) {
+        wheatSetError(err, "wheatTcpServer: listen failed");
+        close(s);
         return NET_WRONG;
+    }
     return s;
 }

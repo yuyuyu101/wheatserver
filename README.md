@@ -17,6 +17,11 @@ Run
 
 -./wheatserver --app-module-path {your app path } --app-module-name {app filename} --app-name {callable object}
 
+Config
+===========
+
+See wheatserver.conf
+
 Example(Sample)
 ===========
 

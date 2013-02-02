@@ -40,7 +40,6 @@ void initServer()
 }
 
 /* Worker Manage Function */
-
 static void removeWorker(struct workerProcess *worker)
 {
     struct listNode *worker_node = searchListKey(Server.workers, worker);
@@ -96,8 +95,8 @@ void adjustWorkerNumber()
 {
     while (listLength(Server.workers) < Server.worker_number)
         spawnWorker("SyncWorker");
-    while (listLength(Server.workers) > Server.worker_number) {
-        /* worker is append to Server.workers, so first worker must be alive longer */
+    while (listLength(Server.workers) > Server.worker_number && listLength(Server.workers) > 0) {
+        /* worker is append to Server.workers, so the first worker in the `Server.workers` is alive longest */
         struct listNode *max_age_worker = listFirst(Server.workers);
         killWorker(listNodeValue(max_age_worker), SIGQUIT);
     }
@@ -135,7 +134,7 @@ void killAllWorkers(int sig)
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
     struct listNode *current;
     while ((current = listNext(iter)) != NULL) {
-        struct workerProcess *w = current->value;
+        struct workerProcess *w = listNodeValue(current);
         killWorker(w, sig);
     }
     freeListIterator(iter);
@@ -145,12 +144,11 @@ void killWorker(struct workerProcess *worker, int sig)
 {
     int result;
     if ((result = kill(worker->pid, sig)) != 0) {
-        if (errno == ESRCH) {
-            removeWorker(worker);
-            return;
-        }
-        wheatLog(WHEAT_NOTICE, "kill %d pid failed: %s", strerror(errno));
+        wheatLog(WHEAT_NOTICE, "kill %d pid failed: %s", worker->pid, strerror(errno));
+    } else {
+        wheatLog(WHEAT_NOTICE, "kill %d pid success", worker->pid);
     }
+    removeWorker(worker);
 }
 
 /* reap worker avoid zombie */
@@ -176,13 +174,23 @@ void reapWorkers()
 
         if (WIFSIGNALED(status))
             bysignal = WTERMSIG(status);
-        if (bysignal && exitcode != 0) {
-            wheatLog(WHEAT_NOTICE, "reapWorkers() exitcode: %d  signal: %d", exitcode, bysignal);
+        if (bysignal || exitcode != 0) {
+            wheatLog(WHEAT_NOTICE, "reapWorkers() catch worker %d exitcode: %d  signal: %d", result, exitcode, bysignal);
         }
         if (exitcode == WORKER_BOOT_ERROR) {
             wheatLog(WHEAT_WARNING, "Worker failed to boot.");
             halt(1);
         }
+        struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
+        struct listNode *curr;
+        while ((curr = listNext(iter)) != NULL) {
+            struct workerProcess *worker = listNodeValue(curr);
+            if (worker->pid == result) {
+                removeListNode(Server.workers, curr);
+                break;
+            }
+        }
+        freeListIterator(iter);
     }
 }
 
@@ -256,14 +264,32 @@ void run()
         if (listLength(Server.signal_queue) == 0) {
             fakeSleep();
             adjustWorkerNumber();
-            continue;
+        } else {
+            struct listNode *node = listFirst(Server.signal_queue);
+            sig = listNodeValue(node);
+            signalGenericHandle(*sig);
+            removeListNode(Server.signal_queue, node);
+            wakeUp();
         }
-        struct listNode *node = listFirst(Server.signal_queue);
-        sig = listNodeValue(node);
-        signalGenericHandle(*sig);
-        removeListNode(Server.signal_queue, node);
-        wakeUp();
     }
+}
+
+void version() {
+    fprintf(stderr, "wheatserver %s\n", WHEATSERVER_VERSION);
+    exit(0);
+}
+
+void usage() {
+    fprintf(stderr,"Usage: ./wheatserver [/path/to/wheatserver.conf] [options]\n");
+    fprintf(stderr,"       ./wheatserver - (read config from stdin)\n");
+    fprintf(stderr,"       ./wheatserver -v or --version\n");
+    fprintf(stderr,"       ./wheatserver -h or --help\n");
+    fprintf(stderr,"Examples:\n");
+    fprintf(stderr,"       ./wheatserver (run the server with default conf)\n");
+    fprintf(stderr,"       ./wheatserver /etc/redis/10828.conf\n");
+    fprintf(stderr,"       ./wheatserver --port 10828\n");
+    fprintf(stderr,"       ./wheatserver /etc/wheatserver.conf --loglevel verbose\n\n");
+    exit(1);
 }
 
 int main(int argc, const char *argv[])
@@ -273,8 +299,14 @@ int main(int argc, const char *argv[])
     if (argc >= 2) {
         int j = 1;
         wstr options = wstrEmpty();
+
+        if (strcmp(argv[1], "-v") == 0 ||
+            strcmp(argv[1], "--version") == 0) version();
+        if (strcmp(argv[1], "--help") == 0 ||
+            strcmp(argv[1], "-h") == 0) usage();
+
         if (argv[j][0] != '-' && argv[j][1] != '-')
-            strncpy(Server.configfile_path, argv[j], WHEATSERVER_MAX_NAMELEN);
+            strncpy(Server.configfile_path, argv[j++], WHEATSERVER_MAX_NAMELEN);
         while(j != argc) {
             if (argv[j][0] == '-' && argv[j][1] == '-') {
                 if (wstrlen(options))
@@ -282,8 +314,8 @@ int main(int argc, const char *argv[])
                 options = wstrCat(options,argv[j]+2);
                 options = wstrCat(options," ");
             } else {
-               options = wstrCat(options, argv[j]);
-               options = wstrCat(options," ");
+                options = wstrCat(options, argv[j]);
+                options = wstrCat(options," ");
             }
             j++;
         }

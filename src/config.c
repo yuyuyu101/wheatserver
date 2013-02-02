@@ -6,6 +6,10 @@ static struct enumIdName Verbose[] = {
     {-1, NULL}
 };
 
+// Attention: If modify configTable, three places should be attention to.
+// 1. usage() in wheatserver.h
+// 2. wheatserver.conf
+// 3. fillServerConfig() below
 struct configuration configTable[] = {
     //  name   |    args| validator     |      default       |         helper |  flags
 
@@ -87,7 +91,7 @@ loaderr:
     fprintf(stderr, "\n*** FATAL CONFIG FILE ERROR ***\n");
     fprintf(stderr, "Reading the configuration file, at line %d\n", i+1);
     fprintf(stderr, ">>> '%s'\n", lines[i]);
-    fprintf(stderr, "%s\n", err);
+    fprintf(stderr, "Reason: %s\n", err);
     halt(1);
 }
 
@@ -127,13 +131,13 @@ void statConfigByName(const char *n, char *result, int len)
     } else if (!wstrCmpChars(name, "logfile", 7)) {
         snprintf(result, len, "%s", Server.logfile);
     } else if (!wstrCmpChars(name, "logfile-level", 13)) {
-        if (Server.verbose == 0)
+        if (Server.verbose == WHEAT_DEBUG)
             snprintf(result, len, "DEBUG");
-        else if (Server.verbose == 1)
+        else if (Server.verbose == WHEAT_VERBOSE)
             snprintf(result, len, "VERBOSE");
-        else if (Server.verbose == 2)
+        else if (Server.verbose == WHEAT_NOTICE)
             snprintf(result, len, "NOTICE");
-        else if (Server.verbose == 3)
+        else if (Server.verbose == WHEAT_WARNING)
             snprintf(result, len, "WARNING");
         else
             snprintf(result, len, "UNKNOWN");

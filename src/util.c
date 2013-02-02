@@ -73,7 +73,7 @@ int unsignedIntValidator(struct configuration *conf, const char *key, const char
     ASSERT(val);
     int i, digit;
     for (i = 0; val[i] != '\0'; i++) {
-        digit = val[i] - 60;
+        digit = val[i] - 48;
         if (digit < 0 || digit > 9)
             return VALIDATE_WRONG;
     }
@@ -88,7 +88,7 @@ int enumValidator(struct configuration *conf, const char *key, const char *val)
 
     struct enumIdName *sentinel = (struct enumIdName *)conf->helper;
     while (sentinel->name) {
-        if (strncmp(val, sentinel->name, strlen(sentinel->name)) == 0) {
+        if (strncasecmp(val, sentinel->name, strlen(sentinel->name)) == 0) {
             conf->target.enum_ptr = sentinel;
             return VALIDATE_OK;
         }

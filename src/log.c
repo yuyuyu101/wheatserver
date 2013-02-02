@@ -1,7 +1,7 @@
 #include "wheatserver.h"
 
 void wheatLogRaw(int level, const char *msg) {
-    const char *c = ".-*#";
+    const char *c = ".-* #";
     FILE *fp;
     char buf[64];
     int rawmode = (level & WHEAT_LOG_RAW);
@@ -9,7 +9,10 @@ void wheatLogRaw(int level, const char *msg) {
     level &= 0xff; /* clear flags */
     if (level < Server.verbose) return;
 
-    fp = (Server.logfile == NULL) ? stdout : fopen(Server.logfile, "a");
+    if (Server.logfile == NULL || !strcasecmp(Server.logfile, "stdout"))
+        fp = stdout;
+    else
+        fp = fopen(Server.logfile, "a");
     if (!fp) return;
 
     if (rawmode) {
@@ -25,7 +28,7 @@ void wheatLogRaw(int level, const char *msg) {
     }
     fflush(fp);
 
-    if (Server.logfile) fclose(fp);
+    if (fp != stdout) fclose(fp);
 }
 
 void wheatLog(int level, const char *fmt, ...) {

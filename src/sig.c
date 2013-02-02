@@ -25,7 +25,7 @@ int matchInt(void *ptr, void *key)
     return (*(int *)ptr == *(int *)key);
 }
 
-static struct list *createSignalList()
+static struct list *createIntList()
 {
     struct list *l = createList();
     listSetDup(l, dupInt);
@@ -44,7 +44,7 @@ void initWorkerSignals()
     for (i = 0; i < SIGNAL_COUNT; i++) {
         act.sa_flags = 0;
         if (signals[i] == SIGQUIT)
-            act.sa_handler = handleWorkerUsr1;
+            act.sa_handler = handleWorkerQuit;
         else if (signals[i] == SIGTERM || signals[i] == SIGINT)
             act.sa_handler = handleWorkerAbort;
         else if (signals[i] == SIGUSR1)
@@ -64,7 +64,7 @@ void initWorkerSignals()
 
 void initMasterSignals()
 {
-    Server.signal_queue = createSignalList();
+    Server.signal_queue = createIntList();
     struct sigaction act, oact;
 
     act.sa_handler = signalProc;

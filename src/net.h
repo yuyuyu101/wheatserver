@@ -2,7 +2,7 @@
 #define _NET_H
 
 #define NET_OK 0
-#define NET_WRONG 1
+#define NET_WRONG -1
 #define NET_ERR_LEN 255
 
 int wheatNonBlock(char *err, int fd);
