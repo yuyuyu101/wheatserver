@@ -233,7 +233,7 @@ struct list *createResHeader(struct client *client)
 
     listSetFree(headers, (void (*)(void *))wstrFree);
 
-    snprintf(buf, 255, "%s %d\r\n", http_data->protocol_version, wsgi_data->status);
+    snprintf(buf, 255, "%s %d %s\r\n", http_data->protocol_version, wsgi_data->status, wsgi_data->status_msg);
     if (appendToListTail(headers, wstrNew(buf)) == NULL)
         goto cleanup;
     snprintf(buf, 255, "Server: %s\r\n", Server.master_name);
@@ -274,7 +274,8 @@ static int wsgiSendHeaders(struct response *self)
         struct dictEntry *entry = NULL;
         while ((entry = dictNext(iter)) != NULL) {
             snprintf(buf, 255, "%s: %s\r\n", (char *)dictGetKey(entry), (char *)dictGetVal(entry));
-            if (appendToListTail(headers, buf) == NULL) {
+
+            if (appendToListTail(headers, wstrNew(buf)) == NULL) {
                 freeList(headers);
                 dictReleaseIterator(iter);
                 return -1;
@@ -300,7 +301,6 @@ static int wsgiSendHeaders(struct response *self)
             goto cleanup;
         totallen += len;
     }
-    wheatLog(WHEAT_DEBUG, "response header: %s", client->res_buf);
     client->res_buf = wstrRange(client->res_buf, totallen, -1);
     self->headers_sent = 1;
 
@@ -763,7 +763,6 @@ int wsgiSendResponse(struct response *self, PyObject *result)
                 Py_DECREF(item);
                 break;
             }
-            wheatLog(WHEAT_DEBUG, "response body: %s", data);
         }
 
         Py_DECREF(item);

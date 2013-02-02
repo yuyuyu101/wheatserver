@@ -14,7 +14,7 @@ struct configuration configTable[] = {
     {"port",          2, unsignedIntValidator, {.val=WHEAT_SERVERPORT},    NULL,     INT_FORMAT},
     {"worker-number", 2, unsignedIntValidator, {.val=2},    NULL,     INT_FORMAT},
     {"logfile",       2, stringValidator,      {.ptr=NULL},  NULL,     STRING_FORMAT},
-    {"logfile-level", 2, enumValidator,        {.val=WHEAT_VERBOSE},  &Verbose[0], ENUM_FORMAT},
+    {"logfile-level", 2, enumValidator,        {.enum_ptr=&Verbose[0]},  &Verbose[0], ENUM_FORMAT},
 
     // WSGI Configuration
     {"app-module-path",      2, stringValidator,      {.ptr=NULL},  NULL,     STRING_FORMAT},

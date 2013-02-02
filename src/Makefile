@@ -7,7 +7,7 @@ SERVER_OBJECTS += wheatserver.o
 WORKER_OBJECTS += $(OBJECTS)
 WORKER_OBJECTS += wheatworker.o
 LIBS = -L/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/config -lpython2.7
-CFLAGS = -O0 -Wall
+CFLAGS = -O0 -Wall -g
 
 TESTS = test_wstr test_list test_dict
 

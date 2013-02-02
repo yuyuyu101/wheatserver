@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "list.h"
 
@@ -149,9 +150,22 @@ struct listNode *listNext(struct listIterator *iter)
     return current;
 }
 
+void listPrint(struct list *list)
+{
+    if (list == NULL)
+        return ;
+    struct listIterator *iter = listGetIterator(list, START_HEAD);
+    struct listNode *current;
+    int i = 0;
+    while ((current = listNext(iter)) != NULL) {
+        printf("%d: %s -> ", i, (char *)current->value);
+        i++;
+    }
+    printf("\n");
+}
+
 #ifdef LIST_TEST_MAIN
 #include "test_help.h"
-#include <stdio.h>
 
 void *dupInt(void *ptr)
 {

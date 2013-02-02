@@ -30,7 +30,6 @@ int readBulkFrom(int fd, wstr *clientbuf)
             return -1;
         }
     } else if (nread == 0) {
-        wheatLog(WHEAT_VERBOSE, "fd closed");
         return -1;
     }
     if (nread) {

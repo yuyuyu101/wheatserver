@@ -45,5 +45,6 @@ struct listNode *searchListKey(struct list *l, void *key);
 struct listIterator *listGetIterator(struct list *list, int direction);
 struct listNode *listNext(struct listIterator *iter);
 void freeListIterator(struct listIterator *iter);
+void listPrint(struct list *list);
 
 #endif
