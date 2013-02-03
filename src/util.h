@@ -17,6 +17,9 @@ int boolValidator(struct configuration *conf, const char *key, const char *val);
 void wheat_stacktrace(int skip_count);
 void wheat_assert(const char *cond, const char *file, int line, int panic);
 
+int daemonize(int coredump);
+void createPidFile();
+
 #define ASSERT(_x) do {                            \
     if (!(_x)) {                                   \
         wheat_assert(#_x, __FILE__, __LINE__, 1);  \

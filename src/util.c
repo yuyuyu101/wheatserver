@@ -1,5 +1,7 @@
 #include "wheatserver.h"
 #include <execinfo.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 void nonBlockCloseOnExecPipe(int *fd0, int *fd1)
 {
@@ -103,9 +105,9 @@ int enumValidator(struct configuration *conf, const char *key, const char *val)
 int boolValidator(struct configuration *conf, const char *key, const char *val)
 {
     size_t len = strlen(val) + 1;
-    if (memcmp("on", val, len)) {
+    if (memcmp("on", val, len) == 0) {
         conf->target.val = 1;
-    } else if (memcmp("off", val, len)) {
+    } else if (memcmp("off", val, len) == 0) {
         conf->target.val = 0;
     } else
         return VALIDATE_WRONG;
@@ -144,3 +146,108 @@ void wheat_assert(const char *cond, const char *file, int line, int panic)
     }
 }
 
+
+int daemonize(int dump_core)
+{
+    int status;
+    pid_t pid, sid;
+    int fd;
+
+    pid = fork();
+    switch (pid) {
+    case -1:
+        wheatLog(WHEAT_WARNING, "fork() failed: %s", strerror(errno));
+        return WHEAT_WRONG;
+
+    case 0:
+        break;
+
+    default:
+        /* parent terminates */
+        _exit(0);
+    }
+
+    /* 1st child continues and becomes the session leader */
+
+    sid = setsid();
+    if (sid < 0) {
+        wheatLog(WHEAT_WARNING, "setsid() failed: %s", strerror(errno));
+        return WHEAT_WRONG;
+    }
+
+    pid = fork();
+    switch (pid) {
+    case -1:
+        wheatLog(WHEAT_WARNING, "fork() failed: %s", strerror(errno));
+        return WHEAT_WRONG;
+
+    case 0:
+        break;
+
+    default:
+        /* 1st child terminates */
+        _exit(0);
+    }
+
+    /* 2nd child continues */
+
+    /* change working directory */
+    if (dump_core == 0) {
+        status = chdir("/");
+        if (status < 0) {
+            wheatLog(WHEAT_WARNING, "chdir(\"/\") failed: %s", strerror(errno));
+            return WHEAT_WRONG;
+        }
+    }
+
+    /* clear file mode creation mask */
+    umask(0);
+
+    /* redirect stdin, stdout and stderr to "/dev/null" */
+
+    fd = open("/dev/null", O_RDWR);
+    if (fd < 0) {
+        wheatLog(WHEAT_WARNING, "open(\"/dev/null\") failed: %s", strerror(errno));
+        return WHEAT_WRONG;
+    }
+
+    status = dup2(fd, STDIN_FILENO);
+    if (status < 0) {
+        wheatLog(WHEAT_WARNING, "dup2(%d, STDIN) failed: %s", fd, strerror(errno));
+        close(fd);
+        return WHEAT_WRONG;
+    }
+
+    status = dup2(fd, STDOUT_FILENO);
+    if (status < 0) {
+        wheatLog(WHEAT_WARNING, "dup2(%d, STDOUT) failed: %s", fd, strerror(errno));
+        close(fd);
+        return WHEAT_WRONG;
+    }
+
+    status = dup2(fd, STDERR_FILENO);
+    if (status < 0) {
+        wheatLog(WHEAT_WARNING, "dup2(%d, STDERR) failed: %s", fd, strerror(errno));
+        close(fd);
+        return WHEAT_WRONG;
+    }
+
+    if (fd > STDERR_FILENO) {
+        status = close(fd);
+        if (status < 0) {
+            wheatLog(WHEAT_WARNING, "close(%d) failed: %s", fd, strerror(errno));
+            return WHEAT_WRONG;
+        }
+    }
+
+    return WHEAT_OK;
+}
+
+void createPidFile() {
+    /* Try to write the pid file in a best-effort way. */
+    FILE *fp = fopen(Server.pidfile, "w");
+    if (fp) {
+        fprintf(fp, "%d\n", (int)getpid());
+        fclose(fp);
+    }
+}

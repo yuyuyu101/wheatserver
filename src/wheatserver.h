@@ -58,6 +58,8 @@ struct globalServer {
     struct hookCenter *hook_center;
     int graceful_timeout;
     int idle_timeout;
+    int daemon;                                  //daemon, off
+    char *pidfile;                               //pidfile, NULL
 
     /* status */
     int ipfd;
@@ -90,7 +92,8 @@ struct enumIdName {
 enum printFormat {
     INT_FORMAT,
     STRING_FORMAT,
-    ENUM_FORMAT
+    ENUM_FORMAT,
+    BOOL_FORMAT
 };
 
 struct configuration {

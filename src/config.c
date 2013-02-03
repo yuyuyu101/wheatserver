@@ -7,7 +7,7 @@ static struct enumIdName Verbose[] = {
 };
 
 // Attention: If modify configTable, three places should be attention to.
-// 1. usage() in wheatserver.h
+// 1. initGlobalServerConfig() in wheatserver.c
 // 2. wheatserver.conf
 // 3. fillServerConfig() below
 struct configuration configTable[] = {
@@ -19,6 +19,8 @@ struct configuration configTable[] = {
     {"worker-number", 2, unsignedIntValidator, {.val=2},    NULL,     INT_FORMAT},
     {"logfile",       2, stringValidator,      {.ptr=NULL},  NULL,     STRING_FORMAT},
     {"logfile-level", 2, enumValidator,        {.enum_ptr=&Verbose[0]},  &Verbose[0], ENUM_FORMAT},
+    {"daemon",        2, boolValidator,        {.val=0},    NULL, BOOL_FORMAT},
+    {"pidfile",       2, stringValidator,      {.ptr=NULL},  NULL, STRING_FORMAT},
 
     // WSGI Configuration
     {"app-module-path",      2, stringValidator,      {.ptr=NULL},  NULL,     STRING_FORMAT},
@@ -39,6 +41,10 @@ void fillServerConfig()
     Server.logfile = conf->target.ptr;
     conf++;
     Server.verbose = conf->target.enum_ptr->id;
+    conf++;
+    Server.daemon = conf->target.val;
+    conf++;
+    Server.pidfile = conf->target.ptr;
 }
 
 struct configuration *getConfiguration(const char *name)

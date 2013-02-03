@@ -1,6 +1,6 @@
 #include "wheatserver.h"
 
-struct workerProcess *WorkerProcess;
+struct workerProcess *WorkerProcess = NULL;
 
 struct worker workerTable[] = {
     {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRecvData}

@@ -12,6 +12,8 @@ void initGlobalServerConfig()
     Server.worker_number = 2;
     Server.graceful_timeout = WHEATSERVER_GRACEFUL_TIME;
     Server.idle_timeout = WHEATSERVER_IDLE_TIME;
+    Server.daemon = 0;
+    Server.pidfile = NULL;
     initHookCenter();
     Server.workers = createList();
     Server.pid = getpid();
@@ -221,6 +223,7 @@ void reload()
     for (i = 0; i < Server.worker_number; i++) {
         spawnWorker("SyncWorker");
     }
+    if (Server.daemon) createPidFile();
 
     adjustWorkerNumber();
 }
@@ -237,6 +240,7 @@ void halt(int exitcode)
     } else {
         wheatLog(WHEAT_NOTICE, "worker %s exit.", WorkerProcess->worker_name);
     }
+    if (Server.daemon) unlink(Server.pidfile);
     exit(exitcode);
 }
 
@@ -252,7 +256,7 @@ void stopWorkers(int graceful)
     long seconds = time(NULL) + Server.graceful_timeout;
     while (seconds < time(NULL)) {
         killAllWorkers(sig);
-        sleep(0.2);
+        usleep(200000);
         reapWorkers();
     }
     killAllWorkers(SIGKILL);
@@ -327,11 +331,12 @@ int main(int argc, const char *argv[])
     } else {
         wheatLog(WHEAT_NOTICE, "No config file specified, use the default settings");
     }
+    if (Server.daemon) daemonize(1);
     wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
-
     printServerConfig();
 
     initServer();
+    if (Server.daemon) createPidFile();
     run();
     return 0;
 }

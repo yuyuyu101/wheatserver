@@ -205,6 +205,12 @@ int main(void)
         freeList(l);
         freeListIterator(iter);
 
+        i = 1;
+        l = createList();
+        appendToListTail(l, &i);
+        removeListNode(l, listFirst(l));
+        test_cond("Delete element", listLength(l) == 0);
+
         l = createList();
         listSetDup(l, dupInt);
         listSetFree(l, freeInt);
@@ -237,6 +243,7 @@ int main(void)
         s = searchListKey(l, &d);
         test_cond("searchListKey not matched", s == NULL && listLength(l) == 9);
         freeList(l);
+
     }
     test_report();
 }

@@ -24,9 +24,9 @@ int wsgiConstructor(struct client *client)
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
     /* Create Request object, passing it the context as a CObject */
-    PyObject *res = PyCObject_FromVoidPtr(client, NULL);
     PyObject *start_resp, *result, *args, *env;
-    struct response *req_obj;
+    struct response *req_obj = NULL;
+    PyObject *res = PyCObject_FromVoidPtr(client, NULL);
     if (res == NULL)
         goto out;
 

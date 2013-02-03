@@ -103,17 +103,20 @@ PyObject *default_environ(PyObject *env, struct httpData *http_data)
 PyObject *create_environ(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
-    const char *req_uri;
-    PyObject *environ;
+    const char *req_uri = NULL;
+    PyObject *environ, *tmp;
     environ = PyDict_New();
     char buf[256];
     int result = 1;
 
     if (!environ)
         return NULL;
+    tmp = environ;
     environ = default_environ(environ, http_data);
-    if (environ == NULL)
-        goto cleanup;
+    if (environ == NULL) {
+        Py_DECREF(environ);
+        return NULL;
+    }
 
     /* HTTP headers */
     struct dictIterator *iter = dictGetIterator(http_data->headers);
@@ -202,7 +205,8 @@ PyObject *create_environ(struct client *client)
     result = 0;
 
 cleanup:
-    free((void *)req_uri);
+    if (req_uri)
+        free((void *)req_uri);
     if (!host) {
         wstrFree(host);
         wstrFree(port);

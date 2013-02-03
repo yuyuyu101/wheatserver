@@ -134,7 +134,7 @@ void handleHup()
 void handleQuit()
 {
     wheatLog(WHEAT_WARNING, "Signal sigquit");
-    halt(1);
+    halt(0);
 }
 
 void handleInt()
