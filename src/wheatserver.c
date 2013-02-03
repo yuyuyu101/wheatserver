@@ -231,8 +231,12 @@ void reexec()
 
 void halt(int exitcode)
 {
-    stopWorkers(1);
-    wheatLog(WHEAT_NOTICE, "shutdown %s", Server.master_name);
+    if (WorkerProcess == NULL) {
+        stopWorkers(1);
+        wheatLog(WHEAT_NOTICE, "shutdown %s.", Server.master_name);
+    } else {
+        wheatLog(WHEAT_NOTICE, "worker %s exit.", WorkerProcess->worker_name);
+    }
     exit(exitcode);
 }
 
