@@ -98,6 +98,7 @@ struct dictIterator *dictGetIterator(struct dict *d);
 struct dictEntry *dictNext(struct dictIterator *iter);
 void dictReleaseIterator(struct dictIterator *iter);
 void dictPrintStats(struct dict *d);
+void dictPrint(struct dict *d);
 unsigned int dictGenHashFunction(const void *key, int len);
 unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len);
 void dictClear(struct dict *d);

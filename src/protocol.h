@@ -27,5 +27,9 @@ char *httpDate();
 int is_chunked();
 void *initHttpData();
 void freeHttpData(void *data);
+void initHttp();
+void deallocHttp();
+
+void logAccess(struct client *client, int response_length, int status);
 
 #endif

@@ -2,15 +2,22 @@
 #include "ctype.h"
 
 struct protocol protocolTable[] = {
-    {"Http", parseHttp, initHttpData, freeHttpData}
+    {"Http", parseHttp, initHttpData, freeHttpData, initHttp, deallocHttp}
 };
 
 struct protocol *spotProtocol(char *ip, int port, int fd)
 {
+    static int is_init = 0;
+    if (!is_init) {
+        protocolTable[0].initProtocol();
+        is_init = 1;
+    }
     return &protocolTable[0];
 }
 
 /* ========== Http Area ========== */
+
+static FILE *access_log_fp = NULL;
 
 const char *URL_SCHEME[] = {
     "http",
@@ -21,7 +28,6 @@ const char *PROTOCOL_VERSION[] = {
     "HTTP/1.0",
     "HTTP/1.1"
 };
-
 
 char *httpDate()
 {
@@ -256,3 +262,82 @@ void freeHttpData(void *data)
     free(d);
 }
 
+static void openAccessLog(char *access_log)
+{
+    if (access_log == NULL)
+        access_log_fp = NULL;
+    else if (!strcasecmp(access_log, "stdout"))
+        access_log_fp = stdout;
+    else
+        access_log_fp = fopen(access_log, "a");
+}
+
+void initHttp()
+{
+    if (access_log_fp == NULL) {
+        struct configuration *conf;
+        char *access_log;
+        conf = getConfiguration("access-log");
+        access_log = conf->target.ptr;
+        openAccessLog(access_log);
+        if (!access_log_fp) {
+            wheatLog(WHEAT_WARNING, "init Http failed");
+            halt(1);
+        }
+    }
+}
+
+void deallocHttp()
+{
+    if (access_log_fp)
+        fclose(access_log_fp);
+}
+
+static const char *apacheDateFormat()
+{
+    static char buf[255];
+    time_t now = time(0);
+    struct tm tm = *gmtime(&now);
+    strftime(buf, sizeof buf, "%d/%m/%Y:%H:%M:%S %z", &tm);
+    return buf;
+}
+
+void logAccess(struct client *client, int response_length, int status)
+{
+    struct httpData *http_data = client->protocol_data;
+    const char *remote_addr, *hyphen, *user, *datetime, *request;
+    const char *refer, *user_agent;
+    char status_str[100], resp_length[32];
+    char buf[255];
+    wstr temp;
+
+    temp = wstrNew("Remote_Addr");
+    remote_addr = dictFetchValue(http_data->headers, temp);
+    if (!remote_addr)
+        remote_addr = client->ip;
+    wstrFree(temp);
+
+    hyphen = user = "-";
+    datetime = apacheDateFormat();
+    snprintf(buf, 255, "%s %s %s", http_data->method, http_data->path, http_data->protocol_version);
+    request = buf;
+    gcvt(status, 0, status_str);
+    gcvt(response_length, 0, resp_length);
+
+    temp = wstrNew("Referer");
+    refer = dictFetchValue(http_data->headers, temp);
+    if (!refer)
+        refer = "-";
+    wstrFree(temp);
+
+    temp = wstrNew("User-Agent");
+    user_agent = dictFetchValue(http_data->headers, temp);
+    if (!user_agent)
+        user_agent = "-";
+    wstrFree(temp);
+
+    fprintf(access_log_fp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
+            remote_addr, hyphen, user, datetime, request, status_str,
+            resp_length, refer, user_agent);
+    fflush(access_log_fp);
+}

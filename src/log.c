@@ -1,6 +1,7 @@
 #include "wheatserver.h"
 
-void wheatLogRaw(int level, const char *msg) {
+void wheatLogRaw(int level, const char *msg)
+{
     const char *c = ".-* #";
     FILE *fp;
     char buf[64];
@@ -31,7 +32,8 @@ void wheatLogRaw(int level, const char *msg) {
     if (fp != stdout) fclose(fp);
 }
 
-void wheatLog(int level, const char *fmt, ...) {
+void wheatLog(int level, const char *fmt, ...)
+{
     va_list ap;
     char msg[WHEATSERVER_MAX_LOG_LEN];
 

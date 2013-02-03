@@ -333,10 +333,10 @@ int main(int argc, const char *argv[])
     }
     if (Server.daemon) daemonize(1);
     wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
-    printServerConfig();
 
     initServer();
     if (Server.daemon) createPidFile();
+
     run();
     return 0;
 }

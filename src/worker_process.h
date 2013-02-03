@@ -30,6 +30,8 @@ struct protocol {
     int (*parser)(struct client *);
     void *(*initProtocolData)();
     void (*freeProtocolData)(void *ptcol_data);
+    void (*initProtocol)();
+    void (*deallocProtocol)();
 };
 
 extern struct protocol protocolTable[];

@@ -84,6 +84,9 @@ out:
     }
 
     PyGILState_Release(gstate);
+
+    struct wsgiData *wsgi_data = client->app_private_data;
+    logAccess(client, wsgi_data->response_length, wsgi_data->status);
     return 0;
 }
 

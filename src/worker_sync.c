@@ -19,7 +19,7 @@ void dispatchRequest(int fd, char *ip, int port)
             freeClient(c);
             return ;
         }
-    }while(ret != 1);
+    } while(ret != 1);
     ret = application->constructor(c);
     if (ret != 0) {
         wheatLog(WHEAT_WARNING, "app faileds");

@@ -21,6 +21,7 @@ struct configuration configTable[] = {
     {"logfile-level", 2, enumValidator,        {.enum_ptr=&Verbose[0]},  &Verbose[0], ENUM_FORMAT},
     {"daemon",        2, boolValidator,        {.val=0},    NULL, BOOL_FORMAT},
     {"pidfile",       2, stringValidator,      {.ptr=NULL},  NULL, STRING_FORMAT},
+    {"access-log",    2, stringValidator,      {.ptr=NULL}, NULL, STRING_FORMAT},
 
     // WSGI Configuration
     {"app-module-path",      2, stringValidator,      {.ptr=NULL},  NULL,     STRING_FORMAT},
@@ -123,6 +124,7 @@ void loadConfigFile(const char *filename, char *options)
     }
 
     applyConfig(config);
+    printServerConfig();
     wstrFree(config);
 }
 
@@ -165,6 +167,8 @@ void printServerConfig()
             wheatLog(WHEAT_DEBUG, "%s: %d", conf->name, conf->target.val);
         else if (conf->format == ENUM_FORMAT) {
             wheatLog(WHEAT_DEBUG, "%s: %s", conf->name, conf->target.enum_ptr->name);
+        } else if (conf->format == BOOL_FORMAT) {
+            wheatLog(WHEAT_DEBUG, "%s: %d", conf->name, conf->target.val);
         }
         conf++;
     }

@@ -253,7 +253,7 @@ void *dictFetchValue(struct dict *d, const void *key)
 {
     struct dictEntry *he;
 
-    he = dictFind(d,key);
+    he = dictFind(d, key);
     return he ? dictGetVal(he) : NULL;
 }
 
@@ -363,6 +363,15 @@ unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
     return hash;
 }
 
+void dictPrint(struct dict *d)
+{
+    struct dictIterator *iter = dictGetIterator(d);
+    struct dictEntry *entry;
+    while ((entry = dictNext(iter)) != NULL) {
+        printf("%s -> %s \n", (char *)entry->key, (char *)entry->v.val);
+    }
+    dictReleaseIterator(iter);
+}
 
 #define DICT_STATS_VECTLEN 50
 void dictPrintStats(struct dict *d) {
