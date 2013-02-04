@@ -232,16 +232,16 @@ void reexec()
 {
 }
 
-void halt(int exitcode)
+void halt(int graceful)
 {
     if (WorkerProcess == NULL) {
-        stopWorkers(1);
+        stopWorkers(graceful);
         wheatLog(WHEAT_NOTICE, "shutdown %s.", Server.master_name);
     } else {
         wheatLog(WHEAT_NOTICE, "worker %s exit.", WorkerProcess->worker_name);
     }
     if (Server.daemon) unlink(Server.pidfile);
-    exit(exitcode);
+    exit(graceful);
 }
 
 void stopWorkers(int graceful)

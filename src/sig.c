@@ -134,19 +134,19 @@ void handleHup()
 void handleQuit()
 {
     wheatLog(WHEAT_WARNING, "Signal sigquit");
-    halt(0);
+    halt(1);
 }
 
 void handleInt()
 {
     wheatLog(WHEAT_WARNING, "Signal int");
-    halt(1);
+    halt(0);
 }
 
 void handleTerm()
 {
     wheatLog(WHEAT_WARNING, "Signal term");
-    halt(1);
+    halt(0);
 }
 
 void handleTtin()
