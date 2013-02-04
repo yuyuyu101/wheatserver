@@ -186,7 +186,7 @@ PyObject *create_environ(struct client *client)
     if (sep) {
         if (envPutString(environ, "SERVER_PORT", sep+1))
             goto cleanup;
-        server = wstrRange(server, (int)(sep-server+1), -1);
+        server = wstrRange(server, (int)(sep-server+1), 0);
     } else if (!strcmp(http_data->url_scheme, "HTTP")) {
         if (envPutString(environ, "SERVER_PORT", "80"))
             goto cleanup;
@@ -305,7 +305,7 @@ static int wsgiSendHeaders(struct response *self)
             goto cleanup;
         totallen += len;
     }
-    client->res_buf = wstrRange(client->res_buf, totallen, -1);
+    client->res_buf = wstrRange(client->res_buf, totallen, 0);
     self->headers_sent = 1;
 
 cleanup:
@@ -436,8 +436,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             PyErr_Restore(type, value, tb);
             return NULL;
         }
-    }
-    else if (data->status != 0) {
+    } else if (data->status != 0) {
         data->err = "headers already set";
         return NULL;
     }
@@ -482,6 +481,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     Py_DECREF(iterator);
 
     if (PyErr_Occurred()) {
+        PyErr_Print();
         return NULL;
     }
 
@@ -506,6 +506,7 @@ static int wsgiSendBody(struct response *response, const char *data, size_t len)
         return 0;
 
     wsgi_data->send += tosend;
+    wheatLog(WHEAT_DEBUG, "buf %d tosend %d", wstrlen(response->client->res_buf), tosend);
     response->client->res_buf = wstrCatLen(response->client->res_buf, data, tosend);
     if (response->client->res_buf == NULL)
         return -1;
@@ -768,10 +769,8 @@ int wsgiSendResponse(struct response *self, PyObject *result)
                 break;
             }
         }
-
         Py_DECREF(item);
     }
-
     Py_DECREF(iter);
 
     if (PyErr_Occurred())

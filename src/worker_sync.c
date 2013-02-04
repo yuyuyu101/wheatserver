@@ -8,23 +8,40 @@ void dispatchRequest(int fd, char *ip, int port)
     if (c == NULL)
         return ;
     int ret;
+    int loop = 0;
     do {
+        loop++;
         int n = syncRecvData(fd, &c->buf);
-        if (n == -1) {
-            freeClient(c);
-            return ;
+        if (n == WHEAT_WRONG) {
+            wheatLog(WHEAT_DEBUG, "receive data failed:%s loop:%d", c->buf, loop);
+            goto cleanup;
         }
+        wheatLog(WHEAT_DEBUG, "receive data :%d loop:%d", n, loop);
+parser:
         ret = ptcol->parser(c);
-        if (ret == -1) {
-            freeClient(c);
-            return ;
+        wheatLog(WHEAT_DEBUG, "ret %d parse data :%d loop:%d", ret, wstrlen(c->buf), loop);
+        if (ret == WHEAT_WRONG) {
+            wheatLog(WHEAT_DEBUG, "parse http data failed:%s loop:%d", c->buf, loop);
+            goto cleanup;
         }
-    } while(ret != 1);
+    } while(ret == 1);
     ret = application->constructor(c);
     if (ret != 0) {
         wheatLog(WHEAT_WARNING, "app faileds");
     }
-    syncSendData(fd, &c->res_buf);
+    ret = syncSendData(fd, &c->res_buf);
+    if (ret != WHEAT_OK)
+        goto cleanup;
+    loop = 0;
+    if (wstrlen(c->buf)) {
+        c->protocol->freeProtocolData(c->protocol_data);
+        c->app->freeAppData(c->app_private_data);
+        c->app_private_data = application->initAppData();
+        c->protocol_data = c->protocol->initProtocolData();
+        goto parser;
+    }
+
+cleanup:
     close(fd);
     freeClient(c);
 }

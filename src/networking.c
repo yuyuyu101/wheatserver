@@ -14,8 +14,6 @@ int readBulkFrom(int fd, wstr *clientbuf)
     readlen = WHEAT_IOBUF_LEN;
 
     qblen = wstrlen(buf);
-    if (wstrfree(buf) * 2 > readlen)
-        readlen = wstrfree(buf);
     buf = wstrMakeRoom(buf, readlen);
 
     // Important ! buf may changed
@@ -27,10 +25,10 @@ int readBulkFrom(int fd, wstr *clientbuf)
             nread = 0;
         } else {
             wheatLog(WHEAT_VERBOSE, "Reading from fd %d: %s", fd, strerror(errno));
-            return -1;
+            return WHEAT_WRONG;
         }
     } else if (nread == 0) {
-        return -1;
+        return WHEAT_WRONG;
     }
     if (nread) {
         wstrupdatelen(buf, (int)(qblen+nread));
@@ -52,10 +50,13 @@ int writeBulkTo(int fd, wstr *clientbuf)
     if (nwritten == -1) {
         if (errno == EAGAIN) {
             nwritten = 0;
+        } else if (errno == EPIPE) {
+            wheatLog(WHEAT_VERBOSE, "Receive RST, peer closed", strerror(errno));
+            return WHEAT_WRONG;
         } else {
-            wheatLog(WHEAT_VERBOSE,
+            wheatLog(WHEAT_NOTICE,
                 "Error writing to client: %s", strerror(errno));
-            return -1;
+            return WHEAT_WRONG;
         }
     }
     return (int)totalwritten;

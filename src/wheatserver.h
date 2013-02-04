@@ -136,7 +136,7 @@ struct configuration *getConfiguration(const char *name);
 void wheatLogRaw(int level, const char *msg);
 void wheatLog(int level, const char *fmt, ...);
 
-#define WHEAT_WRONG 1
+#define WHEAT_WRONG -1
 #define WHEAT_OK 0
 
 #endif

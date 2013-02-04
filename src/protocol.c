@@ -18,6 +18,7 @@ struct protocol *spotProtocol(char *ip, int port, int fd)
 /* ========== Http Area ========== */
 
 static FILE *access_log_fp = NULL;
+static struct http_parser_settings settings;
 
 const char *URL_SCHEME[] = {
     "http",
@@ -114,6 +115,7 @@ int on_header_field(http_parser *parser, const char *at, size_t len)
     else
         key = wstrNewLen(at, (int)len);
     data->last_was_value = 0;
+
     data->last_entry = dictReplaceRaw(data->headers, key);
     if (data->last_entry == NULL)
         return 1;
@@ -126,15 +128,10 @@ int on_header_field(http_parser *parser, const char *at, size_t len)
  */
 int on_header_value(http_parser *parser, const char *at, size_t len)
 {
-    int ret;
     struct httpData *data = parser->data;
     wstr value;
-
     if (data->last_was_value) {
         value = dictGetVal(data->last_entry);
-        ret = dictDeleteNoFree(data->headers, dictGetKey(data->last_entry));
-        if (ret == DICT_WRONG)
-            return 1;
         value = wstrCatLen(value, at, len);
     } else
         value = wstrNewLen(at, (int)len);
@@ -142,10 +139,8 @@ int on_header_value(http_parser *parser, const char *at, size_t len)
     data->last_was_value = 1;
     if (value == NULL)
         return 1;
-    if (dictReplace(data->headers, dictGetKey(data->last_entry), value, NULL) == DICT_WRONG)
-        return 1;
-    else
-        return 0;
+    dictSetVal(data->headers, data->last_entry, value);
+    return 0;
 }
 
 int on_body(http_parser *parser, const char *at, size_t len)
@@ -184,14 +179,6 @@ int on_url(http_parser *parser, const char *at, size_t len)
 
 int parseHttp(struct client *client)
 {
-    http_parser_settings settings;
-    memset(&settings, 0 , sizeof(http_parser_settings));
-    settings.on_header_field = on_header_field;
-    settings.on_header_value = on_header_value;
-    settings.on_headers_complete = on_header_complete;
-    settings.on_body = on_body;
-    settings.on_url = on_url;
-
     size_t nparsed;
     size_t recved = wstrlen(client->buf);
     struct httpData *http_data = client->protocol_data;
@@ -200,14 +187,25 @@ int parseHttp(struct client *client)
 
     if (http_data->parser->upgrade) {
         /* handle new protocol */
+        wheatLog(WHEAT_WARNING, "parseHttp() handle new protocol: %s", client->buf);
         if (http_data->parser->http_minor == 0)
             http_data->upgrade = 1;
         else
-            return 1;
-    } else if (nparsed != recved) {
+            return WHEAT_WRONG;
+    }
+    wstrRange(client->buf, nparsed, 0);
+    if (http_data->complete) {
+        http_data->method = http_method_str(http_data->parser->method);
+        if (http_data->parser->http_minor == 0)
+            http_data->protocol_version = PROTOCOL_VERSION[0];
+        else
+            http_data->protocol_version = PROTOCOL_VERSION[1];
+        return WHEAT_OK;
+    }
+    if (nparsed != recved) {
         /* Handle error. Usually just close the connection. */
-        wheatLog(WHEAT_WARNING, "parseHttp() nparsed != recved: %s", client->buf);
-        return -1;
+        wheatLog(WHEAT_WARNING, "parseHttp() nparsed %d != recved %d: %s", nparsed, recved, client->buf);
+        return WHEAT_WRONG;
     }
     if (http_data->parser->http_errno) {
         wheatLog(
@@ -216,15 +214,9 @@ int parseHttp(struct client *client)
                 http_errno_name(http_data->parser->http_errno),
                 http_errno_description(http_data->parser->http_errno)
                 );
-        return -1;
+        return WHEAT_WRONG;
     }
-    http_data->method = http_method_str(http_data->parser->method);
-    if (http_data->parser->http_minor == 0)
-        http_data->protocol_version = PROTOCOL_VERSION[0];
-    else
-        http_data->protocol_version = PROTOCOL_VERSION[1];
-
-    return http_data->complete;
+    return 1;
 }
 
 void *initHttpData()
@@ -274,17 +266,23 @@ static void openAccessLog(char *access_log)
 
 void initHttp()
 {
-    if (access_log_fp == NULL) {
-        struct configuration *conf;
-        char *access_log;
-        conf = getConfiguration("access-log");
-        access_log = conf->target.ptr;
+    struct configuration *conf;
+    char *access_log;
+    conf = getConfiguration("access-log");
+    access_log = conf->target.ptr;
+    if (access_log && access_log_fp == NULL) {
         openAccessLog(access_log);
         if (!access_log_fp) {
             wheatLog(WHEAT_WARNING, "init Http failed");
             halt(1);
         }
     }
+    memset(&settings, 0 , sizeof(http_parser_settings));
+    settings.on_header_field = on_header_field;
+    settings.on_header_value = on_header_value;
+    settings.on_headers_complete = on_header_complete;
+    settings.on_body = on_body;
+    settings.on_url = on_url;
 }
 
 void deallocHttp()
@@ -304,12 +302,15 @@ static const char *apacheDateFormat()
 
 void logAccess(struct client *client, int response_length, int status)
 {
+    if (!access_log_fp)
+        return ;
     struct httpData *http_data = client->protocol_data;
     const char *remote_addr, *hyphen, *user, *datetime, *request;
     const char *refer, *user_agent;
     char status_str[100], resp_length[32];
     char buf[255];
     wstr temp;
+    int ret;
 
     temp = wstrNew("Remote_Addr");
     remote_addr = dictFetchValue(http_data->headers, temp);
@@ -336,8 +337,11 @@ void logAccess(struct client *client, int response_length, int status)
         user_agent = "-";
     wstrFree(temp);
 
-    fprintf(access_log_fp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
+    ret = fprintf(access_log_fp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
             remote_addr, hyphen, user, datetime, request, status_str,
             resp_length, refer, user_agent);
-    fflush(access_log_fp);
+    if (ret <= 0)
+        wheatLog(WHEAT_WARNING, "log access failed: %s", strerror(errno));
+    else
+        fflush(access_log_fp);
 }
