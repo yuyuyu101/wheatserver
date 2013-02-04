@@ -60,6 +60,7 @@ struct globalServer {
     int idle_timeout;
     int daemon;                                  //daemon, off
     char *pidfile;                               //pidfile, NULL
+    int max_buffer_size;                         //max-buffer-size, 0
 
     /* status */
     int ipfd;

@@ -13,21 +13,19 @@ void dispatchRequest(int fd, char *ip, int port)
         loop++;
         int n = syncRecvData(fd, &c->buf);
         if (n == WHEAT_WRONG) {
-            wheatLog(WHEAT_DEBUG, "receive data failed:%s loop:%d", c->buf, loop);
+            wheatLog(WHEAT_NOTICE, "receive data failed:%s loop:%d", c->buf, loop);
             goto cleanup;
         }
-        wheatLog(WHEAT_DEBUG, "receive data :%d loop:%d", n, loop);
 parser:
         ret = ptcol->parser(c);
-        wheatLog(WHEAT_DEBUG, "ret %d parse data :%d loop:%d", ret, wstrlen(c->buf), loop);
         if (ret == WHEAT_WRONG) {
-            wheatLog(WHEAT_DEBUG, "parse http data failed:%s loop:%d", c->buf, loop);
+            wheatLog(WHEAT_NOTICE, "parse http data failed:%s loop:%d", c->buf, loop);
             goto cleanup;
         }
     } while(ret == 1);
     ret = application->constructor(c);
     if (ret != 0) {
-        wheatLog(WHEAT_WARNING, "app faileds");
+        wheatLog(WHEAT_NOTICE, "app construct faileds");
     }
     ret = syncSendData(fd, &c->res_buf);
     if (ret != WHEAT_OK)

@@ -506,7 +506,6 @@ static int wsgiSendBody(struct response *response, const char *data, size_t len)
         return 0;
 
     wsgi_data->send += tosend;
-    wheatLog(WHEAT_DEBUG, "buf %d tosend %d", wstrlen(response->client->res_buf), tosend);
     response->client->res_buf = wstrCatLen(response->client->res_buf, data, tosend);
     if (response->client->res_buf == NULL)
         return -1;

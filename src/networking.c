@@ -16,6 +16,11 @@ int readBulkFrom(int fd, wstr *clientbuf)
     qblen = wstrlen(buf);
     buf = wstrMakeRoom(buf, readlen);
 
+    if (wstrlen(buf) > Server.max_buffer_size) {
+        wheatLog(WHEAT_NOTICE, "buffer size larger than max limit");
+        return WHEAT_WRONG;
+    }
+
     // Important ! buf may changed
     *clientbuf = buf;
 
