@@ -74,9 +74,16 @@ int unsignedIntValidator(struct configuration *conf, const char *key, const char
 {
     ASSERT(val);
     int i, digit;
+    intptr_t max_limit = 0;
+
+    if (conf->helper)
+        max_limit = (intptr_t)conf->helper;
+
     for (i = 0; val[i] != '\0'; i++) {
         digit = val[i] - 48;
         if (digit < 0 || digit > 9)
+            return VALIDATE_WRONG;
+        if (max_limit != 0 && digit > max_limit)
             return VALIDATE_WRONG;
     }
     conf->target.val = atoi(val);

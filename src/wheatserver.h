@@ -16,6 +16,7 @@
 #include <time.h>
 
 #include "version.h"
+#include "event.h"
 #include "wstr.h"
 #include "dict.h"
 #include "net.h"

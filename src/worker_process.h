@@ -96,7 +96,7 @@ void freeClient(struct client *);
  *
  * worker's duty:
  * 1. provide with send and receive api
- * 2. if parent failed, worker must detect and exit
+ * 2. if parent changed, worker must detect and exit
  * 3. if alive == 0, worker must exit
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
