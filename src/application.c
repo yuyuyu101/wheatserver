@@ -24,6 +24,7 @@ int wsgiConstructor(struct client *client)
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
     /* Create Request object, passing it the context as a CObject */
+    int is_ok = 1;
     PyObject *start_resp, *result, *args, *env;
     struct response *req_obj = NULL;
     PyObject *res = PyCObject_FromVoidPtr(client, NULL);
@@ -74,12 +75,12 @@ out:
         /* Display HTTP 500 error, if possible */
         if (req_obj == NULL || !req_obj->headers_sent)
             sendResponse500((struct response *)req_obj);
+        is_ok = 0;
     }
 
     if (req_obj != NULL) {
         /* Don't rely on cyclic GC. Clear circular references NOW. */
         responseClear(req_obj);
-
         Py_DECREF(req_obj);
     }
 
@@ -87,7 +88,9 @@ out:
 
     struct wsgiData *wsgi_data = client->app_private_data;
     logAccess(client, wsgi_data->response_length, wsgi_data->status);
-    return 0;
+    if (is_ok)
+        return WHEAT_OK;
+    return WHEAT_WRONG;
 }
 
 void *initWsgiAppData()

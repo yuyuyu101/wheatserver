@@ -16,6 +16,17 @@ struct workerProcess {
 
     char *worker_name;
     struct worker *worker;
+
+    // Worker Statistic
+    time_t stat_start_time;             // Worker process start time
+    long long stat_total_connection;    // Number of the total client
+    long long stat_total_request;       // Number of the total request parsed
+    // Number of the failed request parsed. Such as http protocol, non-200
+    // response is included
+    long long stat_failed_request;
+    // Max size of request buffer size since worker started
+    long long stat_buffer_size;
+    long long stat_work_time;           // Total of handling request time
 };
 
 extern struct workerProcess *WorkerProcess;

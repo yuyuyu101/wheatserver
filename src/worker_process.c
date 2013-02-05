@@ -28,6 +28,14 @@ void initWorkerProcess(char *worker_name)
     WorkerProcess->alive = 1;
     WorkerProcess->worker_name = worker_name;
     WorkerProcess->worker = spotWorker(worker_name);
+
+    WorkerProcess->stat_start_time = time(NULL);
+    WorkerProcess->stat_total_connection = 0;
+    WorkerProcess->stat_total_request = 0;
+    WorkerProcess->stat_failed_request = 0;
+    WorkerProcess->stat_buffer_size = 0;
+    WorkerProcess->stat_work_time = 0;
+
     initWorkerSignals();
     WorkerProcess->worker->cron();
 }
