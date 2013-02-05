@@ -21,6 +21,8 @@ struct worker *spotWorker(char *worker_name)
 
 void initWorkerProcess(char *worker_name)
 {
+    if (Server.stat_fd != 0)
+        close(Server.stat_fd);
     WorkerProcess->pid = getpid();
     WorkerProcess->ppid = getppid();
     nonBlockCloseOnExecPipe(&WorkerProcess->pipe_readfd, &WorkerProcess->pipe_writefd);
@@ -28,14 +30,7 @@ void initWorkerProcess(char *worker_name)
     WorkerProcess->alive = 1;
     WorkerProcess->worker_name = worker_name;
     WorkerProcess->worker = spotWorker(worker_name);
-
-    WorkerProcess->stat_start_time = time(NULL);
-    WorkerProcess->stat_total_connection = 0;
-    WorkerProcess->stat_total_request = 0;
-    WorkerProcess->stat_failed_request = 0;
-    WorkerProcess->stat_buffer_size = 0;
-    WorkerProcess->stat_work_time = 0;
-
+    initWorkerStat();
     initWorkerSignals();
     WorkerProcess->worker->cron();
 }

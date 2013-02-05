@@ -250,7 +250,8 @@ int daemonize(int dump_core)
     return WHEAT_OK;
 }
 
-void createPidFile() {
+void createPidFile()
+{
     /* Try to write the pid file in a best-effort way. */
     FILE *fp = fopen(Server.pidfile, "w");
     if (fp) {

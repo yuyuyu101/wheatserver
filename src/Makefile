@@ -1,6 +1,6 @@
 CC=cc
 CXX=c++
-SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c worker_process.c worker_sync.c util.c protocol.c application.c http_parser.c wsgi.c wsgiinput.c wsgiwrapper.c
+SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c worker_process.c worker_sync.c util.c protocol.c application.c http_parser.c wsgi.c wsgiinput.c wsgiwrapper.c stats.c event.c
 OBJECTS = $(SOURCES:.c=.o)
 SERVER_OBJECTS += $(OBJECTS)
 SERVER_OBJECTS += wheatserver.o
@@ -28,7 +28,7 @@ wheatworker: $(WORKER_OBJECTS)
 
 ###########
 test: $(TESTS)
-	for t in $(TESTS); do echo "***** Running $$t"; ./$$t || exit 1; done
+	for t in $(TESTS); do echo "***** Running $$t"; ./$$t ; rm $(TEST) || exit 1; done
 
 test_wstr: wstr.c wstr.h
 	$(CC) -o $@ wstr.c -DWSTR_TEST_MAIN

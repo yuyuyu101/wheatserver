@@ -15,34 +15,40 @@ struct configuration configTable[] = {
     //  helper |    flags
 
     // Master Configuration
-    {"bind-addr",       2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
-    {"port",            2, unsignedIntValidator, {.val=WHEAT_SERVERPORT},
-        NULL,   INT_FORMAT},
-    {"worker-number",   2, unsignedIntValidator, {.val=2},
-        (void *)1024,     INT_FORMAT},
-    {"logfile",         2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
-    {"logfile-level",   2, enumValidator,        {.enum_ptr=&Verbose[0]},
-        &Verbose[0], ENUM_FORMAT},
-    {"daemon",          2, boolValidator,        {.val=0},
-        NULL,   BOOL_FORMAT},
-    {"pidfile",         2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
-    {"max-buffer-size", 2, unsignedIntValidator, {.val=0},
-        NULL,   INT_FORMAT},
+    {"bind-addr",         2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
+    {"port",              2, unsignedIntValidator, {.val=WHEAT_SERVERPORT},
+        NULL,         INT_FORMAT},
+    {"worker-number",     2, unsignedIntValidator, {.val=2},
+        (void *)1024, INT_FORMAT},
+    {"logfile",           2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
+    {"logfile-level",     2, enumValidator,        {.enum_ptr=&Verbose[0]},
+        &Verbose[0],  ENUM_FORMAT},
+    {"daemon",            2, boolValidator,        {.val=0},
+        NULL,         BOOL_FORMAT},
+    {"pidfile",           2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
+    {"max-buffer-size",   2, unsignedIntValidator, {.val=0},
+        NULL,         INT_FORMAT},
+    {"stat-bind-addr",    2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
+    {"stat-port",         2, unsignedIntValidator, {.val=WHEAT_STATS_PORT},
+        NULL,         INT_FORMAT},
+    {"stat-refresh-time", 2, unsignedIntValidator, {.val=WHEAT_STAT_REFRESH},
+        NULL,         INT_FORMAT},
 
     // Http
-    {"access-log",      2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
+    {"access-log",        2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
 
     // WSGI Configuration
-    {"app-module-path", 2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
-    {"app-module-name", 2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
-    {"app-name",        2, stringValidator,      {.ptr=NULL},
-        NULL,   STRING_FORMAT},
+    {"app-module-path",   2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
+    {"app-module-name",   2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
+    {"app-name",          2, stringValidator,      {.ptr=NULL},
+        NULL,         STRING_FORMAT},
 };
 
 void fillServerConfig()
@@ -64,6 +70,12 @@ void fillServerConfig()
     Server.pidfile = conf->target.ptr;
     conf++;
     Server.max_buffer_size = conf->target.val;
+    conf++;
+    Server.stat_addr = conf->target.ptr;
+    conf++;
+    Server.stat_port = conf->target.val;
+    conf++;
+    Server.stat_refresh_seconds = conf->target.val;
 }
 
 struct configuration *getConfiguration(const char *name)

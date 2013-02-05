@@ -5,6 +5,7 @@ void dispatchRequest(int fd, char *ip, int port)
     struct protocol *ptcol = spotProtocol(ip, port, fd);
     struct app *application = spotAppInterface();
     struct client *c = initClient(fd, ip, port, ptcol, application);
+    struct workerStat *stat = WorkerProcess->stat;
     if (c == NULL)
         return ;
     int ret;
@@ -16,20 +17,20 @@ void dispatchRequest(int fd, char *ip, int port)
             wheatLog(WHEAT_NOTICE, "receive data failed:%s loop:%d", c->buf, loop);
             goto cleanup;
         }
-        if (wstrlen(c->buf) > WorkerProcess->stat_buffer_size)
-            WorkerProcess->stat_buffer_size = wstrlen(c->buf);
+        if (wstrlen(c->buf) > stat->stat_buffer_size)
+            stat->stat_buffer_size = wstrlen(c->buf);
 parser:
-        WorkerProcess->stat_total_request++;
+        stat->stat_total_request++;
         ret = ptcol->parser(c);
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse http data failed:%s loop:%d", c->buf, loop);
-            WorkerProcess->stat_failed_request++;
+            stat->stat_failed_request++;
             goto cleanup;
         }
     } while(ret == 1);
     ret = application->constructor(c);
     if (ret != WHEAT_OK) {
-        WorkerProcess->stat_failed_request++;
+        stat->stat_failed_request++;
         wheatLog(WHEAT_NOTICE, "app construct faileds");
     }
     ret = syncSendData(fd, &c->res_buf);
@@ -57,12 +58,19 @@ void syncWorkerCron()
     }
 
     struct timeval start, end;
+    int refresh_seconds = Server.stat_refresh_seconds;
     long time_use;
+    time_t elapse, now = time(NULL);
+    struct workerStat *stat = WorkerProcess->stat;
     while (WorkerProcess->alive) {
         int fd, ret;
 
         char ip[46];
         int port;
+        elapse = time(NULL);
+        if (now - elapse > refresh_seconds) {
+            sendStatPacket();
+        }
         fd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
         if (fd == NET_WRONG) {
             goto accepterror;
@@ -76,8 +84,8 @@ void syncWorkerCron()
         dispatchRequest(fd, ip, port);
         gettimeofday(&end, NULL);
         time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
-        WorkerProcess->stat_work_time += time_use;
-        WorkerProcess->stat_total_connection++;
+        stat->stat_work_time += time_use;
+        stat->stat_total_connection++;
 
         continue;
 accepterror:

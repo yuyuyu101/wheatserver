@@ -19,6 +19,7 @@
 #include "event.h"
 #include "wstr.h"
 #include "dict.h"
+#include "stats.h"
 #include "net.h"
 #include "hook.h"
 #include "list.h"
@@ -36,6 +37,11 @@
 #define WHEATSERVER_PATH_LEN          1024
 #define WHEATSERVER_GRACEFUL_TIME     30
 #define WHEATSERVER_IDLE_TIME         30
+
+/* Statistic Configuration */
+#define WHEAT_STATS_PORT       10829
+#define WHEAT_STAT_REFRESH     10
+#define WHEAT_STAT_PACKET_MAX  512
 
 /* Log levels */
 #define WHEAT_DEBUG       0
@@ -63,8 +69,14 @@ struct globalServer {
     char *pidfile;                               //pidfile, NULL
     int max_buffer_size;                         //max-buffer-size, 0
 
+    char *stat_addr;
+    int stat_port;
+    int stat_refresh_seconds;                    //stat-refresh-time, 10
+
     /* status */
     int ipfd;
+    int stat_fd;
+    struct evcenter *stat_center;
     pid_t pid;
     pid_t relaunch_pid;
     int pipe_readfd;
@@ -110,6 +122,9 @@ struct configuration {
     void *helper;
     enum printFormat format;
 };
+
+
+void initMasterStats();
 
 /* restart */
 void reload();

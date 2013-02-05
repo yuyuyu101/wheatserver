@@ -10,15 +10,12 @@
 //#endif
 //#endif
 
-struct evcenter *eventcenter_init(int nevent, eventProc *read, eventProc *write)
+struct evcenter *eventcenter_init(int nevent)
 {
-    int status, ep = 0;
     struct event *events = NULL;
     struct evcenter *center = NULL;
     struct fired_event *fired_events = NULL;
     void *api_state = NULL;
-
-    ASSERT(read && write);
 
     center = malloc(sizeof(struct evcenter));
     if (center == NULL) {
@@ -43,8 +40,6 @@ struct evcenter *eventcenter_init(int nevent, eventProc *read, eventProc *write)
     center->events = events;
     center->fired_events = fired_events;
     center->apidata = api_state;
-    center->readProc = read;
-    center->writeProc = write;
 
     return center;
 
@@ -65,7 +60,7 @@ void eventcenter_dealloc(struct evcenter *center)
     free(center);
 }
 
-int createEvent(struct evcenter *center, int fd, int mask, void *client_data)
+int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void *client_data)
 {
     if (fd >= center->nevent) {
         errno = ERANGE;
@@ -76,6 +71,8 @@ int createEvent(struct evcenter *center, int fd, int mask, void *client_data)
     if (addEvent(center->apidata, fd, mask) == -1)
         return WHEAT_WRONG;
     event->mask |= mask;
+    if (mask & EVENT_READABLE) event->readProc = proc;
+    if (mask & EVENT_WRITABLE) event->writeProc = proc;
     event->client_data = client_data;
     return WHEAT_OK;
 }
@@ -106,11 +103,11 @@ int processEvents(struct evcenter *center)
          * processed, so we check if the event is still valid. */
         if (event->mask & mask & EVENT_READABLE) {
             rfired = 1;
-            center->readProc(center, fd, event->client_data, mask);
+            event->readProc(center, fd, event->client_data, mask);
         }
         if (event->mask & mask & EVENT_WRITABLE) {
-            if (!rfired || center->readProc != center->writeProc)
-                center->writeProc(center, fd, event->client_data, mask);
+            if (!rfired || event->readProc != event->writeProc)
+                event->writeProc(center, fd, event->client_data, mask);
         }
         processed++;
     }

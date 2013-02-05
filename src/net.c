@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -36,6 +37,55 @@ static int wheatCreateSocket(char *err, int domain)
         return NET_WRONG;
     }
     return s;
+}
+
+#define WHEAT_CONNECT_NONE 0
+#define WHEAT_CONNECT_NONBLOCK 1
+static int wheatTcpGenericConnect(char *err, char *addr, int port, int flags)
+{
+    int s;
+    struct sockaddr_in sa;
+
+    if ((s = wheatCreateSocket(err, AF_INET)) == NET_WRONG)
+        return NET_WRONG;
+
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    if (inet_aton(addr, &sa.sin_addr) == 0) {
+        struct hostent *he;
+
+        he = gethostbyname(addr);
+        if (he == NULL) {
+            wheatSetError(err, "can't resolve: %s", addr);
+            close(s);
+            return NET_WRONG;
+        }
+        memcpy(&sa.sin_addr, he->h_addr, sizeof(struct in_addr));
+    }
+    if (flags & WHEAT_CONNECT_NONBLOCK) {
+        if (wheatNonBlock(err,s) != NET_OK)
+            return NET_WRONG;
+    }
+    if (connect(s, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
+        if (errno == EINPROGRESS &&
+            flags & WHEAT_CONNECT_NONBLOCK)
+            return s;
+
+        wheatSetError(err, "connect: %s", strerror(errno));
+        close(s);
+        return NET_WRONG;
+    }
+    return s;
+}
+
+int wheatTcpConnect(char *err, char *addr, int port)
+{
+    return wheatTcpGenericConnect(err,addr,port,WHEAT_CONNECT_NONE);
+}
+
+int wheatTcpNonBlockConnect(char *err, char *addr, int port)
+{
+    return wheatTcpGenericConnect(err, addr, port, WHEAT_CONNECT_NONBLOCK);
 }
 
 static int wheatListen(char *err, int s, struct sockaddr *sa, socklen_t len) {

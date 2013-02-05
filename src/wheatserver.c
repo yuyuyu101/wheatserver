@@ -7,6 +7,8 @@ void initGlobalServerConfig()
     Server.bind_addr = NULL;
     Server.port = WHEAT_SERVERPORT;
     Server.ipfd = 0;
+    Server.stat_fd = 0;
+    Server.stat_center = NULL;
     Server.logfile = NULL;
     Server.verbose = WHEAT_VERBOSE;
     Server.worker_number = 2;
@@ -14,6 +16,10 @@ void initGlobalServerConfig()
     Server.idle_timeout = WHEATSERVER_IDLE_TIME;
     Server.daemon = 0;
     Server.pidfile = NULL;
+    Server.max_buffer_size = 0;
+    Server.stat_addr = NULL;
+    Server.stat_port = WHEAT_STATS_PORT;
+    Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
     initHookCenter();
     Server.workers = createList();
     Server.pid = getpid();
@@ -89,7 +95,7 @@ void fakeSleep()
             wheatLog(WHEAT_WARNING, "fakeSleep() read failed: %s", strerror(errno));
             halt(1);
         }
-        assert(buf[0] == '.');
+        ASSERT(buf[0] == '.');
     }
 }
 
@@ -265,10 +271,12 @@ void stopWorkers(int graceful)
 void run()
 {
     adjustWorkerNumber();
+    initMasterStats();
     while (1) {
         int *sig;
 
         reapWorkers();
+        statMasterLoop();
         if (listLength(Server.signal_queue) == 0) {
             fakeSleep();
             adjustWorkerNumber();

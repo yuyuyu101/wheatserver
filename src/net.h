@@ -11,6 +11,7 @@ int wheatTcpKeepAlive(char *err, int fd);
 int wheatCloseOnExec(char *err, int fd);
 int wheatTcpServer(char *err, char *bind_attr, int port);
 int wheatTcpConnect(char *err, char *addr, int port);
+int wheatTcpNonBlockConnect(char *err, char *addr, int port);
 int wheatTcpAccept(char *err, int s, char *ip, int *port);
 
 #endif

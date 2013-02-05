@@ -13,6 +13,8 @@ struct event {
     int mask;
     void *client_data;
     int fd;
+    eventProc *readProc;
+    eventProc *writeProc;
 };
 
 struct fired_event {
@@ -25,13 +27,12 @@ struct evcenter {
     struct event *events;
     struct fired_event *fired_events;
     void *apidata;
-    eventProc *readProc;
-    eventProc *writeProc;
 };
 
-struct evcenter *eventcenter_init(int nevent, eventProc *read, eventProc *write);
+struct evcenter *eventcenter_init(int nevent);
 void eventcenter_dealloc(struct evcenter *center);
-int createEvent(struct evcenter *center, int fd, int mask, void *clientData);
+int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void *clientData);
 void deleteEvent(struct evcenter *center, int fd, int mask);
+int processEvents(struct evcenter *center);
 
 #endif
