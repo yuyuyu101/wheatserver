@@ -31,7 +31,7 @@ struct configuration configTable[] = {
         NULL,         STRING_FORMAT},
     {"max-buffer-size",   2, unsignedIntValidator, {.val=0},
         NULL,         INT_FORMAT},
-    {"stat-bind-addr",    2, stringValidator,      {.ptr=WHEAT_STATS_ADDR},
+    {"stat-bind-addr",    2, stringValidator,      {.ptr=NULL},
         NULL,         STRING_FORMAT},
     {"stat-port",         2, unsignedIntValidator, {.val=WHEAT_STATS_PORT},
         NULL,         INT_FORMAT},
