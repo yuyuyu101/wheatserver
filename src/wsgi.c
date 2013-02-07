@@ -656,7 +656,7 @@ int sendFile(struct client *client, int fd)
     } while (len == WHEAT_IOBUF_LEN);
 
     do {
-        if ((len = WorkerProcess->worker->sendData(fd, &buf)) < 0)
+        if ((len = WorkerProcess->worker->sendData(fd, &buf)) < -1)
             return -1;
         writelen += len;
     } while (writelen == readlen);

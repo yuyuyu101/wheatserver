@@ -12,7 +12,6 @@ void dispatchRequest(int fd, char *ip, int port)
     do {
         n = syncRecvData(fd, &c->buf);
         if (n == WHEAT_WRONG) {
-            wheatLog(WHEAT_NOTICE, "receive data failed:%s", c->buf);
             goto cleanup;
         }
         if (wstrlen(c->buf) > stat->stat_buffer_size)

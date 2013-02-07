@@ -33,6 +33,7 @@ int readBulkFrom(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     } else if (nread == 0) {
+        wheatLog(WHEAT_VERBOSE, "Peer close file descriptor %d", fd);
         return WHEAT_WRONG;
     }
     if (nread) {

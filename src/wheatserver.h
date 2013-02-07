@@ -125,9 +125,6 @@ struct configuration {
     enum printFormat format;
 };
 
-
-void initMasterStats();
-
 /* restart */
 void reload();
 void reexec();

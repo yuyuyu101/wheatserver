@@ -96,7 +96,12 @@ static void statReadProc(struct evcenter *center, int fd, void *client_data, int
     wstr buf = wstrEmpty();
     ssize_t nread = readBulkFrom(fd, &buf);
     ssize_t parse_ret = 0;
-    if (nread < 10) {
+    if (nread == -1) {
+        close(fd);
+        deleteEvent(center, fd, EVENT_READABLE);
+        wheatLog(WHEAT_DEBUG, "delete readable fd: %d", fd);
+        return ;
+    } else if (nread < 10) {
         wheatLog(WHEAT_DEBUG, "receive stat packet less than 10 bits: %s",
                 buf);
         return ;
@@ -120,8 +125,18 @@ static void buildConnection(struct evcenter *center, int fd, void *client_data, 
     }
     wheatLog(WHEAT_DEBUG, "Accepted worker %s:%d", ip, cport);
 
-    wheatNonBlock(NULL, cfd);
-    wheatTcpNoDelay(NULL, cfd);
+    if (wheatNonBlock(Server.neterr, cfd) == NET_WRONG) {
+            wheatLog(WHEAT_WARNING,
+                    "buildConnection: set nonblock %d failed: %s",
+                    fd, Server.neterr);
+            return ;
+    }
+    if (wheatTcpNoDelay(Server.neterr, cfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING,
+                "buildConnection: tcp no delay %d failed: %s",
+                fd, Server.neterr);
+        return ;
+    }
     if (createEvent(Server.stat_center, cfd, EVENT_READABLE,
         statReadProc, NULL) == WHEAT_WRONG)
     {
@@ -135,7 +150,7 @@ void resetStat(struct workerStat *stat)
     memset(stat, 0, sizeof(struct workerStat));
 }
 
-void initMasterStats()
+void initMasterStatsServer()
 {
     if (Server.stat_port != 0) {
         Server.stat_fd = wheatTcpServer(Server.neterr,
@@ -198,10 +213,10 @@ void statMasterLoop()
         now = time(NULL);
     processEvents(Server.stat_center, Server.stat_refresh_seconds);
     if (time(NULL) - now > 5) {
+        aggregateStats();
         if (Server.verbose == WHEAT_DEBUG)
             logStat();
         now = time(NULL);
-        aggregateStats();
     }
 }
 

@@ -133,9 +133,9 @@ void spawnWorker(char *worker_name)
         return ;
     } else {
         WorkerProcess = new_worker;
+        wheatLog(WHEAT_NOTICE, "new worker spawned %d", getpid());
         initWorkerProcess(new_worker, worker_name);
         new_worker->worker->cron();
-        wheatLog(WHEAT_NOTICE, "new worker spawned %d", getpid());
         wheatLog(WHEAT_NOTICE, "worker exit pid:%d", getpid());
         exit(0);
     }
@@ -213,21 +213,22 @@ void reapWorkers()
  * 4. reboot statistic server */
 void reload()
 {
-    char *old_addr = Server.bind_addr;
-    int old_port = Server.port;
+    char *old_addr = Server.bind_addr, *old_stat_addr = Server.stat_addr;
+    int old_port = Server.port, old_stat_port = Server.stat_port;
     loadConfigFile(Server.configfile_path, NULL);
     if (strlen(Server.bind_addr) != strlen(old_addr) ||
             strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
             old_port != Server.port) {
         close(Server.ipfd);
-        if (Server.port != 0) {
-            Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
-            if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
-                wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
-                halt(1);
-            }
-            wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
-        }
+        initServer();
+    }
+
+    if (strlen(Server.stat_addr) != strlen(old_stat_addr) ||
+            strncmp(Server.stat_addr, old_stat_addr, strlen(old_stat_addr)) ||
+            old_stat_port != Server.stat_port) {
+        close(Server.stat_fd);
+        eventcenter_dealloc(Server.stat_center);
+        initMasterStatsServer();
     }
 
     int i;
@@ -265,7 +266,7 @@ void stopWorkers(int graceful)
     else
         sig = SIGTERM;
     long seconds = time(NULL) + Server.graceful_timeout;
-    while (seconds < time(NULL)) {
+    while (seconds < time(NULL) && listLength(Server.workers)) {
         killAllWorkers(sig);
         usleep(200000);
         reapWorkers();
@@ -346,7 +347,7 @@ int main(int argc, const char *argv[])
     if (Server.daemon) daemonize(1);
     wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
 
-    initMasterStats();
+    initMasterStatsServer();
     initServer();
     if (Server.daemon) createPidFile();
 

@@ -29,6 +29,7 @@ struct workerStat {
 };
 
 struct workerStat *initStat(int only_malloc);
+void initMasterStatsServer();
 void resetStat(struct workerStat *);
 void sendStatPacket();
 void statMasterLoop();
