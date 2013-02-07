@@ -115,9 +115,19 @@ void setupSync()
 {
 }
 
-int syncSendData(int fd, wstr *buf)
+int syncSendData(int fd, wstr *clientbuf)
 {
-    return writeBulkTo(fd, buf);
+    wstr buf = *clientbuf;
+    ssize_t bufpos = 0, nwritten = 0, totalwritten = 0;
+    while(bufpos <= wstrlen(buf)) {
+        nwritten = writeBulkTo(fd, clientbuf);
+        if (nwritten == -1)
+            break;
+        bufpos += nwritten;
+        totalwritten += nwritten;
+        wstrRange(buf, bufpos, 0);
+    }
+    return (int)totalwritten;
 }
 
 int syncRecvData(int fd, wstr *buf)

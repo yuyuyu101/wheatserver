@@ -44,10 +44,11 @@ void sendStatPacket()
     if (nwrite == -1) {
         wheatLog(WHEAT_DEBUG, "Master close connection");
         connectWithMaster(WorkerProcess->stat);
-    } else if (nwrite != wstrlen(send))
+    } else if (nwrite != wstrlen(send)) {
         wheatLog(WHEAT_DEBUG,
                 "send statistic info failed, total %d sended %d",
                 wstrlen(send), nwrite);
+    }
     else {
         resetStat(stat);
         stat->stat_last_send = time(NULL);
@@ -69,7 +70,7 @@ static ssize_t parseStat(wstr buf)
     len = end + 1;
 
     wstr packet = wstrNewLen(buf, len);
-    buf = wstrRange(buf, len, 0);
+    wstrRange(buf, len, 0);
     ssize_t is_ok = 1;
     int count;
     pid_t pid;

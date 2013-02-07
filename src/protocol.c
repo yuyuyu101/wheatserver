@@ -342,7 +342,8 @@ void logAccess(struct client *client, int response_length, int status)
     ret = fprintf(access_log_fp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
             remote_addr, hyphen, user, datetime, request, status_str,
             resp_length, refer, user_agent);
-    if (ret <= 0)
+    wheatLog(WHEAT_DEBUG, "fprintf %d", ret);
+    if (ret == -1)
         wheatLog(WHEAT_WARNING, "log access failed: %s", strerror(errno));
     else
         fflush(access_log_fp);

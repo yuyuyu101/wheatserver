@@ -104,14 +104,13 @@ PyObject *create_environ(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
     const char *req_uri = NULL;
-    PyObject *environ, *tmp;
+    PyObject *environ;
     environ = PyDict_New();
     char buf[256];
     int result = 1;
 
     if (!environ)
         return NULL;
-    tmp = environ;
     environ = default_environ(environ, http_data);
     if (environ == NULL) {
         Py_DECREF(environ);
@@ -165,7 +164,7 @@ PyObject *create_environ(struct client *client)
             server = wstrDup(value);
         } else if (!strcmp(buf, "HTTP_SCRIPT_NAME")) {
             script_name = wstrNew(value);
-            if (envPutString(environ, "SCRIPT_NAME", ""))
+            if (envPutString(environ, "SCRIPT_NAME", script_name))
                 goto cleanup;
         } else {
             if (envPutString(environ, buf, value))
@@ -267,7 +266,7 @@ static int wsgiSendHeaders(struct response *self)
 {
     struct client *client = self->client;
     struct wsgiData *wsgi_data = client->app_private_data;
-    int totallen, sendlen, len;
+    int len;
     char buf[256];
 
     if (self->headers_sent)
@@ -298,14 +297,9 @@ static int wsgiSendHeaders(struct response *self)
     if (client->res_buf == NULL)
         goto cleanup;
 
-    sendlen = wstrlen(client->res_buf);
-    totallen = 0;
-    while (totallen < sendlen) {
-        if ((len = WorkerProcess->worker->sendData(client->clifd, &client->res_buf)) < 0)
-            goto cleanup;
-        totallen += len;
-    }
-    client->res_buf = wstrRange(client->res_buf, totallen, 0);
+    if ((len = WorkerProcess->worker->sendData(client->clifd, &client->res_buf)) < 0)
+        goto cleanup;
+    client->res_buf = wstrRange(client->res_buf, len, 0);
     self->headers_sent = 1;
 
 cleanup:

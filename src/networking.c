@@ -42,17 +42,13 @@ int readBulkFrom(int fd, wstr *clientbuf)
     return (int)nread;
 }
 
+/* return -1 means `fd` occurs error or closed, it should be closed
+ * return 0 means EAGAIN */
 int writeBulkTo(int fd, wstr *clientbuf)
 {
     wstr buf = *clientbuf;
-    ssize_t bufpos = 0, nwritten = 0, totalwritten = 0;
-    while(bufpos <= wstrlen(buf)) {
-        nwritten = write(fd, buf+bufpos, wstrlen(buf)-bufpos);
-        if (nwritten <= 0)
-            break;
-        bufpos += nwritten;
-        totalwritten += nwritten;
-    }
+    ssize_t nwritten = 0;
+    nwritten = write(fd, buf, wstrlen(buf));
     if (nwritten == -1) {
         if (errno == EAGAIN) {
             nwritten = 0;
@@ -65,5 +61,5 @@ int writeBulkTo(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     }
-    return (int)totalwritten;
+    return (int)nwritten;
 }

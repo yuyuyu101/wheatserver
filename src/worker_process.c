@@ -57,6 +57,7 @@ struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct
     c->res_buf = wstrEmpty();
     if (c->protocol_data && c->app_private_data)
         return c;
+    free(c);
     return NULL;
 }
 
