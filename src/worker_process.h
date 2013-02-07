@@ -11,6 +11,7 @@ struct workerProcess {
     pid_t pid;
     pid_t ppid;
     int alive;
+    time_t start_time;
 
     char *worker_name;
     struct worker *worker;

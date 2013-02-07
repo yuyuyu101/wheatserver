@@ -50,6 +50,7 @@ int wstrCmp(const wstr s1, const wstr s2);
 int wstrCmpChars(const wstr s1, const char *s2, size_t len);
 void wstrLower(wstr s);
 void wstrUpper(wstr s);
+int wstrIndex(wstr s, const char t);
 
 /* May modify exists wstr */
 wstr wstrCat(wstr s, const char *t);

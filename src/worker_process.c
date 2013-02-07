@@ -26,6 +26,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->pid = getpid();
     worker->ppid = getppid();
     worker->alive = 1;
+    worker->start_time = time(NULL);
     worker->worker_name = worker_name;
     worker->worker = spotWorker(worker_name);
     worker->stat = initStat(0);

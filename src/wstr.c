@@ -219,6 +219,14 @@ wstr wstrStrip(wstr str, const char *chars)
     return str;
 }
 
+int wstrIndex(wstr s, const char t)
+{
+    int i = 0, len = wstrlen(s);
+    while (i != len && s[i] != t)
+        ++i;
+    return (i != len) ? i : -1;
+}
+
 #ifdef WSTR_TEST_MAIN
 #include "test_help.h"
 #include <stdio.h>
@@ -325,6 +333,13 @@ int main(void) {
         x = wstrStrip(wstrNew("xyxyxxyy"),"xy");
         test_cond("wstrStrip() correctly trims characters",
             wstrlen(x) == 0 && memcmp(x,"\0",1) == 0);
+        wstrFree(x);
+
+        x = wstrNew("asdfz");
+        test_cond("wstrIndex()", wstrIndex(x, 'a') == 0);
+        test_cond("wstrIndex()", wstrIndex(x, 'd') == 2);
+        test_cond("wstrIndex()", wstrIndex(x, 'z') == 4);
+        test_cond("wstrIndex()", wstrIndex(x, 'v') == -1);
         wstrFree(x);
 
         x = wstrNewLen("port 10000", 10);

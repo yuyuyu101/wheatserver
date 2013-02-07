@@ -130,6 +130,7 @@ void spawnWorker(char *worker_name)
         appendToListTail(Server.workers, new_worker);
         new_worker->stat = initStat(1);
         new_worker->pid = pid;
+        new_worker->start_time = time(NULL);
         return ;
     } else {
         WorkerProcess = new_worker;

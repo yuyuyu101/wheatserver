@@ -28,7 +28,7 @@ wheatworker: $(WORKER_OBJECTS)
 
 ###########
 test: $(TESTS)
-	for t in $(TESTS); do echo "***** Running $$t"; ./$$t ; rm $(TEST) || exit 1; done
+	for t in $(TESTS); do echo "***** Running $$t"; ./$$t ; rm $$t || exit 1; done
 
 test_wstr: wstr.c wstr.h
 	$(CC) -o $@ wstr.c -DWSTR_TEST_MAIN
