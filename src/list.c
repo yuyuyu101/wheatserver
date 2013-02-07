@@ -156,6 +156,7 @@ void listPrint(struct list *list)
         printf("%d: %s -> ", i, (char *)current->value);
         i++;
     }
+    freeListIterator(iter);
     printf("\n");
 }
 

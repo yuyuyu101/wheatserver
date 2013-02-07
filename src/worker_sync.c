@@ -5,25 +5,22 @@ void dispatchRequest(int fd, char *ip, int port)
     struct protocol *ptcol = spotProtocol(ip, port, fd);
     struct app *application = spotAppInterface();
     struct client *c = initClient(fd, ip, port, ptcol, application);
-    struct workerStat *stat = WorkerProcess->stat;
     if (c == NULL)
         return ;
-    int ret;
-    int loop = 0;
+    struct workerStat *stat = WorkerProcess->stat;
+    int ret, n;
     do {
-        loop++;
-        int n = syncRecvData(fd, &c->buf);
+        n = syncRecvData(fd, &c->buf);
         if (n == WHEAT_WRONG) {
-            wheatLog(WHEAT_NOTICE, "receive data failed:%s loop:%d", c->buf, loop);
+            wheatLog(WHEAT_NOTICE, "receive data failed:%s", c->buf);
             goto cleanup;
         }
         if (wstrlen(c->buf) > stat->stat_buffer_size)
             stat->stat_buffer_size = wstrlen(c->buf);
 parser:
-        stat->stat_total_request++;
         ret = ptcol->parser(c);
         if (ret == WHEAT_WRONG) {
-            wheatLog(WHEAT_NOTICE, "parse http data failed:%s loop:%d", c->buf, loop);
+            wheatLog(WHEAT_NOTICE, "parse http data failed:%s", c->buf);
             stat->stat_failed_request++;
             goto cleanup;
         }
@@ -34,9 +31,9 @@ parser:
         wheatLog(WHEAT_NOTICE, "app construct faileds");
     }
     ret = syncSendData(fd, &c->res_buf);
-    if (ret != WHEAT_OK)
+    if (ret == WHEAT_WRONG)
         goto cleanup;
-    loop = 0;
+    stat->stat_total_request++;
     if (wstrlen(c->buf)) {
         c->protocol->freeProtocolData(c->protocol_data);
         c->app->freeAppData(c->app_private_data);
@@ -68,8 +65,9 @@ void syncWorkerCron()
         char ip[46];
         int port;
         elapse = time(NULL);
-        if (now - elapse > refresh_seconds) {
+        if (elapse - now > refresh_seconds) {
             sendStatPacket();
+            now = time(NULL);
         }
         fd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
         if (fd == NET_WRONG) {

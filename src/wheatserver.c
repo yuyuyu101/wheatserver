@@ -22,6 +22,7 @@ void initGlobalServerConfig()
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
     initHookCenter();
     Server.workers = createList();
+    listSetFree(Server.workers, freeWorkerProcess);
     Server.pid = getpid();
     Server.relaunch_pid = 0;
     memcpy(Server.master_name, "master", 7);
@@ -51,8 +52,9 @@ void initServer()
 static void removeWorker(struct workerProcess *worker)
 {
     struct listNode *worker_node = searchListKey(Server.workers, worker);
-    if (worker_node)
+    if (worker_node) {
         removeListNode(Server.workers, worker_node);
+    }
 }
 
 void wakeUp()
@@ -118,20 +120,21 @@ void spawnWorker(char *worker_name)
         wheatLog(WHEAT_WARNING, "spawn new worker failed: %s", strerror(errno));
         halt(1);
     }
-
 #ifdef WHEAT_DEBUG_WORKER
     pid = 0;
 #else
     pid = fork();
 #endif
     if (pid != 0) {
-        new_worker->pid = pid;
         appendToListTail(Server.workers, new_worker);
+        new_worker->stat = initWorkerStat(1);
+        new_worker->pid = pid;
         return ;
     } else {
         WorkerProcess = new_worker;
+        initWorkerProcess(new_worker, worker_name);
+        new_worker->worker->cron();
         wheatLog(WHEAT_NOTICE, "new worker spawned %d", getpid());
-        initWorkerProcess(worker_name);
         wheatLog(WHEAT_NOTICE, "worker exit pid:%d", getpid());
         exit(0);
     }
@@ -271,7 +274,6 @@ void stopWorkers(int graceful)
 void run()
 {
     adjustWorkerNumber();
-    initMasterStats();
     while (1) {
         int *sig;
 
@@ -342,6 +344,7 @@ int main(int argc, const char *argv[])
     if (Server.daemon) daemonize(1);
     wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
 
+    initMasterStats();
     initServer();
     if (Server.daemon) createPidFile();
 

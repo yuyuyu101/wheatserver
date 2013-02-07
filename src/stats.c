@@ -2,34 +2,36 @@
 
 /* ========== Worker Statistic Area ========== */
 
-static int connectWithMaster()
+static int connectWithMaster(struct workerStat *stat)
 {
     int fd;
 
-    fd = wheatTcpNonBlockConnect(NULL, Server.bind_addr, Server.port);
+    fd = wheatTcpConnect(Server.neterr, Server.stat_addr, Server.stat_port);
     if (fd == NET_WRONG) {
-        wheatLog(WHEAT_WARNING,"Unable to connect to MASTER: %s",
-            strerror(errno));
+        wheatLog(WHEAT_WARNING,"Unable to connect to MASTER: %s %s",
+            strerror(errno), Server.neterr);
         return WHEAT_WRONG;
     }
-    if (WorkerProcess->stat->master_stat_fd != 0)
-        close(WorkerProcess->stat->master_stat_fd);
-    WorkerProcess->stat->master_stat_fd = fd;
+    if (stat->master_stat_fd != 0)
+        close(stat->master_stat_fd);
+    stat->master_stat_fd = fd;
 
     return WHEAT_OK;
 }
 
-void initWorkerStat()
+struct workerStat *initWorkerStat(int only_malloc)
 {
-    WorkerProcess->stat = malloc(sizeof(struct workerStat));
-    WorkerProcess->stat->master_stat_fd = 0;
-    WorkerProcess->stat->stat_start_time = time(NULL);
-    WorkerProcess->stat->stat_total_connection = 0;
-    WorkerProcess->stat->stat_total_request = 0;
-    WorkerProcess->stat->stat_failed_request = 0;
-    WorkerProcess->stat->stat_buffer_size = 0;
-    WorkerProcess->stat->stat_work_time = 0;
-    connectWithMaster();
+    struct workerStat *stat = malloc(sizeof(struct workerStat));
+    stat->master_stat_fd = 0;
+    stat->stat_start_time = time(NULL);
+    stat->stat_total_connection = 0;
+    stat->stat_total_request = 0;
+    stat->stat_failed_request = 0;
+    stat->stat_buffer_size = 0;
+    stat->stat_work_time = 0;
+    if (!only_malloc)
+        connectWithMaster(stat);
+    return stat;
 }
 
 void sendStatPacket()
@@ -38,19 +40,20 @@ void sendStatPacket()
     char buf[WHEAT_STAT_PACKET_MAX];
     stat->stat_last_send = time(NULL);
     snprintf(buf, WHEAT_STAT_PACKET_MAX, WHEAT_STAT_SEND_FORMAT,
-            stat->stat_start_time, stat->stat_total_connection,
-            stat->stat_total_request, stat->stat_failed_request,
-            stat->stat_buffer_size, stat->stat_work_time,
-            stat->stat_last_send);
+            WorkerProcess->pid, stat->stat_start_time,
+            stat->stat_total_connection, stat->stat_total_request,
+            stat->stat_failed_request, stat->stat_buffer_size,
+            stat->stat_work_time, stat->stat_last_send);
     wstr send = wstrNew(buf);
-    size_t nwrite = WorkerProcess->worker->sendData(Server.stat_fd, &send);
-    if (nwrite == -1 && errno == EPIPE) {
+    ssize_t nwrite = WorkerProcess->worker->sendData(stat->master_stat_fd, &send);
+    if (nwrite == -1) {
         wheatLog(WHEAT_DEBUG, "Master close connection");
-        connectWithMaster();
+        connectWithMaster(WorkerProcess->stat);
     } else if (nwrite != wstrlen(send))
         wheatLog(WHEAT_DEBUG,
                 "send statistic info failed, total %d sended %d",
                 wstrlen(send), nwrite);
+    wstrFree(send);
 }
 
 /* ========== Master Statistic Area ========== */
@@ -61,12 +64,13 @@ static ssize_t handleStat(wstr buf)
     if (buf[0] != '\r' || buf[1] != '\r') {
         return WHEAT_WRONG;
     }
+    wstrRange(buf, 2, 0);
     int count = 0;
     pid_t pid;
     ssize_t is_ok = 1;
     struct workerProcess *worker = NULL;
     struct workerStat *stat = NULL;
-    wstr *lines = wstrNewSplit(buf+2, "\n", 1, &count);
+    wstr *lines = wstrNewSplit(buf, "\n", 1, &count);
     // extra one for worker pid
     if (count != WHEAT_STAT_FIELD + 1) {
         is_ok = 0;
@@ -104,8 +108,8 @@ cleanup:
 
 static void statReadProc(struct evcenter *center, int fd, void *client_data, int mask)
 {
-    wstr buf;
-    size_t nread = readBulkFrom(fd, &buf);
+    wstr buf = wstrEmpty();
+    ssize_t nread = readBulkFrom(fd, &buf);
     ssize_t parse_ret = 0;
     if (nread < 10) {
         wheatLog(WHEAT_DEBUG, "receive stat packet less than 10 bits: %s",
@@ -113,21 +117,23 @@ static void statReadProc(struct evcenter *center, int fd, void *client_data, int
         return ;
     }
     parse_ret = handleStat(buf);
-    if (parse_ret != WHEAT_OK) {
+    if (parse_ret != WHEAT_OK)
         wheatLog(WHEAT_DEBUG, "parse stat packet failed: %s",
                 buf);
-    }
+    else
+        wheatLog(WHEAT_DEBUG, "receive worker statistic info %d", fd);
+    wstrFree(buf);
 }
 
 static void buildConnection(struct evcenter *center, int fd, void *client_data, int mask)
 {
     char ip[46];
-    int cport, cfd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &cport);
+    int cport, cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
     if (cfd == NET_WRONG) {
         wheatLog(WHEAT_WARNING, "Accepting client connection failed: %s", Server.neterr);
             return;
     }
-    wheatLog(WHEAT_VERBOSE, "Accepted %s:%d", ip, cport);
+    wheatLog(WHEAT_DEBUG, "Accepted worker %s:%d", ip, cport);
 
     wheatNonBlock(NULL, cfd);
     wheatTcpNoDelay(NULL, cfd);
@@ -165,32 +171,46 @@ void initMasterStats()
         wheatLog(WHEAT_NOTICE, "Stat Server is listen port %d",
                 Server.stat_port);
     }
-    Server.stat_center = eventcenter_init(Server.worker_number*2);
-    createEvent(Server.stat_center, Server.stat_fd, EVENT_READABLE, buildConnection,  NULL);
+    Server.stat_center = eventcenter_init(Server.worker_number*2+32);
+    if (createEvent(Server.stat_center, Server.stat_fd, EVENT_READABLE, buildConnection,  NULL) == WHEAT_WRONG)
+    {
+        wheatLog(WHEAT_WARNING, "createEvent failed");
+        return ;
+    }
+
 }
 
+static time_t now = 0;
 void statMasterLoop()
 {
-    processEvents(Server.stat_center);
+    if (now == 0)
+        now = time(NULL);
+    processEvents(Server.stat_center, Server.stat_refresh_seconds);
+    if (time(NULL) - now > 5) {
+        if (Server.verbose == WHEAT_DEBUG)
+            logStat();
+        now = time(NULL);
+    }
 }
 
 void logStat()
 {
     struct listNode *node = NULL;
     struct workerProcess *worker = NULL;
-    struct workerStat *stat = worker->stat;
+    struct workerStat *stat;
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
-    wheatLog(WHEAT_LOG_RAW, "---- Now Statistic Information are ----");
+    wheatLog(WHEAT_LOG_RAW, "---- Now Statistic Information are ----\n");
     while ((node = listNext(iter)) != NULL) {
         worker = listNodeValue(node);
-        wheatLog(WHEAT_LOG_RAW, "Worker: %d", worker->pid);
-        wheatLog(WHEAT_LOG_RAW, "Start Time: %d", stat->stat_start_time);
-        wheatLog(WHEAT_LOG_RAW, "Total Connection: %d", stat->stat_total_connection);
-        wheatLog(WHEAT_LOG_RAW, "Total Request: %d", stat->stat_total_request);
-        wheatLog(WHEAT_LOG_RAW, "Failed Request: %d", stat->stat_failed_request);
-        wheatLog(WHEAT_LOG_RAW, "Max Buffer Size: %d", stat->stat_buffer_size);
-        wheatLog(WHEAT_LOG_RAW, "Refresh Time: %d", stat->stat_last_send);
-        wheatLog(WHEAT_LOG_RAW, "-----------------------------------", stat->stat_last_send);
+        stat = worker->stat;
+        wheatLog(WHEAT_LOG_RAW, "Worker: %d\n", worker->pid);
+        wheatLog(WHEAT_LOG_RAW, "Start Time: %s\n", ctime(&stat->stat_start_time));
+        wheatLog(WHEAT_LOG_RAW, "Total Connection: %d\n", stat->stat_total_connection);
+        wheatLog(WHEAT_LOG_RAW, "Total Request: %d\n", stat->stat_total_request);
+        wheatLog(WHEAT_LOG_RAW, "Failed Request: %d\n", stat->stat_failed_request);
+        wheatLog(WHEAT_LOG_RAW, "Max Buffer Size: %d\n", stat->stat_buffer_size);
+        wheatLog(WHEAT_LOG_RAW, "Refresh Time: %s\n", ctime(&stat->stat_last_send));
+        wheatLog(WHEAT_LOG_RAW, "-----------------------------------\n", stat->stat_last_send);
     }
     freeListIterator(iter);
 }

@@ -135,7 +135,9 @@ int wstrCmpChars(const wstr s1, const char *s2, size_t len)
     wstr s = wstrNewLen(s2, (int)len);
     if (s == NULL)
         return 1;
-    return wstrCmp(s1, s);
+    int ret = wstrCmp(s1, s);
+    wstrFree(s);
+    return ret;
 }
 
 void wstrLower(wstr s) {

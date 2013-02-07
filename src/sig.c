@@ -163,7 +163,7 @@ void handleTtou()
 
 void handleUsr1()
 {
-    killAllWorkers(SIGUSR1);
+    logStat();
 }
 
 /* SIGUSR2 handling.  Creates a new master/worker set as a

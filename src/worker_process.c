@@ -19,20 +19,24 @@ struct worker *spotWorker(char *worker_name)
     return NULL;
 }
 
-void initWorkerProcess(char *worker_name)
+void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
     if (Server.stat_fd != 0)
         close(Server.stat_fd);
-    WorkerProcess->pid = getpid();
-    WorkerProcess->ppid = getppid();
-    nonBlockCloseOnExecPipe(&WorkerProcess->pipe_readfd, &WorkerProcess->pipe_writefd);
-    wheatNonBlock(Server.neterr, Server.ipfd); //after fork, it seems reset nonblock
-    WorkerProcess->alive = 1;
-    WorkerProcess->worker_name = worker_name;
-    WorkerProcess->worker = spotWorker(worker_name);
-    initWorkerStat();
+    worker->pid = getpid();
+    worker->ppid = getppid();
+    worker->alive = 1;
+    worker->worker_name = worker_name;
+    worker->worker = spotWorker(worker_name);
+    worker->stat = initWorkerStat(0);
     initWorkerSignals();
-    WorkerProcess->worker->cron();
+}
+
+void freeWorkerProcess(void *w)
+{
+    struct workerProcess *worker = w;
+    free(worker->stat);
+    free(worker);
 }
 
 struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct app *app)

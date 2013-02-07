@@ -5,7 +5,7 @@
 
 #define WHEAT_STAT_FIELD       7
 #define WHEAT_STAT_SEND_FORMAT \
-    "\r\r%ld\n%lld\n%lld\n%lld\n%lld\n%lld\n%lld"
+    "\r\r%d\n%ld\n%lld\n%lld\n%lld\n%lld\n%lld\n%ld"
 
 // If want to add or delete statistic field, pay attention to place
 // 1. where handle this field
@@ -24,10 +24,10 @@ struct workerStat {
     // Max size of request buffer size since worker started
     long long stat_buffer_size;
     long long stat_work_time;           // Total of handling request time
-    long long stat_last_send;           // Statistic last sended.
+    time_t stat_last_send;           // Time since last send.
 };
 
-void initWorkerStat();
+struct workerStat *initWorkerStat(int only_malloc);
 void sendStatPacket();
 void statMasterLoop();
 void logStat();

@@ -36,10 +36,11 @@
 #define WHEATSERVER_MAX_NAMELEN       1024
 #define WHEATSERVER_PATH_LEN          1024
 #define WHEATSERVER_GRACEFUL_TIME     30
-#define WHEATSERVER_IDLE_TIME         30
+#define WHEATSERVER_IDLE_TIME         5
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
+#define WHEAT_STATS_ADDR       "127.0.0.1"
 #define WHEAT_STAT_REFRESH     10
 #define WHEAT_STAT_PACKET_MAX  512
 

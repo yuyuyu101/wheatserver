@@ -11,7 +11,7 @@ struct apiState {
 
 static struct apiState *eventInit(int nevent)
 {
-    struct kevent *event = NULL;
+    struct kevent *events = NULL;
     int ep;
     struct apiState *state = NULL;
 
@@ -26,12 +26,15 @@ static struct apiState *eventInit(int nevent)
         return NULL;
     }
 
-    event = malloc(nevent*sizeof(struct kevent));
-    if (event == NULL) {
+    events = malloc(nevent*sizeof(struct kevent));
+    if (events == NULL) {
         close(ep);
         free(state);
         return NULL;
     }
+
+    state->kqfd = ep;
+    state->events = events;
     return state;
 }
 
@@ -90,14 +93,14 @@ static int eventWait(struct evcenter *center, struct timeval *tvp) {
         int j;
 
         numevents = retval;
-        for(j = 0; j < numevents; j++) {
+        for (j = 0; j < numevents; j++) {
             int mask = 0;
             struct kevent *e = state->events + j;
 
             if (e->filter == EVFILT_READ) mask |= EVENT_READABLE;
             if (e->filter == EVFILT_WRITE) mask |= EVENT_WRITABLE;
-            center->events[j].fd = e->ident;
-            center->events[j].mask = mask;
+            center->fired_events[j].fd = (int)e->ident;
+            center->fired_events[j].mask = mask;
         }
     }
     return numevents;

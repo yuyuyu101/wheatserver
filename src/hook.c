@@ -7,6 +7,7 @@ void initHookCenter()
     if (Server.hook_center == NULL) {
         wheatLog(WHEAT_WARNING, "init hookcenter failed");
         halt(1);
+        return ;
     }
 
     Server.hook_center->afterinit = createList();

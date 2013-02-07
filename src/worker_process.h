@@ -10,8 +10,6 @@
 struct workerProcess {
     pid_t pid;
     pid_t ppid;
-    int pipe_readfd;
-    int pipe_writefd;
     int alive;
 
     char *worker_name;
@@ -71,7 +69,8 @@ struct client {
 
 
 /* modify attention. Worker, Protocol, Applicantion interface */
-void initWorkerProcess(char *worker_name);
+void initWorkerProcess(struct workerProcess *worker, char *worker_name);
+void freeWorkerProcess(void *worker);
 struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
 void freeClient(struct client *);
 

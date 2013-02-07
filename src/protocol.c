@@ -92,6 +92,8 @@ void parserForward(wstr value, wstr *h, wstr *p)
     else
         port = wstrNew("80");
 
+    *h = host;
+    *p = port;
     wstrFree(remote_addr);
 }
 

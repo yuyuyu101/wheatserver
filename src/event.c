@@ -29,6 +29,8 @@ struct evcenter *eventcenter_init(int nevent)
                 strerror(errno));
         goto cleanup;
     }
+    memset(events, 0, nevent*sizeof(struct event));
+    memset(fired_events, 0, nevent*sizeof(struct fired_event));
 
     api_state = eventInit(nevent);
     if (!api_state) {
@@ -87,10 +89,14 @@ void deleteEvent(struct evcenter *center, int fd, int mask)
     delEvent(center->apidata, fd, mask);
 }
 
-int processEvents(struct evcenter *center)
+int processEvents(struct evcenter *center, int timeout_seconds)
 {
     struct timeval tv;
-    tv.tv_usec = tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    if (timeout_seconds > 0)
+        tv.tv_sec = timeout_seconds;
+    else
+        tv.tv_sec = 0;
     int j, processed = 0, numevents = eventWait(center, &tv);
     for (j = 0; j < numevents; j++) {
         struct event *event = &center->events[center->fired_events[j].fd];
