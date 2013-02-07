@@ -101,8 +101,6 @@ void signalGenericHandle(int sig)
         handleUsr2();
     else if (sig == SIGWINCH)
         handleWinch();
-    else if (sig == SIGSEGV)
-        handleSegv();
 }
 
 void signalProc(int signal)
