@@ -28,7 +28,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->alive = 1;
     worker->worker_name = worker_name;
     worker->worker = spotWorker(worker_name);
-    worker->stat = initWorkerStat(0);
+    worker->stat = initStat(0);
     initWorkerSignals();
 }
 

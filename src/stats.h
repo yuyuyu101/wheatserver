@@ -10,7 +10,8 @@
 // If want to add or delete statistic field, pay attention to place
 // 1. where handle this field
 // 2. modify statements send and parse statistic packet
-// 3. log statistic information.
+// 3. logWorkerStatFormt()
+// 4. aggregateStats()
 struct workerStat {
     int master_stat_fd;
 
@@ -27,8 +28,10 @@ struct workerStat {
     time_t stat_last_send;           // Time since last send.
 };
 
-struct workerStat *initWorkerStat(int only_malloc);
+struct workerStat *initStat(int only_malloc);
+void resetStat(struct workerStat *);
 void sendStatPacket();
 void statMasterLoop();
 void logStat();
+
 #endif

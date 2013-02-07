@@ -78,6 +78,7 @@ struct globalServer {
     int ipfd;
     int stat_fd;
     struct evcenter *stat_center;
+    struct workerStat *stat;
     pid_t pid;
     pid_t relaunch_pid;
     int pipe_readfd;

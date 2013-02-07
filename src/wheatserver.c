@@ -20,6 +20,7 @@ void initGlobalServerConfig()
     Server.stat_addr = NULL;
     Server.stat_port = WHEAT_STATS_PORT;
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
+    Server.stat = initStat(1);
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);
@@ -127,7 +128,7 @@ void spawnWorker(char *worker_name)
 #endif
     if (pid != 0) {
         appendToListTail(Server.workers, new_worker);
-        new_worker->stat = initWorkerStat(1);
+        new_worker->stat = initStat(1);
         new_worker->pid = pid;
         return ;
     } else {
@@ -208,7 +209,8 @@ void reapWorkers()
 /* reload do some works below:
  * 1. reload config file
  * 2. spawn new workers
- * 3. kill old wokers */
+ * 3. kill old wokers
+ * 4. reboot statistic server */
 void reload()
 {
     char *old_addr = Server.bind_addr;

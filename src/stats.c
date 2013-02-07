@@ -19,21 +19,6 @@ static int connectWithMaster(struct workerStat *stat)
     return WHEAT_OK;
 }
 
-struct workerStat *initWorkerStat(int only_malloc)
-{
-    struct workerStat *stat = malloc(sizeof(struct workerStat));
-    stat->master_stat_fd = 0;
-    stat->stat_start_time = time(NULL);
-    stat->stat_total_connection = 0;
-    stat->stat_total_request = 0;
-    stat->stat_failed_request = 0;
-    stat->stat_buffer_size = 0;
-    stat->stat_work_time = 0;
-    if (!only_malloc)
-        connectWithMaster(stat);
-    return stat;
-}
-
 void sendStatPacket()
 {
     struct workerStat *stat = WorkerProcess->stat;
@@ -145,6 +130,11 @@ static void buildConnection(struct evcenter *center, int fd, void *client_data, 
     }
 }
 
+void resetStat(struct workerStat *stat)
+{
+    memset(stat, 0, sizeof(struct workerStat));
+}
+
 void initMasterStats()
 {
     if (Server.stat_port != 0) {
@@ -180,6 +170,27 @@ void initMasterStats()
 
 }
 
+static void aggregateStats()
+{
+    struct workerStat *stat = Server.stat, *worker_stat = NULL;
+    resetStat(stat);
+    struct listNode *node = NULL;
+    struct workerProcess *worker;
+    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        worker = listNodeValue(node);
+        worker_stat = worker->stat;
+        stat->stat_start_time = worker_stat->stat_start_time;
+        stat->stat_total_connection = worker_stat->stat_total_connection;
+        stat->stat_total_request = worker_stat->stat_total_request;
+        stat->stat_failed_request = worker_stat->stat_failed_request;
+        stat->stat_buffer_size = worker_stat->stat_buffer_size;
+        stat->stat_work_time = worker_stat->stat_work_time;
+        stat->stat_last_send = worker_stat->stat_last_send;
+    }
+    freeListIterator(iter);
+}
+
 static time_t now = 0;
 void statMasterLoop()
 {
@@ -190,7 +201,18 @@ void statMasterLoop()
         if (Server.verbose == WHEAT_DEBUG)
             logStat();
         now = time(NULL);
+        aggregateStats();
     }
+}
+
+static void logWorkerStatFormt(struct workerStat *stat)
+{
+    wheatLog(WHEAT_LOG_RAW, "\nStart Time: %s", ctime(&stat->stat_start_time));
+    wheatLog(WHEAT_LOG_RAW, "Total Connection: %d\n", stat->stat_total_connection);
+    wheatLog(WHEAT_LOG_RAW, "Total Request: %d\n", stat->stat_total_request);
+    wheatLog(WHEAT_LOG_RAW, "Failed Request: %d\n", stat->stat_failed_request);
+    wheatLog(WHEAT_LOG_RAW, "Max Buffer Size: %d\n", stat->stat_buffer_size);
+    wheatLog(WHEAT_LOG_RAW, "Refresh Time: %s\n", ctime(&stat->stat_last_send));
 }
 
 void logStat()
@@ -198,19 +220,30 @@ void logStat()
     struct listNode *node = NULL;
     struct workerProcess *worker = NULL;
     struct workerStat *stat;
+    wheatLog(WHEAT_LOG_RAW, "---- Master Statistic Information -----\n");
+    logWorkerStatFormt(Server.stat);
+    wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
-    wheatLog(WHEAT_LOG_RAW, "---- Now Statistic Information are ----\n");
     while ((node = listNext(iter)) != NULL) {
         worker = listNodeValue(node);
         stat = worker->stat;
-        wheatLog(WHEAT_LOG_RAW, "Worker: %d\n", worker->pid);
-        wheatLog(WHEAT_LOG_RAW, "Start Time: %s\n", ctime(&stat->stat_start_time));
-        wheatLog(WHEAT_LOG_RAW, "Total Connection: %d\n", stat->stat_total_connection);
-        wheatLog(WHEAT_LOG_RAW, "Total Request: %d\n", stat->stat_total_request);
-        wheatLog(WHEAT_LOG_RAW, "Failed Request: %d\n", stat->stat_failed_request);
-        wheatLog(WHEAT_LOG_RAW, "Max Buffer Size: %d\n", stat->stat_buffer_size);
-        wheatLog(WHEAT_LOG_RAW, "Refresh Time: %s\n", ctime(&stat->stat_last_send));
-        wheatLog(WHEAT_LOG_RAW, "-----------------------------------\n", stat->stat_last_send);
+        logWorkerStatFormt(stat);
     }
     freeListIterator(iter);
+    wheatLog(WHEAT_LOG_RAW, "---------------------------------------\n");
+}
+
+struct workerStat *initStat(int only_malloc)
+{
+    struct workerStat *stat = malloc(sizeof(struct workerStat));
+    stat->master_stat_fd = 0;
+    stat->stat_start_time = time(NULL);
+    stat->stat_total_connection = 0;
+    stat->stat_total_request = 0;
+    stat->stat_failed_request = 0;
+    stat->stat_buffer_size = 0;
+    stat->stat_work_time = 0;
+    if (!only_malloc)
+        connectWithMaster(stat);
+    return stat;
 }
