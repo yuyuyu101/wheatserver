@@ -35,8 +35,9 @@
 #define WHEATSERVER_MAX_LOG_LEN       1024
 #define WHEATSERVER_MAX_NAMELEN       1024
 #define WHEATSERVER_PATH_LEN          1024
-#define WHEATSERVER_GRACEFUL_TIME     30
+#define WHEATSERVER_GRACEFUL_TIME     5
 #define WHEATSERVER_IDLE_TIME         5
+#define WHEATSERVER_TIMEOUT           30
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
@@ -69,16 +70,19 @@ struct globalServer {
     int daemon;                                  //daemon, off
     char *pidfile;                               //pidfile, NULL
     int max_buffer_size;                         //max-buffer-size, 0
+    int worker_timeout;                          //timeout-seconds, 30
 
-    char *stat_addr;
-    int stat_port;
+    char *stat_addr;                             //stat-bind-addr, 127.0.0.1
+    int stat_port;                               //stat-port, 10829
     int stat_refresh_seconds;                    //stat-refresh-time, 10
 
     /* status */
     int ipfd;
+    struct evcenter *master_center;
     int stat_fd;
-    struct evcenter *stat_center;
-    struct workerStat *stat;
+    struct workerStat *aggregate_workers_stat;
+    time_t cron_time;
+    struct masterStat *master_stat;
     pid_t pid;
     pid_t relaunch_pid;
     int pipe_readfd;
@@ -125,6 +129,8 @@ struct configuration {
     enum printFormat format;
 };
 
+void initServer();
+
 /* restart */
 void reload();
 void reexec();
@@ -135,7 +141,6 @@ void murderIdleWorkers();
 void killWorker(struct workerProcess *worker, int sig);
 void killAllWorkers(int sig);
 void spawnWorker(char *worker_name);
-void fakeSleep();
 void wakeUp();
 /* graceful means whether to wait worker
  * conncction completion */

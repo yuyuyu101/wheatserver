@@ -2,6 +2,7 @@
 #define _WORKER_H
 
 #include <unistd.h>
+#include <setjmp.h>
 #include "wstr.h"
 
 #define WORKER_BOOT_ERROR 3
@@ -12,6 +13,8 @@ struct workerProcess {
     pid_t ppid;
     int alive;
     time_t start_time;
+
+    jmp_buf jmp;
 
     char *worker_name;
     struct worker *worker;
@@ -72,6 +75,7 @@ struct client {
 /* modify attention. Worker, Protocol, Applicantion interface */
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);
+void workerProcessCron();
 struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
 void freeClient(struct client *);
 
@@ -89,6 +93,7 @@ void freeClient(struct client *);
  * 2. if parent changed, worker must detect and exit
  * 3. if alive == 0, worker must exit
  * 4. send worker status every refresh time
+ * 5. use jmp to handle timeout script running
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();

@@ -1,7 +1,8 @@
 #include "sig.h"
 #include "wheatserver.h"
 
-#define SIGNAL_COUNT 11
+#define MASTER_SIGNAL_COUNT 10
+#define WORKER_SIGNAL_COUNT 11
 static int signals[11] = {SIGHUP, SIGQUIT, SIGINT, SIGTERM,
     SIGTTIN, SIGTTOU, SIGUSR1, SIGUSR2, SIGWINCH, SIGCHLD,
     SIGSEGV
@@ -41,7 +42,7 @@ void initWorkerSignals()
     struct sigaction act, oact;
     int i;
 
-    for (i = 0; i < SIGNAL_COUNT; i++) {
+    for (i = 0; i < WORKER_SIGNAL_COUNT; i++) {
         act.sa_flags = 0;
         if (signals[i] == SIGQUIT)
             act.sa_handler = handleWorkerQuit;
@@ -72,10 +73,17 @@ void initMasterSignals()
     act.sa_flags = 0;
 
     int i;
-    for (i = 0; i < SIGNAL_COUNT; i++) {
+    for (i = 0; i < MASTER_SIGNAL_COUNT; i++) {
         if (sigaction(signals[i], &act, &oact) != 0) {
             wheatLog(WHEAT_WARNING, "sigaction error on %d : %s", signals[i], strerror(errno));
         }
+    }
+
+    act.sa_handler = handleSegv;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = (int)SA_RESETHAND;
+    if (sigaction(signals[10], &act, &oact) != 0) {
+            wheatLog(WHEAT_WARNING, "sigaction error on %d : %s", signals[i], strerror(errno));
     }
 }
 

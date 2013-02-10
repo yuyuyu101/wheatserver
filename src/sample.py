@@ -1,3 +1,4 @@
+from time import sleep
 HELLO_WORLD = b"Hello world!\n"
 
 def application(environ, start_response):

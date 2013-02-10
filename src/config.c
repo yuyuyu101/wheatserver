@@ -37,6 +37,8 @@ struct configuration configTable[] = {
         NULL,         INT_FORMAT},
     {"stat-refresh-time", 2, unsignedIntValidator, {.val=WHEAT_STAT_REFRESH},
         NULL,         INT_FORMAT},
+    {"timeout-seconds",   2, unsignedIntValidator, {.val=WHEATSERVER_TIMEOUT},
+        (void *)300,  INT_FORMAT},
 
     // Http
     {"access-log",        2, stringValidator,      {.ptr=NULL},
@@ -76,6 +78,14 @@ void fillServerConfig()
     Server.stat_port = conf->target.val;
     conf++;
     Server.stat_refresh_seconds = conf->target.val;
+    conf++;
+    Server.worker_timeout = conf->target.val;
+}
+
+static void extraValidator()
+{
+    ASSERT(Server.stat_refresh_seconds < Server.worker_timeout);
+    ASSERT(Server.port && Server.stat_port);
 }
 
 struct configuration *getConfiguration(const char *name)
@@ -154,6 +164,7 @@ void loadConfigFile(const char *filename, char *options)
     }
 
     applyConfig(config);
+    extraValidator();
     printServerConfig();
     wstrFree(config);
 }

@@ -20,6 +20,8 @@ void wheat_assert(const char *cond, const char *file, int line, int panic);
 int daemonize(int coredump);
 void createPidFile();
 
+void setTimer(int milliseconds);
+
 #define ASSERT(_x) do {                            \
     if (!(_x)) {                                   \
         wheat_assert(#_x, __FILE__, __LINE__, 1);  \

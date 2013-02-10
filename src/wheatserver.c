@@ -8,19 +8,22 @@ void initGlobalServerConfig()
     Server.port = WHEAT_SERVERPORT;
     Server.ipfd = 0;
     Server.stat_fd = 0;
-    Server.stat_center = NULL;
+    Server.master_center = NULL;
     Server.logfile = NULL;
     Server.verbose = WHEAT_VERBOSE;
     Server.worker_number = 2;
     Server.graceful_timeout = WHEATSERVER_GRACEFUL_TIME;
     Server.idle_timeout = WHEATSERVER_IDLE_TIME;
+    Server.cron_time = time(NULL);
     Server.daemon = 0;
     Server.pidfile = NULL;
     Server.max_buffer_size = 0;
+    Server.worker_number = WHEATSERVER_TIMEOUT;
     Server.stat_addr = NULL;
     Server.stat_port = WHEAT_STATS_PORT;
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
-    Server.stat = initStat(1);
+    Server.aggregate_workers_stat = initWorkerStat(1);
+    Server.master_stat = initMasterStat();
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);
@@ -30,23 +33,6 @@ void initGlobalServerConfig()
     Server.configfile_path[0] = '\0';
     initMasterSignals();
     nonBlockCloseOnExecPipe(&Server.pipe_readfd, &Server.pipe_writefd);
-}
-
-void initServer()
-{
-    if (Server.port != 0) {
-        Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
-        if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
-            wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
-            halt(1);
-        }
-        if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-            wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-            halt(1);
-        }
-
-        wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
-    }
 }
 
 /* Worker Manage Function */
@@ -71,35 +57,17 @@ void wakeUp()
     assert(n == 1);
 }
 
-void fakeSleep()
+static void handlePipe(struct evcenter *center, int fd, void *client_data, int mask)
 {
-    struct timeval tvp;
-    fd_set rset;
-    tvp.tv_sec = 1;
-    tvp.tv_usec = 0;
-
-    FD_ZERO(&rset);
-    FD_SET(Server.pipe_readfd, &rset);
-
-    int ret = select(Server.pipe_readfd+1, &rset, NULL, NULL, &tvp);
-    if (ret == 0)
-        return ;
-    else if (ret == -1) {
+    ssize_t n;
+    char buf[2];
+    while ((n = read(Server.pipe_readfd, buf, 1)) <= 0){
         if (errno == EAGAIN || errno == EINTR)
-            return ;
-        wheatLog(WHEAT_WARNING, "fakeSleep() select failed: %s", strerror(errno));
+            continue;
+        wheatLog(WHEAT_WARNING, "handlePipe() read failed: %s", strerror(errno));
         halt(1);
-    } else {
-        ssize_t n;
-        char buf[2];
-        while ((n = read(Server.pipe_readfd, buf, 1)) <= 0){
-            if (errno == EAGAIN || errno == EINTR)
-                continue;
-            wheatLog(WHEAT_WARNING, "fakeSleep() read failed: %s", strerror(errno));
-            halt(1);
-        }
-        ASSERT(buf[0] == '.');
     }
+    ASSERT(buf[0] == '.');
 }
 
 void adjustWorkerNumber()
@@ -121,6 +89,8 @@ void spawnWorker(char *worker_name)
         wheatLog(WHEAT_WARNING, "spawn new worker failed: %s", strerror(errno));
         halt(1);
     }
+
+    Server.master_stat->total_run_workers++;
 #ifdef WHEAT_DEBUG_WORKER
     pid = 0;
 #else
@@ -128,15 +98,15 @@ void spawnWorker(char *worker_name)
 #endif
     if (pid != 0) {
         appendToListTail(Server.workers, new_worker);
-        new_worker->stat = initStat(1);
+        new_worker->stat = initWorkerStat(1);
         new_worker->pid = pid;
-        new_worker->start_time = time(NULL);
+        new_worker->start_time = Server.cron_time;
         return ;
     } else {
         WorkerProcess = new_worker;
         wheatLog(WHEAT_NOTICE, "new worker spawned %d", getpid());
         initWorkerProcess(new_worker, worker_name);
-        new_worker->worker->cron();
+        workerProcessCron();
         wheatLog(WHEAT_NOTICE, "worker exit pid:%d", getpid());
         exit(0);
     }
@@ -221,15 +191,24 @@ void reload()
             strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
             old_port != Server.port) {
         close(Server.ipfd);
-        initServer();
+        Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
+        if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
+            wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
+            halt(1);
+        }
+        if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+            wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+            halt(1);
+        }
+        wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
     }
 
     if (strlen(Server.stat_addr) != strlen(old_stat_addr) ||
             strncmp(Server.stat_addr, old_stat_addr, strlen(old_stat_addr)) ||
             old_stat_port != Server.stat_port) {
         close(Server.stat_fd);
-        eventcenter_dealloc(Server.stat_center);
-        initMasterStatsServer();
+        deleteEvent(Server.master_center, Server.stat_port, EVENT_READABLE);
+        initMasterStatServer();
     }
 
     int i;
@@ -266,8 +245,8 @@ void stopWorkers(int graceful)
         sig = SIGQUIT;
     else
         sig = SIGTERM;
-    long seconds = time(NULL) + Server.graceful_timeout;
-    while (seconds < time(NULL) && listLength(Server.workers)) {
+    long seconds = Server.cron_time + Server.graceful_timeout;
+    while (seconds < Server.cron_time && listLength(Server.workers)) {
         killAllWorkers(sig);
         usleep(200000);
         reapWorkers();
@@ -275,17 +254,42 @@ void stopWorkers(int graceful)
     killAllWorkers(SIGKILL);
 }
 
+static void findTimeoutWorker()
+{
+    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
+    struct listNode *node;
+    time_t cache_now = Server.cron_time;
+    int timeout = Server.worker_timeout;
+    while ((node = listNext(iter)) != NULL) {
+        struct workerProcess *worker = listNodeValue(node);
+        if (cache_now - worker->stat->refresh_time > timeout) {
+            Server.master_stat->timeout_workers++;
+            wheatLog(WHEAT_WARNING, "Worker trigger timeout %d, kill it: %d",
+                    cache_now - worker->stat->stat_last_send, worker->pid);
+            killWorker(worker, SIGTERM);
+        }
+    }
+}
+
 void run()
 {
+    static long cron_times = 1;
+    int *sig;
     adjustWorkerNumber();
     while (1) {
-        int *sig;
+        cron_times++;
+        wheatLog(WHEAT_DEBUG, "%d", cron_times);
 
+        Server.cron_time = time(NULL);
         reapWorkers();
-        statMasterLoop();
         if (listLength(Server.signal_queue) == 0) {
-            fakeSleep();
+        // processEvents will refresh worker status, so findTimeoutWorker
+        // must follow processEvents in order to avoid incorrect timeout
+            processEvents(Server.master_center, Server.stat_refresh_seconds);
             adjustWorkerNumber();
+            findTimeoutWorker();
+            if (!(cron_times % 10) && Server.verbose == WHEAT_DEBUG)
+                logStat();
         } else {
             struct listNode *node = listFirst(Server.signal_queue);
             sig = listNodeValue(node);
@@ -295,6 +299,35 @@ void run()
         }
     }
 }
+
+void initServer()
+{
+    Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
+    if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
+        wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
+        halt(1);
+    }
+    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+        halt(1);
+    }
+    wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
+
+    Server.master_center = eventcenter_init(Server.worker_number*2+32);
+    if (!Server.master_center) {
+        wheatLog(WHEAT_WARNING, "eventcenter_init failed");
+        halt(1);
+    }
+
+   if (createEvent(Server.master_center, Server.pipe_readfd, EVENT_READABLE, handlePipe,  NULL) == WHEAT_WRONG)
+    {
+        wheatLog(WHEAT_WARNING, "createEvent failed");
+        halt(1);
+    }
+
+    initMasterStatServer();
+}
+
 
 void version() {
     fprintf(stderr, "wheatserver %s\n", WHEATSERVER_VERSION);
@@ -348,7 +381,6 @@ int main(int argc, const char *argv[])
     if (Server.daemon) daemonize(1);
     wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
 
-    initMasterStatsServer();
     initServer();
     if (Server.daemon) createPidFile();
 

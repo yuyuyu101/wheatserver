@@ -25,5 +25,6 @@ void handleSegv();
 void handleWorkerUsr1(int);
 void handleWorkerAbort(int);
 void handleWorkerQuit(int);
+void handleWorkerAlrm(int);
 
 #endif

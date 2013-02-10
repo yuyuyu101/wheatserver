@@ -48,11 +48,6 @@ cleanup:
 
 void syncWorkerCron()
 {
-    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-        halt(1);
-    }
-
     struct timeval start, end;
     int refresh_seconds = Server.stat_refresh_seconds;
     long time_use;
@@ -66,7 +61,7 @@ void syncWorkerCron()
         elapse = time(NULL);
         if (elapse - now > refresh_seconds) {
             sendStatPacket();
-            now = time(NULL);
+            now = elapse;
         }
         fd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
         if (fd == NET_WRONG) {

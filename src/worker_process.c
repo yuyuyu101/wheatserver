@@ -19,6 +19,21 @@ struct worker *spotWorker(char *worker_name)
     return NULL;
 }
 
+void workerProcessCron()
+{
+    ASSERT(WorkerProcess);
+    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+        halt(1);
+    }
+
+    Server.cron_time = time(NULL);
+    sendStatPacket();
+    while (WorkerProcess->alive) {
+        WorkerProcess->worker->cron();
+    }
+}
+
 void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
     if (Server.stat_fd != 0)
@@ -29,7 +44,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->start_time = time(NULL);
     worker->worker_name = worker_name;
     worker->worker = spotWorker(worker_name);
-    worker->stat = initStat(0);
+    worker->stat = initWorkerStat(0);
     initWorkerSignals();
 }
 

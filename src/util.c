@@ -259,3 +259,15 @@ void createPidFile()
         fclose(fp);
     }
 }
+
+void setTimer(int milliseconds)
+{
+    struct itimerval it;
+
+    /* Will stop the timer if period is 0. */
+    it.it_value.tv_sec = milliseconds / 1000;
+    it.it_value.tv_usec = (milliseconds % 1000) * 1000;
+    it.it_interval.tv_sec = it.it_value.tv_sec;
+    it.it_interval.tv_usec = it.it_value.tv_usec;
+    setitimer(ITIMER_REAL, &it, NULL);
+}
