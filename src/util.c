@@ -153,7 +153,6 @@ void wheat_assert(const char *cond, const char *file, int line, int panic)
     }
 }
 
-
 int daemonize(int dump_core)
 {
     int status;

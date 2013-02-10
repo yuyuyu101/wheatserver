@@ -29,9 +29,7 @@ void workerProcessCron()
 
     Server.cron_time = time(NULL);
     sendStatPacket();
-    while (WorkerProcess->alive) {
-        WorkerProcess->worker->cron();
-    }
+    WorkerProcess->worker->cron();
 }
 
 void initWorkerProcess(struct workerProcess *worker, char *worker_name)
