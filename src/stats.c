@@ -75,7 +75,7 @@ struct workerStat *initWorkerStat(int only_malloc)
 
 /* ========== Master Statistic Area ========== */
 
-static ssize_t parseStat(wstr buf)
+static ssize_t parseStat(wstr buf, struct workerStat *stat, struct workerProcess **owner)
 {
     ASSERT(wstrlen(buf) > 2);
     if (buf[0] != '\r' || buf[1] != '\r') {
@@ -92,7 +92,6 @@ static ssize_t parseStat(wstr buf)
     int count;
     pid_t pid;
     struct workerProcess *worker = NULL;
-    struct workerStat *stat = initWorkerStat(1);
     wstr *lines = wstrNewSplit(packet, "\n", 1, &count);
     // extra one for worker pid
     if (count != WHEAT_STAT_FIELD + 1) {
@@ -113,6 +112,7 @@ static ssize_t parseStat(wstr buf)
         is_ok = 0;
         goto cleanup;
     }
+    *owner = worker;
 
     stat->stat_total_connection = atoi(lines[1]);
     stat->stat_total_request = atoi(lines[2]);
@@ -121,13 +121,9 @@ static ssize_t parseStat(wstr buf)
     stat->stat_work_time = atoi(lines[5]);
     stat->stat_last_send = atoi(lines[6]);
 
-    handleStat(worker->stat, stat);
-    handleStat(Server.aggregate_workers_stat, stat);
-
 cleanup:
     wstrFreeSplit(lines, count);
     wstrFree(packet);
-    free(stat);
     if (is_ok)
         return WHEAT_OK;
     return WHEAT_WRONG;
@@ -138,6 +134,8 @@ static void statReadProc(struct evcenter *center, int fd, void *client_data, int
     wstr buf = wstrEmpty();
     ssize_t nread = readBulkFrom(fd, &buf);
     ssize_t parse_ret = WHEAT_OK;
+    struct workerStat stat;
+    struct workerProcess *worker = NULL;
     if (nread == -1) {
         close(fd);
         deleteEvent(center, fd, EVENT_READABLE);
@@ -149,9 +147,11 @@ static void statReadProc(struct evcenter *center, int fd, void *client_data, int
         return ;
     }
     while (wstrlen(buf)) {
-        parse_ret = parseStat(buf);
+        parse_ret = parseStat(buf, &stat, &worker);
         if (parse_ret == WHEAT_OK) {
             wheatLog(WHEAT_DEBUG, "receive worker statistic info %d", fd);
+            handleStat(worker->stat, &stat);
+            handleStat(Server.aggregate_workers_stat, &stat);
         }
         else {
             wheatLog(WHEAT_DEBUG, "parse stat packet failed: %s",
@@ -274,4 +274,3 @@ void logStat()
     freeListIterator(iter);
     wheatLog(WHEAT_LOG_RAW, "---------------------------------------\n");
 }
-

@@ -169,6 +169,8 @@ void handleTtou()
 
 void handleUsr1()
 {
+    wheatLog(WHEAT_NOTICE, "Signal usr1: %s", Server.master_name);
+    killAllWorkers(SIGUSR1);
     logStat();
 }
 
@@ -195,6 +197,7 @@ void handleWinch()
 /* ========== Worker Singal Handler ========== */
 void handleWorkerUsr1(int sig)
 {
+    sendStatPacket();
     return ;
 }
 

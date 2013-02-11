@@ -51,6 +51,8 @@ static int wheatTcpGenericConnect(char *err, char *addr, int port, int flags)
 
     sa.sin_family = AF_INET;
     sa.sin_port = htons(port);
+    if (!addr)
+        addr = "127.0.0.1";
     if (inet_aton(addr, &sa.sin_addr) == 0) {
         struct hostent *he;
 

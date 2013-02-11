@@ -35,15 +35,6 @@ void initGlobalServerConfig()
     nonBlockCloseOnExecPipe(&Server.pipe_readfd, &Server.pipe_writefd);
 }
 
-/* Worker Manage Function */
-static void removeWorker(struct workerProcess *worker)
-{
-    struct listNode *worker_node = searchListKey(Server.workers, worker);
-    if (worker_node) {
-        removeListNode(Server.workers, worker_node);
-    }
-}
-
 void wakeUp()
 {
     ssize_t n;
@@ -128,10 +119,7 @@ void killWorker(struct workerProcess *worker, int sig)
     int result;
     if ((result = kill(worker->pid, sig)) != 0) {
         wheatLog(WHEAT_NOTICE, "kill %d pid failed: %s", worker->pid, strerror(errno));
-    } else {
-        wheatLog(WHEAT_NOTICE, "kill %d pid success", worker->pid);
     }
-    removeWorker(worker);
 }
 
 /* reap worker avoid zombie */
@@ -278,7 +266,6 @@ void run()
     adjustWorkerNumber();
     while (1) {
         cron_times++;
-        wheatLog(WHEAT_DEBUG, "%d", cron_times);
 
         Server.cron_time = time(NULL);
         reapWorkers();
@@ -347,13 +334,14 @@ void usage() {
     exit(1);
 }
 
+#ifndef TEST_WHEATSERVER
 int main(int argc, const char *argv[])
 {
     initGlobalServerConfig();
 
+    wstr options = wstrEmpty();
     if (argc >= 2) {
         int j = 1;
-        wstr options = wstrEmpty();
 
         if (strcmp(argv[1], "-v") == 0 ||
             strcmp(argv[1], "--version") == 0) version();
@@ -374,10 +362,11 @@ int main(int argc, const char *argv[])
             }
             j++;
         }
-        loadConfigFile(Server.configfile_path, options);
     } else {
         wheatLog(WHEAT_NOTICE, "No config file specified, use the default settings");
     }
+    loadConfigFile(Server.configfile_path, options);
+    wstrFree(options);
     if (Server.daemon) daemonize(1);
     wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
 
@@ -387,3 +376,4 @@ int main(int argc, const char *argv[])
     run();
     return 0;
 }
+#endif
