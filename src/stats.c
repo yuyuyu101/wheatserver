@@ -1,4 +1,4 @@
-#include "stats.h"
+#include "wheatserver.h"
 
 static void handleStat(struct workerStat *left, struct workerStat *add)
 {
@@ -75,31 +75,15 @@ struct workerStat *initWorkerStat(int only_malloc)
 
 /* ========== Master Statistic Area ========== */
 
-static ssize_t parseStat(wstr buf, struct workerStat *stat, struct workerProcess **owner)
+static ssize_t parseStat(struct masterClient *client, struct workerStat *stat, struct workerProcess **owner)
 {
-    ASSERT(wstrlen(buf) > 2);
-    if (buf[0] != '\r' || buf[1] != '\r') {
-        return WHEAT_WRONG;
-    }
-    int end = wstrIndex(buf, '.'), len;
-    if (end == -1)
-        return WHEAT_WRONG;
-    len = end + 1;
-
-    wstr packet = wstrNewLen(buf, len);
-    wstrRange(buf, len, 0);
-    ssize_t is_ok = 1;
-    int count;
+    ssize_t is_ok;
     pid_t pid;
-    struct workerProcess *worker = NULL;
-    wstr *lines = wstrNewSplit(packet, "\n", 1, &count);
-    // extra one for worker pid
-    if (count != WHEAT_STAT_FIELD + 1) {
-        is_ok = 0;
-        goto cleanup;
-    }
-    pid = atoi(lines[0]);
+    if (client->argc != WHEAT_STATCOMMAND_PACKET_FIELD)
+        return WHEAT_WRONG;
+    pid = atoi(client->argv[1]);
     struct listNode *node = NULL;
+    struct workerProcess *worker = NULL;
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
     while ((node = listNext(iter)) != NULL) {
         worker = listNodeValue(node);
@@ -110,85 +94,35 @@ static ssize_t parseStat(wstr buf, struct workerStat *stat, struct workerProcess
 
     if (!worker) {
         is_ok = 0;
-        goto cleanup;
+        return WHEAT_WRONG;
     }
     *owner = worker;
 
-    stat->stat_total_connection = atoi(lines[1]);
-    stat->stat_total_request = atoi(lines[2]);
-    stat->stat_failed_request = atoi(lines[3]);
-    stat->stat_buffer_size = atoi(lines[4]);
-    stat->stat_work_time = atoi(lines[5]);
-    stat->stat_last_send = atoi(lines[6]);
+    stat->stat_total_connection = atoi(client->argv[2]);
+    stat->stat_total_request = atoi(client->argv[3]);
+    stat->stat_failed_request = atoi(client->argv[4]);
+    stat->stat_buffer_size = atoi(client->argv[5]);
+    stat->stat_work_time = atoi(client->argv[6]);
+    stat->stat_last_send = atoi(client->argv[7]);
 
-cleanup:
-    wstrFreeSplit(lines, count);
-    wstrFree(packet);
-    if (is_ok)
-        return WHEAT_OK;
-    return WHEAT_WRONG;
+    return WHEAT_OK;
 }
 
-static void statReadProc(struct evcenter *center, int fd, void *client_data, int mask)
+void statCommand(struct masterClient *client)
 {
-    wstr buf = wstrEmpty();
-    ssize_t nread = readBulkFrom(fd, &buf);
-    ssize_t parse_ret = WHEAT_OK;
+    wstr buf = client->request_buf;
+    struct workerProcess *worker;
     struct workerStat stat;
-    struct workerProcess *worker = NULL;
-    if (nread == -1) {
-        close(fd);
-        deleteEvent(center, fd, EVENT_READABLE);
-        wheatLog(WHEAT_DEBUG, "delete readable fd: %d", fd);
-        return ;
-    } else if (nread < 10) {
-        wheatLog(WHEAT_DEBUG, "receive stat packet less than 10 bits: %s",
+    ssize_t parse_ret;
+    parse_ret = parseStat(client, &stat, &worker);
+    if (parse_ret == WHEAT_OK) {
+        wheatLog(WHEAT_DEBUG, "receive worker statistic info %d", client->fd);
+        handleStat(worker->stat, &stat);
+        handleStat(Server.aggregate_workers_stat, &stat);
+    }
+    else {
+        wheatLog(WHEAT_DEBUG, "parse stat packet failed: %s",
                 buf);
-        return ;
-    }
-    while (wstrlen(buf)) {
-        parse_ret = parseStat(buf, &stat, &worker);
-        if (parse_ret == WHEAT_OK) {
-            wheatLog(WHEAT_DEBUG, "receive worker statistic info %d", fd);
-            handleStat(worker->stat, &stat);
-            handleStat(Server.aggregate_workers_stat, &stat);
-        }
-        else {
-            wheatLog(WHEAT_DEBUG, "parse stat packet failed: %s",
-                    buf);
-            break;
-        }
-    }
-    wstrFree(buf);
-}
-
-static void buildConnection(struct evcenter *center, int fd, void *client_data, int mask)
-{
-    char ip[46];
-    int cport, cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
-    if (cfd == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Accepting client connection failed: %s", Server.neterr);
-            return;
-    }
-    wheatLog(WHEAT_DEBUG, "Accepted worker %s:%d", ip, cport);
-
-    if (wheatNonBlock(Server.neterr, cfd) == NET_WRONG) {
-            wheatLog(WHEAT_WARNING,
-                    "buildConnection: set nonblock %d failed: %s",
-                    fd, Server.neterr);
-            return ;
-    }
-    if (wheatTcpNoDelay(Server.neterr, cfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING,
-                "buildConnection: tcp no delay %d failed: %s",
-                fd, Server.neterr);
-        return ;
-    }
-    if (createEvent(Server.master_center, cfd, EVENT_READABLE,
-        statReadProc, NULL) == WHEAT_WRONG)
-    {
-        close(fd);
-        return ;
     }
 }
 
@@ -197,37 +131,6 @@ void resetStat(struct workerStat *stat)
     int fd = stat->master_stat_fd;
     memset(stat, 0, sizeof(struct workerStat));
     stat->master_stat_fd = fd;
-}
-
-void initMasterStatServer()
-{
-    Server.stat_fd = wheatTcpServer(Server.neterr,
-            Server.stat_addr, Server.stat_port);
-    if (Server.stat_fd == NET_WRONG || Server.stat_fd < 0) {
-        wheatLog( WHEAT_WARNING,
-                "Setup tcp server failed port: %d wrong: %s",
-                Server.stat_port, Server.neterr);
-        halt(1);
-    }
-    if (wheatNonBlock(Server.neterr, Server.stat_fd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING,
-                "Set nonblock %d failed: %s",
-                Server.stat_fd, Server.neterr);
-        halt(1);
-    }
-    if (wheatCloseOnExec(Server.neterr, Server.stat_fd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING,
-                "Set close on exec %d failed: %s",
-                Server.stat_fd, Server.neterr);
-    }
-    wheatLog(WHEAT_NOTICE, "Stat Server is listen port %d",
-            Server.stat_port);
-
-    if (createEvent(Server.master_center, Server.stat_fd, EVENT_READABLE, buildConnection,  NULL) == WHEAT_WRONG)
-    {
-        wheatLog(WHEAT_WARNING, "createEvent failed");
-        halt(1);
-    }
 }
 
 struct masterStat *initMasterStat()

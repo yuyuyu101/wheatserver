@@ -35,6 +35,20 @@ void initGlobalServerConfig()
     nonBlockCloseOnExecPipe(&Server.pipe_readfd, &Server.pipe_writefd);
 }
 
+static void initMainListen()
+{
+    Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
+    if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
+        wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
+        halt(1);
+    }
+    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+        halt(1);
+    }
+    wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
+}
+
 void wakeUp()
 {
     ssize_t n;
@@ -165,49 +179,6 @@ void reapWorkers()
     }
 }
 
-/* reload do some works below:
- * 1. reload config file
- * 2. spawn new workers
- * 3. kill old wokers
- * 4. reboot statistic server */
-void reload()
-{
-    char *old_addr = Server.bind_addr, *old_stat_addr = Server.stat_addr;
-    int old_port = Server.port, old_stat_port = Server.stat_port;
-    loadConfigFile(Server.configfile_path, NULL);
-    if (strlen(Server.bind_addr) != strlen(old_addr) ||
-            strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
-            old_port != Server.port) {
-        close(Server.ipfd);
-        Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
-        if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
-            wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
-            halt(1);
-        }
-        if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-            wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-            halt(1);
-        }
-        wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
-    }
-
-    if (strlen(Server.stat_addr) != strlen(old_stat_addr) ||
-            strncmp(Server.stat_addr, old_stat_addr, strlen(old_stat_addr)) ||
-            old_stat_port != Server.stat_port) {
-        close(Server.stat_fd);
-        deleteEvent(Server.master_center, Server.stat_port, EVENT_READABLE);
-        initMasterStatServer();
-    }
-
-    int i;
-    for (i = 0; i < Server.worker_number; i++) {
-        spawnWorker("SyncWorker");
-    }
-    if (Server.daemon) createPidFile();
-
-    adjustWorkerNumber();
-}
-
 void reexec()
 {
 }
@@ -287,19 +258,178 @@ void run()
     }
 }
 
+static struct masterClient *createMasterClient(int fd)
+{
+    struct masterClient *c = malloc(sizeof(struct masterClient));
+    c->request_buf = wstrEmpty();
+    c->status = INIT;
+    c->argc = 0;
+    c->argv = NULL;
+    c->fd = fd;
+    return c;
+}
+
+static void freeMasterClient(struct masterClient *c)
+{
+    close(c->fd);
+    wstrFree(c->request_buf);
+    if (c->argv)
+        wstrFreeSplit(c->argv, c->argc);
+    deleteEvent(Server.master_center, c->fd, EVENT_READABLE);
+    deleteEvent(Server.master_center, c->fd, EVENT_WRITABLE);
+    free(c);
+    wheatLog(WHEAT_DEBUG, "delete readable fd: %d", c->fd);
+}
+
+static void resetMasterClient(struct masterClient *c)
+{
+    if (c->argc != 0)
+        wstrFreeSplit(c->argv, c->argc);
+    c->argc = 0;
+    c->argv = NULL;
+    c->status = INIT;
+}
+
+static ssize_t processCommand(struct masterClient *c)
+{
+    if (c->argc == WHEAT_STATCOMMAND_PACKET_FIELD
+            && !wstrCmpChars(c->argv[0], "STAT", 4)) {
+        statCommand(c);
+    }
+    return WHEAT_OK;
+}
+
+static void commandParse(struct evcenter *center, int fd, void *client_data, int mask)
+{
+    struct masterClient *client = client_data;
+    ssize_t nread = readBulkFrom(fd, &client->request_buf);
+    ssize_t ret = WHEAT_OK;
+    if (nread == -1) {
+        freeMasterClient(client);
+        return ;
+    }
+    while (wstrlen(client->request_buf)) {
+        int start, end;
+        int count = 0;
+        wstr packet;
+        start = wstrIndex(client->request_buf, '\r');
+        if (start == -1 || start >= wstrlen(client->request_buf) - 4 ||
+                client->request_buf[start+1] != '\r')
+            break;
+        end = wstrIndex(client->request_buf, '$');
+        if (end == -1)
+            break;
+        packet = wstrNewLen(client->request_buf+2, end-start);
+        if (end+1 == wstrlen(packet)) {
+            wstrRange(client->request_buf, 0, 0);
+        } else {
+            wstrRange(client->request_buf, end+1, 0);
+        }
+        client->argv = wstrNewSplit(packet, "\n", 1, &count);
+        if (!client->argv || count < 1)
+            break;
+        client->argc = count;
+        ret = processCommand(client);
+        resetMasterClient(client);
+        wstrFree(packet);
+    }
+}
+
+static void buildConnection(struct evcenter *center, int fd, void *client_data, int mask)
+{
+    char ip[46];
+    int cport, cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
+    if (cfd == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Accepting client connection failed: %s", Server.neterr);
+            return;
+    }
+    wheatLog(WHEAT_DEBUG, "Accepted worker %s:%d", ip, cport);
+
+    if (wheatNonBlock(Server.neterr, cfd) == NET_WRONG) {
+            wheatLog(WHEAT_WARNING,
+                    "buildConnection: set nonblock %d failed: %s",
+                    fd, Server.neterr);
+            return ;
+    }
+    if (wheatTcpNoDelay(Server.neterr, cfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING,
+                "buildConnection: tcp no delay %d failed: %s",
+                fd, Server.neterr);
+        return ;
+    }
+
+    struct masterClient *c = createMasterClient(cfd);
+
+    createEvent(Server.master_center, cfd, EVENT_READABLE, commandParse, c);
+}
+
+void initStatListen()
+{
+    Server.stat_fd = wheatTcpServer(Server.neterr,
+            Server.stat_addr, Server.stat_port);
+    if (Server.stat_fd == NET_WRONG || Server.stat_fd < 0) {
+        wheatLog( WHEAT_WARNING,
+                "Setup tcp server failed port: %d wrong: %s",
+                Server.stat_port, Server.neterr);
+        halt(1);
+    }
+    if (wheatNonBlock(Server.neterr, Server.stat_fd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING,
+                "Set nonblock %d failed: %s",
+                Server.stat_fd, Server.neterr);
+        halt(1);
+    }
+    if (wheatCloseOnExec(Server.neterr, Server.stat_fd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING,
+                "Set close on exec %d failed: %s",
+                Server.stat_fd, Server.neterr);
+    }
+    wheatLog(WHEAT_NOTICE, "Stat Server is listen port %d",
+            Server.stat_port);
+
+    if (createEvent(Server.master_center, Server.stat_fd, EVENT_READABLE, buildConnection,  NULL) == WHEAT_WRONG)
+    {
+        wheatLog(WHEAT_WARNING, "createEvent failed");
+        halt(1);
+    }
+}
+
+/* reload do some works below:
+ * 1. reload config file
+ * 2. spawn new workers
+ * 3. kill old wokers
+ * 4. reboot statistic server */
+void reload()
+{
+    char *old_addr = Server.bind_addr, *old_stat_addr = Server.stat_addr;
+    int old_port = Server.port, old_stat_port = Server.stat_port;
+    loadConfigFile(Server.configfile_path, NULL);
+    if (strlen(Server.bind_addr) != strlen(old_addr) ||
+            strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
+            old_port != Server.port) {
+        close(Server.ipfd);
+        initMainListen();
+    }
+
+    if (strlen(Server.stat_addr) != strlen(old_stat_addr) ||
+            strncmp(Server.stat_addr, old_stat_addr, strlen(old_stat_addr)) ||
+            old_stat_port != Server.stat_port) {
+        close(Server.stat_fd);
+        deleteEvent(Server.master_center, Server.stat_port, EVENT_READABLE);
+        initStatListen();
+    }
+
+    int i;
+    for (i = 0; i < Server.worker_number; i++) {
+        spawnWorker("SyncWorker");
+    }
+    if (Server.daemon) createPidFile();
+
+    adjustWorkerNumber();
+}
+
 void initServer()
 {
-    Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
-    if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
-        wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
-        halt(1);
-    }
-    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-        halt(1);
-    }
-    wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
-
     Server.master_center = eventcenter_init(Server.worker_number*2+32);
     if (!Server.master_center) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
@@ -312,9 +442,9 @@ void initServer()
         halt(1);
     }
 
-    initMasterStatServer();
+    initStatListen();
+    initMainListen();
 }
-
 
 void version() {
     fprintf(stderr, "wheatserver %s\n", WHEATSERVER_VERSION);
@@ -334,7 +464,6 @@ void usage() {
     exit(1);
 }
 
-#ifndef TEST_WHEATSERVER
 int main(int argc, const char *argv[])
 {
     initGlobalServerConfig();
@@ -376,4 +505,3 @@ int main(int argc, const char *argv[])
     run();
     return 0;
 }
-#endif

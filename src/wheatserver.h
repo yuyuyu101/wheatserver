@@ -17,9 +17,9 @@
 
 #include "version.h"
 #include "event.h"
+#include "stats.h"
 #include "wstr.h"
 #include "dict.h"
-#include "stats.h"
 #include "net.h"
 #include "hook.h"
 #include "list.h"
@@ -44,6 +44,9 @@
 #define WHEAT_STATS_ADDR       "127.0.0.1"
 #define WHEAT_STAT_REFRESH     10
 #define WHEAT_STAT_PACKET_MAX  512
+
+/* Command Format */
+#define WHEAT_START_SPLIT     "\r\r"
 
 /* Log levels */
 #define WHEAT_DEBUG       0
@@ -102,7 +105,19 @@ struct globalServer {
 
 extern struct globalServer Server;
 
-#define CONFIG_GAIN_RESULT    0
+enum masterClientStatus {
+    INIT,
+    STRIP,
+    EXEC
+};
+
+struct masterClient {
+    int fd;
+    wstr request_buf;
+    enum masterClientStatus status;
+    int argc;
+    wstr *argv;
+};
 
 struct enumIdName {
     int id;

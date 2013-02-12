@@ -1,11 +1,9 @@
 #ifndef _STATS_H_
 #define _STATS_H_
 
-#include "wheatserver.h"
-
-#define WHEAT_STAT_FIELD       6
+#define WHEAT_STATCOMMAND_PACKET_FIELD       8
 #define WHEAT_STAT_SEND_FORMAT \
-    "\r\r%d\n%lld\n%lld\n%lld\n%lld\n%lld\n%ld."
+    "\r\rSTAT\n%d\n%lld\n%lld\n%lld\n%lld\n%lld\n%ld$"
 
 // If want to add or delete statistic field, pay attention to place
 // 1. where handle this field
@@ -38,11 +36,13 @@ struct masterStat {
     int timeout_workers;                // Number of total worker timeout
 };
 
+struct masterClient;
+
 struct workerStat *initWorkerStat(int only_malloc);
 struct masterStat *initMasterStat();
-void initMasterStatServer();
-void resetStat(struct workerStat *);
+void resetStat(struct workerStat *w);
 void sendStatPacket();
 void logStat();
+void statCommand(struct masterClient *c);
 
 #endif

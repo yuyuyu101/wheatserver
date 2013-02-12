@@ -1,7 +1,6 @@
 import httplib
 import os
 import signal
-import time
 
 PROJECT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXECFILE = os.path.join(os.path.join(PROJECT_PATH, "src"), "wheatserver")
