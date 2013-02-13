@@ -118,26 +118,29 @@ void wstrFreeSplit(wstr *slots, int count)
 
 int wstrCmp(const wstr s1, const wstr s2)
 {
-    int l1, l2, minlen;
-    int cmp;
-    l1 = wstrlen(s1);
-    l2 = wstrlen(s2);
-    minlen = l1 < l2 ? l1: l2;
+    return wstrCmpChars(s1, s2, wstrlen(s2));
+}
 
-    cmp = memcmp(s1, s2, minlen);
+int wstrCmpNocaseChars(const wstr s1, const char *s2, size_t l2)
+{
+    int l1, minlen, cmp;
+    l1 = wstrlen(s1);
+    minlen = l1 < l2 ? l1: l2;
+    cmp = strncasecmp(s1, s2, l2);
     if (cmp == 0)
         return l1 - l2;
     return cmp;
 }
 
-int wstrCmpChars(const wstr s1, const char *s2, size_t len)
+int wstrCmpChars(const wstr s1, const char *s2, size_t l2)
 {
-    wstr s = wstrNewLen(s2, (int)len);
-    if (s == NULL)
-        return 1;
-    int ret = wstrCmp(s1, s);
-    wstrFree(s);
-    return ret;
+    int l1, minlen, cmp;
+    l1 = wstrlen(s1);
+    minlen = l1 < l2 ? l1: l2;
+    cmp = memcmp(s1, s2, minlen);
+    if (cmp == 0)
+        return l1 - l2;
+    return cmp;
 }
 
 void wstrLower(wstr s) {
@@ -315,6 +318,21 @@ int main(void) {
 
         wstrFree(x);
         wstrFree(y);
+
+        x = wstrNew("aar");
+        y = wstrNew("AAR");
+        test_cond("wstrCmpNocaseChars(aar,AAR)", wstrCmpNocaseChars(x, y, 3) == 0);
+
+        wstrFree(x);
+        wstrFree(y);
+
+        x = wstrNew("aar");
+        y = wstrNew("AAr1");
+        test_cond("wstrCmpNocaseChars(aar,AAr)", wstrCmpNocaseChars(x, y, 3) == 0);
+
+        wstrFree(x);
+        wstrFree(y);
+
 
         x = wstrEmpty();
         test_cond("wstrEmpty()", wstrlen(x) == 0);

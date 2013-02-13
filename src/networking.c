@@ -63,3 +63,38 @@ int writeBulkTo(int fd, wstr *clientbuf)
     }
     return (int)nwritten;
 }
+
+static void sendReplyToMasterClient(struct evcenter *center, int fd, void *data, int mask)
+{
+    struct masterClient *client = data;
+    size_t bufpos = 0, totallen = wstrlen(client->response_buf);
+    ssize_t nwritten;
+
+    while (bufpos < totallen) {
+        nwritten = writeBulkTo(client->fd, &client->response_buf);
+        if (nwritten <= 0)
+            break;
+        bufpos += nwritten;
+    }
+    if (nwritten == -1) {
+        freeMasterClient(client);
+        return ;
+    }
+    if (bufpos == totallen) {
+        deleteEvent(center, fd, EVENT_WRITABLE);
+    }
+}
+
+static ssize_t isClientPreparedWrite(struct masterClient *c)
+{
+    if (c->fd <= 0 || createEvent(Server.master_center, c->fd, EVENT_WRITABLE, sendReplyToMasterClient, c) == WHEAT_WRONG)
+        return WHEAT_WRONG;
+    return WHEAT_OK;
+}
+
+void addReply(struct masterClient *c, const char *buf, size_t len)
+{
+    if (isClientPreparedWrite(c) == WHEAT_WRONG)
+        return ;
+    c->response_buf = wstrCatLen(c->response_buf, buf, len);
+}

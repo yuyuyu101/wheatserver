@@ -93,7 +93,7 @@ struct configuration *getConfiguration(const char *name)
     int len = sizeof(configTable) / sizeof(struct configuration);
     int i;
     for (i = 0; i < len; i++) {
-        if (!strncmp(name, configTable[i].name, strlen(name))) {
+        if (!strncasecmp(name, configTable[i].name, strlen(name))) {
             return &configTable[i];
         }
     }
@@ -195,22 +195,45 @@ void statConfigByName(const char *n, char *result, int len)
     wstrFree(name);
 }
 
+static ssize_t constructConfigFormat(struct configuration *conf, char *buf, size_t len)
+{
+    ssize_t ret = 0;
+    if (conf->format == STRING_FORMAT)
+        ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.ptr);
+    else if (conf->format == INT_FORMAT)
+        ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+    else if (conf->format == ENUM_FORMAT) {
+        ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.enum_ptr->name);
+    } else if (conf->format == BOOL_FORMAT) {
+        ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+    }
+    return ret;
+}
+
+void configCommand(struct masterClient *c)
+{
+    struct configuration *conf = NULL;
+    char buf[255];
+    ssize_t len;
+    conf = getConfiguration(c->argv[1]);
+    if (conf == NULL) {
+        len = snprintf(buf, 255, "No Correspond Configuration");
+    } else {
+        len = constructConfigFormat(conf, buf, 255);
+    }
+    addReply(c, buf, len);
+}
+
 void printServerConfig()
 {
     wheatLog(WHEAT_DEBUG, "---- Now Configuration are ----");
     int size = sizeof(configTable) / sizeof(struct configuration);
     int i;
     struct configuration *conf = &configTable[0];
+    char buf[255];
     for (i = 0; i < size; i++) {
-        if (conf->format == STRING_FORMAT)
-            wheatLog(WHEAT_DEBUG, "%s: %s", conf->name, conf->target.ptr);
-        else if (conf->format == INT_FORMAT)
-            wheatLog(WHEAT_DEBUG, "%s: %d", conf->name, conf->target.val);
-        else if (conf->format == ENUM_FORMAT) {
-            wheatLog(WHEAT_DEBUG, "%s: %s", conf->name, conf->target.enum_ptr->name);
-        } else if (conf->format == BOOL_FORMAT) {
-            wheatLog(WHEAT_DEBUG, "%s: %d", conf->name, conf->target.val);
-        }
+        constructConfigFormat(conf, buf, 255);
+        wheatLog(WHEAT_DEBUG, "%s", buf);
         conf++;
     }
     wheatLog(WHEAT_DEBUG, "-------------------------------");

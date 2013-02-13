@@ -258,21 +258,22 @@ void run()
     }
 }
 
-static struct masterClient *createMasterClient(int fd)
+struct masterClient *createMasterClient(int fd)
 {
     struct masterClient *c = malloc(sizeof(struct masterClient));
     c->request_buf = wstrEmpty();
-    c->status = INIT;
+    c->response_buf = wstrEmpty();
     c->argc = 0;
     c->argv = NULL;
     c->fd = fd;
     return c;
 }
 
-static void freeMasterClient(struct masterClient *c)
+void freeMasterClient(struct masterClient *c)
 {
     close(c->fd);
     wstrFree(c->request_buf);
+    wstrFree(c->response_buf);
     if (c->argv)
         wstrFreeSplit(c->argv, c->argc);
     deleteEvent(Server.master_center, c->fd, EVENT_READABLE);
@@ -287,15 +288,19 @@ static void resetMasterClient(struct masterClient *c)
         wstrFreeSplit(c->argv, c->argc);
     c->argc = 0;
     c->argv = NULL;
-    c->status = INIT;
 }
 
 static ssize_t processCommand(struct masterClient *c)
 {
     if (c->argc == WHEAT_STATCOMMAND_PACKET_FIELD
-            && !wstrCmpChars(c->argv[0], "STAT", 4)) {
+            && !wstrCmpNocaseChars(c->argv[0], "statinput", 9)) {
+        statinputCommand(c);
+    } else if (c->argc == 2 && !wstrCmpNocaseChars(c->argv[0], "config", 6)) {
+        configCommand(c);
+    } else if(c->argc == 2 && !wstrCmpNocaseChars(c->argv[0], "stat", 4)) {
         statCommand(c);
     }
+
     return WHEAT_OK;
 }
 
@@ -319,7 +324,8 @@ static void commandParse(struct evcenter *center, int fd, void *client_data, int
         end = wstrIndex(client->request_buf, '$');
         if (end == -1)
             break;
-        packet = wstrNewLen(client->request_buf+2, end-start);
+        start += 2;
+        packet = wstrNewLen(client->request_buf+start, end-start);
         if (end+1 == wstrlen(packet)) {
             wstrRange(client->request_buf, 0, 0);
         } else {

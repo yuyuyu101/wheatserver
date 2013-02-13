@@ -7,5 +7,6 @@
 
 int readBulkFrom(int fd, wstr *buf);
 int writeBulkTo(int fd, wstr *buf);
+void addReply(struct masterClient *c, const char *buf, size_t len);
 
 #endif

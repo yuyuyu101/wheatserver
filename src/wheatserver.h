@@ -105,16 +105,10 @@ struct globalServer {
 
 extern struct globalServer Server;
 
-enum masterClientStatus {
-    INIT,
-    STRIP,
-    EXEC
-};
-
 struct masterClient {
     int fd;
     wstr request_buf;
-    enum masterClientStatus status;
+    wstr response_buf;
     int argc;
     wstr *argv;
 };
@@ -167,10 +161,14 @@ void loadConfigFile(const char *filename, char *options);
 void fillServerConfig();
 void printServerConfig();
 struct configuration *getConfiguration(const char *name);
+void configCommand(struct masterClient *);
 
 /* log */
 void wheatLogRaw(int level, const char *msg);
 void wheatLog(int level, const char *fmt, ...);
+
+struct masterClient *createMasterClient(int fd);
+void freeMasterClient(struct masterClient *c);
 
 #define WHEAT_WRONG -1
 #define WHEAT_OK 0

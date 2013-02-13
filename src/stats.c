@@ -1,4 +1,4 @@
-#include "wheatserver.h"
+ #include "wheatserver.h"
 
 static void handleStat(struct workerStat *left, struct workerStat *add)
 {
@@ -108,7 +108,7 @@ static ssize_t parseStat(struct masterClient *client, struct workerStat *stat, s
     return WHEAT_OK;
 }
 
-void statCommand(struct masterClient *client)
+void statinputCommand(struct masterClient *client)
 {
     wstr buf = client->request_buf;
     struct workerProcess *worker;
@@ -141,21 +141,34 @@ struct masterStat *initMasterStat()
     return stat;
 }
 
-static void logMasterStatFormat(struct masterStat *stat)
+static size_t getMasterStatFormat(struct masterStat *stat, char *buf, size_t len)
 {
-    wheatLog(WHEAT_LOG_RAW, "Total workers spawned: %lld\n", stat->total_run_workers);
-    wheatLog(WHEAT_LOG_RAW, "Total timeout workers killed: %lld\n", stat->timeout_workers);
+    size_t pos = 0;
+    ssize_t ret = 0;
+    ret = snprintf(buf+pos, len-pos, "Total workers spawned: %d\n", stat->total_run_workers);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Total timeout workers killed: %d\n", stat->timeout_workers);
+    return pos;
 }
 
-static void logWorkerStatFormat(struct workerStat *stat)
+static size_t getWorkerStatFormat(struct workerStat *stat, char *buf, size_t len)
 {
-    wheatLog(WHEAT_LOG_RAW, "Total Connection: %lld\n", stat->stat_total_connection);
-    wheatLog(WHEAT_LOG_RAW, "Total Request: %lld\n", stat->stat_total_request);
-    wheatLog(WHEAT_LOG_RAW, "Failed Request: %lld\n", stat->stat_failed_request);
-    wheatLog(WHEAT_LOG_RAW, "Max Buffer Size: %lld\n", stat->stat_buffer_size);
-    wheatLog(WHEAT_LOG_RAW, "Work Time: %llds\n", stat->stat_work_time/100000);
-    wheatLog(WHEAT_LOG_RAW, "Last Send Time: %s", ctime(&stat->stat_last_send));
-    wheatLog(WHEAT_LOG_RAW, "Refresh Time: %s", ctime(&stat->refresh_time));
+    size_t pos = 0;
+    ssize_t ret = 0;
+    ret = snprintf(buf+pos, len-pos, "Total Connection: %lld\n", stat->stat_total_connection);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Total Request: %lld\n", stat->stat_total_request);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Failed Request: %lld\n", stat->stat_failed_request);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Max Buffer Size: %lld\n", stat->stat_buffer_size);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Work Time: %llds\n", stat->stat_work_time/100000);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Last Send Time: %s", ctime(&stat->stat_last_send));
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Refresh Time: %s", ctime(&stat->refresh_time));
+    return pos;
 }
 
 void logStat()
@@ -163,17 +176,34 @@ void logStat()
     struct listNode *node = NULL;
     struct workerProcess *worker = NULL;
     struct workerStat *stat;
+    char buf[1024];
     wheatLog(WHEAT_LOG_RAW, "---- Master Statistic Information -----\n");
-    logMasterStatFormat(Server.master_stat);
-    logWorkerStatFormat(Server.aggregate_workers_stat);
+    getMasterStatFormat(Server.master_stat, buf, 1024);
+    wheatLog(WHEAT_LOG_RAW, "%s", buf);
+    getWorkerStatFormat(Server.aggregate_workers_stat, buf, 1024);
+    wheatLog(WHEAT_LOG_RAW, "%s", buf);
     wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
     while ((node = listNext(iter)) != NULL) {
         worker = listNodeValue(node);
         stat = worker->stat;
         wheatLog(WHEAT_LOG_RAW, "\nStart Time: %s", ctime(&worker->start_time));
-        logWorkerStatFormat(stat);
+        getWorkerStatFormat(stat, buf, 1024);
+        wheatLog(WHEAT_LOG_RAW, "%s", buf);
     }
     freeListIterator(iter);
     wheatLog(WHEAT_LOG_RAW, "---------------------------------------\n");
 }
+
+void statCommand(struct masterClient *c)
+{
+    char buf[1024];
+    ssize_t len = 0;
+    if (!wstrCmpNocaseChars(c->argv[1], "master", 6)) {
+        len = getMasterStatFormat(Server.master_stat, buf, 1024);
+    } else if (!wstrCmpNocaseChars(c->argv[1], "worker", 6)) {
+        len = getWorkerStatFormat(Server.aggregate_workers_stat, buf, 1024);
+    }
+    addReply(c, buf, len);
+}
+

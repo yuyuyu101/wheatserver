@@ -3,7 +3,7 @@
 
 #define WHEAT_STATCOMMAND_PACKET_FIELD       8
 #define WHEAT_STAT_SEND_FORMAT \
-    "\r\rSTAT\n%d\n%lld\n%lld\n%lld\n%lld\n%lld\n%ld$"
+    "\r\rSTATINPUT\n%d\n%lld\n%lld\n%lld\n%lld\n%lld\n%ld$"
 
 // If want to add or delete statistic field, pay attention to place
 // 1. where handle this field
@@ -43,6 +43,7 @@ struct masterStat *initMasterStat();
 void resetStat(struct workerStat *w);
 void sendStatPacket();
 void logStat();
+void statinputCommand(struct masterClient *c);
 void statCommand(struct masterClient *c);
 
 #endif
