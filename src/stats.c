@@ -42,7 +42,7 @@ void sendStatPacket()
             stat->stat_failed_request, stat->stat_buffer_size,
             stat->stat_work_time, stat->stat_last_send);
     wstr send = wstrNew(buf);
-    ssize_t nwrite = WorkerProcess->worker->sendData(stat->master_stat_fd, &send);
+    ssize_t nwrite = writeBulkTo(stat->master_stat_fd, &send);
     if (nwrite == -1) {
         wheatLog(WHEAT_DEBUG, "Master close connection");
         connectWithMaster(WorkerProcess->stat);
@@ -204,6 +204,6 @@ void statCommand(struct masterClient *c)
     } else if (!wstrCmpNocaseChars(c->argv[1], "worker", 6)) {
         len = getWorkerStatFormat(Server.aggregate_workers_stat, buf, 1024);
     }
-    addReply(c, buf, len);
+    replyMasterClient(c, buf, len);
 }
 

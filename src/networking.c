@@ -61,10 +61,11 @@ int writeBulkTo(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     }
+    wstrRange(buf, nwritten, 0);
     return (int)nwritten;
 }
 
-static void sendReplyToMasterClient(struct evcenter *center, int fd, void *data, int mask)
+static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)
 {
     struct masterClient *client = data;
     size_t bufpos = 0, totallen = wstrlen(client->response_buf);
@@ -85,16 +86,16 @@ static void sendReplyToMasterClient(struct evcenter *center, int fd, void *data,
     }
 }
 
-static ssize_t isClientPreparedWrite(struct masterClient *c)
+ssize_t isClientPreparedWrite(int fd, struct evcenter *center, void *c)
 {
-    if (c->fd <= 0 || createEvent(Server.master_center, c->fd, EVENT_WRITABLE, sendReplyToMasterClient, c) == WHEAT_WRONG)
+    if (fd <= 0 || createEvent(center, fd, EVENT_WRITABLE, sendReplyToClient, c) == WHEAT_WRONG)
         return WHEAT_WRONG;
     return WHEAT_OK;
 }
 
-void addReply(struct masterClient *c, const char *buf, size_t len)
+void replyMasterClient(struct masterClient *c, const char *buf, size_t len)
 {
-    if (isClientPreparedWrite(c) == WHEAT_WRONG)
+    if (isClientPreparedWrite(c->fd, Server.master_center, c) == WHEAT_WRONG)
         return ;
     c->response_buf = wstrCatLen(c->response_buf, buf, len);
 }

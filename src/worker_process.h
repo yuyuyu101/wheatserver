@@ -43,8 +43,13 @@ struct worker {
     char *name;
     void (*setup)();
     void (*cron)();
-    int (*sendData)(int fd, wstr *buf);
-    int (*recvData)(int fd, wstr *buf);
+    /* Send data in buffer which `buf` points
+     * return -1 imply send data failed and the remaining length
+     * of bufmeans the length of data not sended.
+     * return others means the length of data.
+     */
+    int (*sendData)(struct client *);
+    int (*recvData)(struct client *);
 };
 
 extern struct worker workerTable[];
@@ -93,7 +98,6 @@ void freeClient(struct client *);
  * 2. if parent changed, worker must detect and exit
  * 3. if alive == 0, worker must exit
  * 4. send worker status every refresh time
- * 5. use jmp to handle timeout script running
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();
@@ -102,7 +106,13 @@ struct app *spotAppInterface();
 /* Sync worker Area */
 void setupSync();
 void syncWorkerCron();
-int syncSendData(int, wstr *);
-int syncRecvData(int, wstr *);
+int syncSendData(struct client *c);
+int syncRecvData(struct client *c);
+
+/* Async worker Area */
+void setupAsync();
+void asyncWorkerCron();
+int asyncSendData(struct client *c);
+int asyncRecvData(struct client *c);
 
 #endif

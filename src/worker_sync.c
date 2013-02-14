@@ -10,7 +10,7 @@ void dispatchRequest(int fd, char *ip, int port)
     struct workerStat *stat = WorkerProcess->stat;
     int ret, n;
     do {
-        n = syncRecvData(fd, &c->buf);
+        n = syncRecvData(c);
         if (n == WHEAT_WRONG) {
             goto cleanup;
         }
@@ -29,7 +29,6 @@ parser:
         stat->stat_failed_request++;
         wheatLog(WHEAT_NOTICE, "app construct faileds");
     }
-    ret = syncSendData(fd, &c->res_buf);
     if (ret == WHEAT_WRONG)
         goto cleanup;
     stat->stat_total_request++;
@@ -42,7 +41,6 @@ parser:
     }
 
 cleanup:
-    close(fd);
     freeClient(c);
 }
 
@@ -110,22 +108,19 @@ void setupSync()
 {
 }
 
-int syncSendData(int fd, wstr *clientbuf)
+int syncSendData(struct client *c)
 {
-    wstr buf = *clientbuf;
-    ssize_t bufpos = 0, nwritten = 0, totalwritten = 0;
-    while(bufpos <= wstrlen(buf)) {
-        nwritten = writeBulkTo(fd, clientbuf);
+    ssize_t bufpos = 0, total = wstrlen(c->res_buf), nwritten;
+    while(bufpos < total) {
+        nwritten = writeBulkTo(c->clifd, &c->res_buf);
         if (nwritten == -1)
             break;
         bufpos += nwritten;
-        totalwritten += nwritten;
-        wstrRange(buf, bufpos, 0);
     }
-    return (int)totalwritten;
+    return (int)bufpos;
 }
 
-int syncRecvData(int fd, wstr *buf)
+int syncRecvData(struct client *c)
 {
-    return readBulkFrom(fd, buf);
+    return readBulkFrom(c->clifd, &c->buf);
 }

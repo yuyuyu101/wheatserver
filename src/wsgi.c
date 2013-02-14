@@ -155,9 +155,9 @@ PyObject *create_environ(struct client *client)
             if (envPutString(environ, buf, value))
                 goto cleanup;
             wstrLower(value);
-            wstr expect = wstrNew("HTTP/1.1 100 Continue\r\n\r\n");
+            client->res_buf = wstrCat(client->res_buf, "HTTP/1.1 100 Continue\r\n\r\n");
             if (!strcmp(value, "100-continue"))
-                WorkerProcess->worker->sendData(client->clifd, &expect);
+                WorkerProcess->worker->sendData(client);
         } else if (!strcmp(buf, "HTTP_HOST")) {
             if (envPutString(environ, buf, value))
                 goto cleanup;
@@ -297,9 +297,8 @@ static int wsgiSendHeaders(struct response *self)
     if (client->res_buf == NULL)
         goto cleanup;
 
-    if ((len = WorkerProcess->worker->sendData(client->clifd, &client->res_buf)) < 0)
+    if ((len = WorkerProcess->worker->sendData(client)) < 0)
         goto cleanup;
-    client->res_buf = wstrRange(client->res_buf, len, 0);
     self->headers_sent = 1;
 
 cleanup:
@@ -488,6 +487,7 @@ static int wsgiSendBody(struct response *response, const char *data, size_t len)
     struct wsgiData *wsgi_data = response->client->app_private_data;
     struct httpData *http_data = response->client->protocol_data;
     size_t tosend = len, restsend;
+    ssize_t ret;
     if (!len)
         return 0;
     if (wsgi_data->response_length != 0) {
@@ -503,7 +503,9 @@ static int wsgiSendBody(struct response *response, const char *data, size_t len)
     response->client->res_buf = wstrCatLen(response->client->res_buf, data, tosend);
     if (response->client->res_buf == NULL)
         return -1;
-
+    ret = WorkerProcess->worker->sendData(response->client);
+    if (ret == WHEAT_WRONG)
+        return -1;
     return 0;
 }
 
@@ -528,8 +530,9 @@ static PyObject *responseWrite(struct response *self, PyObject *args)
             return NULL;
     }
 
-    if (wsgiSendBody(self, data, dataLen))
+    if (wsgiSendBody(self, data, dataLen)) {
         return NULL;
+    }
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -640,17 +643,16 @@ void sendResponse500(struct response *response)
    Non-sendfile(2) version. */
 int sendFile(struct client *client, int fd)
 {
-    wstr buf = client->res_buf;
     int len, readlen = 0, writelen = 0;
 
     do {
-        if ((len = WorkerProcess->worker->recvData(fd, &buf)) < 0)
+        if ((len = WorkerProcess->worker->recvData(client)) < 0)
             return -1;
         readlen += len;
     } while (len == WHEAT_IOBUF_LEN);
 
     do {
-        if ((len = WorkerProcess->worker->sendData(fd, &buf)) < -1)
+        if ((len = WorkerProcess->worker->sendData(client)) < -1)
             return -1;
         writelen += len;
     } while (writelen == readlen);

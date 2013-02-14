@@ -7,6 +7,7 @@
 
 int readBulkFrom(int fd, wstr *buf);
 int writeBulkTo(int fd, wstr *buf);
-void addReply(struct masterClient *c, const char *buf, size_t len);
+void replyMasterClient(struct masterClient *c, const char *buf, size_t len);
+ssize_t isClientPreparedWrite(int fd, struct evcenter *center, void *c);
 
 #endif

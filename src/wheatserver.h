@@ -36,14 +36,16 @@
 #define WHEATSERVER_MAX_NAMELEN       1024
 #define WHEATSERVER_PATH_LEN          1024
 #define WHEATSERVER_GRACEFUL_TIME     5
-#define WHEATSERVER_IDLE_TIME         5
+#define WHEATSERVER_IDLE_TIME         1
 #define WHEATSERVER_TIMEOUT           30
+#define WHEAT_NOTFREE          1
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
 #define WHEAT_STATS_ADDR       "127.0.0.1"
 #define WHEAT_STAT_REFRESH     10
 #define WHEAT_STAT_PACKET_MAX  512
+#define WHEAT_DEFAULT_WORKER   "SyncWorker"
 
 /* Command Format */
 #define WHEAT_START_SPLIT     "\r\r"
@@ -66,6 +68,7 @@ struct globalServer {
     char *bind_addr;                             //bind-addr, *
     int port;                                    //port, 10828
     int worker_number;                           //worker-number, 2
+    char *worker_type;                           //worker-type, SyncWorker
     char configfile_path[WHEATSERVER_PATH_LEN];
     struct hookCenter *hook_center;
     int graceful_timeout;
@@ -134,7 +137,7 @@ struct configuration {
         char *ptr;
         struct enumIdName *enum_ptr;
     } target;
-    void *helper;
+    void *helper;   // using in validator, indicating target attribute
     enum printFormat format;
 };
 

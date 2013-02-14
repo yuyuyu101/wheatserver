@@ -3,7 +3,8 @@
 struct workerProcess *WorkerProcess = NULL;
 
 struct worker workerTable[] = {
-    {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRecvData}
+    {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRecvData},
+    {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRecvData}
 };
 
 /* ========== Worker Area ========== */
@@ -11,7 +12,7 @@ struct worker workerTable[] = {
 struct worker *spotWorker(char *worker_name)
 {
     int i;
-    for (i = 0; i < sizeof(workerTable)/sizeof(workerTable); i++) {
+    for (i = 0; i < sizeof(workerTable)/sizeof(struct worker); i++) {
         if (strcmp(workerTable[i].name, worker_name) == 0) {
             return &workerTable[i];
         }
@@ -42,8 +43,10 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->start_time = time(NULL);
     worker->worker_name = worker_name;
     worker->worker = spotWorker(worker_name);
+    ASSERT(worker->worker);
     worker->stat = initWorkerStat(0);
     initWorkerSignals();
+    worker->worker->setup();
 }
 
 void freeWorkerProcess(void *w)
@@ -76,6 +79,8 @@ struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct
 
 void freeClient(struct client *c)
 {
+    close(c->clifd);
+    wstrFree(c->ip);
     wstrFree(c->buf);
     wstrFree(c->res_buf);
     c->protocol->freeProtocolData(c->protocol_data);

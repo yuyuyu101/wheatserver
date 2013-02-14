@@ -6,6 +6,10 @@ static struct enumIdName Verbose[] = {
     {-1, NULL}
 };
 
+static struct enumIdName Workers[] = {
+    {0, "SyncWorker"}, {1, "AsyncWorker"}
+};
+
 // Attention: If modify configTable, three places should be attention to.
 // 1. initGlobalServerConfig() in wheatserver.c
 // 2. wheatserver.conf
@@ -16,41 +20,43 @@ struct configuration configTable[] = {
 
     // Master Configuration
     {"bind-addr",         2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
     {"port",              2, unsignedIntValidator, {.val=WHEAT_SERVERPORT},
-        NULL,         INT_FORMAT},
+        NULL,                   INT_FORMAT},
     {"worker-number",     2, unsignedIntValidator, {.val=2},
-        (void *)1024, INT_FORMAT},
+        (void *)1024,           INT_FORMAT},
+    {"worker-type",       2, enumValidator,        {.enum_ptr=&Workers[0]},
+        &Workers[0],            ENUM_FORMAT},
     {"logfile",           2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
     {"logfile-level",     2, enumValidator,        {.enum_ptr=&Verbose[0]},
-        &Verbose[0],  ENUM_FORMAT},
+        &Verbose[0],            ENUM_FORMAT},
     {"daemon",            2, boolValidator,        {.val=0},
-        NULL,         BOOL_FORMAT},
+        NULL,                   BOOL_FORMAT},
     {"pidfile",           2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
     {"max-buffer-size",   2, unsignedIntValidator, {.val=0},
-        NULL,         INT_FORMAT},
-    {"stat-bind-addr",    2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   INT_FORMAT},
+    {"stat-bind-addr",    2, stringValidator,      {.ptr=WHEAT_STATS_ADDR},
+        (void *)WHEAT_NOTFREE, STRING_FORMAT},
     {"stat-port",         2, unsignedIntValidator, {.val=WHEAT_STATS_PORT},
-        NULL,         INT_FORMAT},
+        NULL,                   INT_FORMAT},
     {"stat-refresh-time", 2, unsignedIntValidator, {.val=WHEAT_STAT_REFRESH},
-        NULL,         INT_FORMAT},
+        NULL,                   INT_FORMAT},
     {"timeout-seconds",   2, unsignedIntValidator, {.val=WHEATSERVER_TIMEOUT},
-        (void *)300,  INT_FORMAT},
+        (void *)300,            INT_FORMAT},
 
     // Http
     {"access-log",        2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
 
     // WSGI Configuration
     {"app-module-path",   2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
     {"app-module-name",   2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
     {"app-name",          2, stringValidator,      {.ptr=NULL},
-        NULL,         STRING_FORMAT},
+        NULL,                   STRING_FORMAT},
 };
 
 void fillServerConfig()
@@ -62,6 +68,8 @@ void fillServerConfig()
     Server.port = conf->target.val;
     conf++;
     Server.worker_number = conf->target.val;
+    conf++;
+    Server.worker_type = conf->target.enum_ptr->name;
     conf++;
     Server.logfile = conf->target.ptr;
     conf++;
@@ -221,7 +229,7 @@ void configCommand(struct masterClient *c)
     } else {
         len = constructConfigFormat(conf, buf, 255);
     }
-    addReply(c, buf, len);
+    replyMasterClient(c, buf, len);
 }
 
 void printServerConfig()

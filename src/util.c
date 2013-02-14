@@ -63,8 +63,9 @@ int stringValidator(struct configuration *conf, const char *key, const char *val
 {
     ASSERT(val);
 
-    if (conf->target.ptr) {
+    if (conf->target.ptr && !conf->helper) {
         free(conf->target.ptr);
+        conf->helper = NULL;
     }
     conf->target.ptr = strdup(val);
     return VALIDATE_OK;

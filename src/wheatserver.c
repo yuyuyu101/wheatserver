@@ -12,6 +12,7 @@ void initGlobalServerConfig()
     Server.logfile = NULL;
     Server.verbose = WHEAT_VERBOSE;
     Server.worker_number = 2;
+    Server.worker_type = NULL;
     Server.graceful_timeout = WHEATSERVER_GRACEFUL_TIME;
     Server.idle_timeout = WHEATSERVER_IDLE_TIME;
     Server.cron_time = time(NULL);
@@ -78,7 +79,7 @@ static void handlePipe(struct evcenter *center, int fd, void *client_data, int m
 void adjustWorkerNumber()
 {
     while (listLength(Server.workers) < Server.worker_number)
-        spawnWorker("SyncWorker");
+        spawnWorker(Server.worker_type);
     while (listLength(Server.workers) > Server.worker_number && listLength(Server.workers) > 0) {
         /* worker is append to Server.workers, so the first worker in the `Server.workers` is alive longest */
         struct listNode *max_age_worker = listFirst(Server.workers);
@@ -109,10 +110,12 @@ void spawnWorker(char *worker_name)
         return ;
     } else {
         WorkerProcess = new_worker;
-        wheatLog(WHEAT_NOTICE, "new worker spawned %d", getpid());
         initWorkerProcess(new_worker, worker_name);
+        wheatLog(WHEAT_NOTICE, "new worker %s spawned %d",
+                WorkerProcess->worker->name, getpid());
         workerProcessCron();
-        wheatLog(WHEAT_NOTICE, "worker exit pid:%d", getpid());
+        wheatLog(WHEAT_NOTICE, "worker %s exit pid:%d",
+                WorkerProcess->worker->name, getpid());
         exit(0);
     }
 }
@@ -366,7 +369,7 @@ static void buildConnection(struct evcenter *center, int fd, void *client_data, 
 
     struct masterClient *c = createMasterClient(cfd);
 
-    createEvent(Server.master_center, cfd, EVENT_READABLE, commandParse, c);
+    createEvent(center, cfd, EVENT_READABLE, commandParse, c);
 }
 
 void initStatListen()
@@ -427,7 +430,7 @@ void reload()
 
     int i;
     for (i = 0; i < Server.worker_number; i++) {
-        spawnWorker("SyncWorker");
+        spawnWorker(Server.worker_type);
     }
     if (Server.daemon) createPidFile();
 
