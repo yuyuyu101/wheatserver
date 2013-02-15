@@ -76,6 +76,49 @@ static void handlePipe(struct evcenter *center, int fd, void *client_data, int m
     ASSERT(buf[0] == '.');
 }
 
+/* reap worker avoid zombie */
+static void reapWorkers()
+{
+    int status, result;
+
+    result = waitpid(-1, &status, WNOHANG);
+    if (result == 0)
+        return ;
+    else if (result == -1) {
+        if (errno == ECHILD)
+            return ;
+        else {
+            wheatLog(WHEAT_NOTICE, "reapWorkers() waitpid failed: %s", strerror(errno));
+        }
+    } else {
+        if (Server.relaunch_pid == result)
+            return ;
+
+        int exitcode = WEXITSTATUS(status);
+        int bysignal = 0;
+
+        if (WIFSIGNALED(status))
+            bysignal = WTERMSIG(status);
+        if (bysignal || exitcode != 0) {
+            wheatLog(WHEAT_NOTICE, "reapWorkers() catch worker %d exitcode: %d  signal: %d", result, exitcode, bysignal);
+        }
+        if (exitcode == WORKER_BOOT_ERROR) {
+            wheatLog(WHEAT_WARNING, "Worker failed to boot.");
+            halt(1);
+        }
+        struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
+        struct listNode *curr;
+        while ((curr = listNext(iter)) != NULL) {
+            struct workerProcess *worker = listNodeValue(curr);
+            if (worker->pid == result) {
+                removeListNode(Server.workers, curr);
+                break;
+            }
+        }
+        freeListIterator(iter);
+    }
+}
+
 void adjustWorkerNumber()
 {
     while (listLength(Server.workers) < Server.worker_number)
@@ -84,6 +127,7 @@ void adjustWorkerNumber()
         /* worker is append to Server.workers, so the first worker in the `Server.workers` is alive longest */
         struct listNode *max_age_worker = listFirst(Server.workers);
         killWorker(listNodeValue(max_age_worker), SIGQUIT);
+        reapWorkers();
     }
 }
 
@@ -136,49 +180,6 @@ void killWorker(struct workerProcess *worker, int sig)
     int result;
     if ((result = kill(worker->pid, sig)) != 0) {
         wheatLog(WHEAT_NOTICE, "kill %d pid failed: %s", worker->pid, strerror(errno));
-    }
-}
-
-/* reap worker avoid zombie */
-void reapWorkers()
-{
-    int status, result;
-
-    result = waitpid(-1, &status, WNOHANG);
-    if (result == 0)
-        return ;
-    else if (result == -1) {
-        if (errno == ECHILD)
-            return ;
-        else {
-            wheatLog(WHEAT_NOTICE, "reapWorkers() waitpid failed: %s", strerror(errno));
-        }
-    } else {
-        if (Server.relaunch_pid == result)
-            return ;
-
-        int exitcode = WEXITSTATUS(status);
-        int bysignal = 0;
-
-        if (WIFSIGNALED(status))
-            bysignal = WTERMSIG(status);
-        if (bysignal || exitcode != 0) {
-            wheatLog(WHEAT_NOTICE, "reapWorkers() catch worker %d exitcode: %d  signal: %d", result, exitcode, bysignal);
-        }
-        if (exitcode == WORKER_BOOT_ERROR) {
-            wheatLog(WHEAT_WARNING, "Worker failed to boot.");
-            halt(1);
-        }
-        struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
-        struct listNode *curr;
-        while ((curr = listNext(iter)) != NULL) {
-            struct workerProcess *worker = listNodeValue(curr);
-            if (worker->pid == result) {
-                removeListNode(Server.workers, curr);
-                break;
-            }
-        }
-        freeListIterator(iter);
     }
 }
 

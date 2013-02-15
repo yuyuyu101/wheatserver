@@ -19,13 +19,6 @@ class WheatServer(object):
     def __del__(self):
         os.kill(self.exec_pid, signal.SIGQUIT);
 
-sync_server = WheatServer("", "--port 10826", "--stat-port 10827",
-                         "--worker-type %s" % "SyncWorker",
-                       "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
-
-async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
-                       "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
-
 def server_socket(port):
     s = socket.socket()
     s.connect(("127.0.0.1", port))
@@ -35,7 +28,7 @@ def construct_command(*args):
     return "\r\r%s$" % ("\n".join(args))
 
 def pytest_generate_tests(metafunc):
-    metafunc.parametrize(('port',), [(10829,),(10827,),])
+    metafunc.parametrize(('port',), [(10827,),(10829,),])
 
 def test_config_command(port):
     s = server_socket(port)
@@ -43,6 +36,7 @@ def test_config_command(port):
     assert s.recv(100) == "logfile-level: DEBUG"
 
 def test_stat_accuracy(port):
+    global sync_server, async_server
     conn = httplib.HTTPConnection("127.0.0.1", port-1);
     for i in range(100):
         conn.request("GET", "/")
@@ -55,18 +49,17 @@ def test_stat_accuracy(port):
     s.send(construct_command("stat", "worker"))
     assert "Total Connection: 100" in s.recv(1000)
 
-def test_reload(port):
-    s = server_socket(port)
-    if port == 10827:
-        os.kill(sync_server.exec_pid, signal.SIGHUP)
-    else:
-        os.kill(async_server.exec_pid, signal.SIGHUP)
+sync_server = async_server = None
 
-    conn = httplib.HTTPConnection("127.0.0.1", port-1);
-    for i in range(10):
-        conn.request("GET", "/")
-        r1 = conn.getresponse()
-        assert r1.status == 200
+def setup_module(module):
+    global sync_server, async_server
+    sync_server = WheatServer("", "--port 10826", "--stat-port 10827",
+                              "--worker-type %s" % "SyncWorker",
+                              "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
+
+    async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
+                               "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
+    time.sleep(0.5)
 
 
 def teardown_module(module):
