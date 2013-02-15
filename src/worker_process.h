@@ -71,6 +71,7 @@ struct client {
     void *protocol_data;
     struct app *app;
     void *app_private_data;
+    time_t last_io;
 
     wstr buf;
     wstr res_buf;
@@ -94,10 +95,11 @@ void freeClient(struct client *);
  * 6. construct response and send to
  *
  * worker's duty:
- * 1. provide with send and receive api
+ * 1. provide with send and receive api and refresh client's last_io field
  * 2. if parent changed, worker must detect and exit
  * 3. if alive == 0, worker must exit
  * 4. send worker status every refresh time
+ * 5. guarantee closing client in Server.worker_timeout
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();

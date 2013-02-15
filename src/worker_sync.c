@@ -87,7 +87,7 @@ accepterror:
         }
         struct timeval tvp;
         fd_set rset;
-        tvp.tv_sec = Server.idle_timeout;
+        tvp.tv_sec = WHEATSERVER_CRON;
         tvp.tv_usec = 0;
         FD_ZERO(&rset);
         FD_SET(Server.ipfd, &rset);
@@ -117,10 +117,14 @@ int syncSendData(struct client *c)
             break;
         bufpos += nwritten;
     }
+    c->last_io = Server.cron_time;
     return (int)bufpos;
 }
 
 int syncRecvData(struct client *c)
 {
-    return readBulkFrom(c->clifd, &c->buf);
+    ssize_t n = readBulkFrom(c->clifd, &c->buf);
+    if (n > 0)
+        c->last_io = Server.cron_time;
+    return n;
 }

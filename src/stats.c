@@ -4,6 +4,7 @@ static void handleStat(struct workerStat *left, struct workerStat *add)
 {
     left->stat_total_connection += add->stat_total_connection;
     left->stat_total_request += add->stat_total_request;
+    left->stat_timeout_request += add->stat_timeout_request;
     left->stat_failed_request += add->stat_failed_request;
     if (left->stat_buffer_size < add->stat_buffer_size)
         left->stat_buffer_size = add->stat_buffer_size;
@@ -39,8 +40,9 @@ void sendStatPacket()
     snprintf(buf, WHEAT_STAT_PACKET_MAX, WHEAT_STAT_SEND_FORMAT,
             WorkerProcess->pid,
             stat->stat_total_connection, stat->stat_total_request,
-            stat->stat_failed_request, stat->stat_buffer_size,
-            stat->stat_work_time, stat->stat_last_send);
+            stat->stat_timeout_request, stat->stat_failed_request,
+            stat->stat_buffer_size, stat->stat_work_time,
+            stat->stat_last_send);
     wstr send = wstrNew(buf);
     ssize_t nwrite = writeBulkTo(stat->master_stat_fd, &send);
     if (nwrite == -1) {
@@ -64,6 +66,7 @@ struct workerStat *initWorkerStat(int only_malloc)
     stat->stat_total_connection = 0;
     stat->stat_total_request = 0;
     stat->stat_failed_request = 0;
+    stat->stat_timeout_request = 0;
     stat->stat_buffer_size = 0;
     stat->stat_work_time = 0;
     stat->stat_last_send = time(NULL);
@@ -100,10 +103,11 @@ static ssize_t parseStat(struct masterClient *client, struct workerStat *stat, s
 
     stat->stat_total_connection = atoi(client->argv[2]);
     stat->stat_total_request = atoi(client->argv[3]);
-    stat->stat_failed_request = atoi(client->argv[4]);
-    stat->stat_buffer_size = atoi(client->argv[5]);
-    stat->stat_work_time = atoi(client->argv[6]);
-    stat->stat_last_send = atoi(client->argv[7]);
+    stat->stat_timeout_request = atoi(client->argv[4]);
+    stat->stat_failed_request = atoi(client->argv[5]);
+    stat->stat_buffer_size = atoi(client->argv[6]);
+    stat->stat_work_time = atoi(client->argv[7]);
+    stat->stat_last_send = atoi(client->argv[8]);
 
     return WHEAT_OK;
 }
@@ -158,6 +162,8 @@ static size_t getWorkerStatFormat(struct workerStat *stat, char *buf, size_t len
     ret = snprintf(buf+pos, len-pos, "Total Connection: %lld\n", stat->stat_total_connection);
     if (ret > 0) pos += ret;
     ret = snprintf(buf+pos, len-pos, "Total Request: %lld\n", stat->stat_total_request);
+    if (ret > 0) pos += ret;
+    ret = snprintf(buf+pos, len-pos, "Timeout Request: %lld\n", stat->stat_timeout_request);
     if (ret > 0) pos += ret;
     ret = snprintf(buf+pos, len-pos, "Failed Request: %lld\n", stat->stat_failed_request);
     if (ret > 0) pos += ret;

@@ -38,7 +38,8 @@
 #define WHEATSERVER_GRACEFUL_TIME     5
 #define WHEATSERVER_IDLE_TIME         1
 #define WHEATSERVER_TIMEOUT           30
-#define WHEAT_NOTFREE          1
+#define WHEAT_NOTFREE                 1
+#define WHEATSERVER_CRON              1
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
@@ -94,6 +95,7 @@ struct globalServer {
     int pipe_readfd;
     int pipe_writefd;
     struct list *workers;
+    struct list *master_clients;
     struct list *signal_queue;
     char master_name[WHEATSERVER_MAX_NAMELEN];
 

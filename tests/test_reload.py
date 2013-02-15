@@ -2,6 +2,7 @@ from wheatserver_test import WheatServer, server_socket, construct_command, PROJ
 import os
 import signal
 import time
+import httplib
 
 async_server = None
 

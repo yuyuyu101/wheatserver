@@ -58,6 +58,7 @@ wstr wstrCat(wstr s, const char *t);
 wstr wstrCatLen(wstr s, const char *t, size_t len);
 wstr wstrRange(wstr, int left, int right);
 wstr wstrStrip(wstr, const char *chars);
+wstr wstrRemoveFreeSpace(wstr);
 
 /* low function */
 wstr wstrMakeRoom(wstr s, size_t add_size);

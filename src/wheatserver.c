@@ -28,6 +28,7 @@ void initGlobalServerConfig()
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);
+    Server.master_clients = createList();
     Server.pid = getpid();
     Server.relaunch_pid = 0;
     memcpy(Server.master_name, "master", 7);
@@ -222,7 +223,7 @@ static void findTimeoutWorker()
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
     struct listNode *node;
     time_t cache_now = Server.cron_time;
-    int timeout = Server.worker_timeout;
+    unsigned int timeout = Server.worker_timeout;
     while ((node = listNext(iter)) != NULL) {
         struct workerProcess *worker = listNodeValue(node);
         if (cache_now - worker->stat->refresh_time > timeout) {
@@ -247,7 +248,7 @@ void run()
         if (listLength(Server.signal_queue) == 0) {
         // processEvents will refresh worker status, so findTimeoutWorker
         // must follow processEvents in order to avoid incorrect timeout
-            processEvents(Server.master_center, Server.stat_refresh_seconds);
+            processEvents(Server.master_center, WHEATSERVER_CRON);
             adjustWorkerNumber();
             findTimeoutWorker();
             if (!(cron_times % 10) && Server.verbose == WHEAT_DEBUG)
@@ -270,6 +271,7 @@ struct masterClient *createMasterClient(int fd)
     c->argc = 0;
     c->argv = NULL;
     c->fd = fd;
+    appendToListTail(Server.master_clients, c);
     return c;
 }
 
@@ -282,6 +284,9 @@ void freeMasterClient(struct masterClient *c)
         wstrFreeSplit(c->argv, c->argc);
     deleteEvent(Server.master_center, c->fd, EVENT_READABLE);
     deleteEvent(Server.master_center, c->fd, EVENT_WRITABLE);
+    struct listNode *node = searchListKey(Server.master_clients, c);
+    ASSERT(node);
+    removeListNode(Server.master_clients, node);
     free(c);
     wheatLog(WHEAT_DEBUG, "delete readable fd: %d", c->fd);
 }

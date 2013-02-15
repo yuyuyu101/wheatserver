@@ -3,13 +3,54 @@
 #define WHEAT_ASYNC_CLIENT_MAX     10000
 
 static struct evcenter *WorkerCenter = NULL;
+static struct list *Clients = NULL;
 
 static void cleanRequest(struct client *c)
 {
     close(c->clifd);
     deleteEvent(WorkerCenter, c->clifd, EVENT_READABLE);
     deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
+    struct listNode *node = searchListKey(Clients, c);
+    ASSERT(node);
+    removeListNode(Clients, node);
     freeClient(c);
+}
+
+static struct client *initRequest(int fd, char *ip, int port, struct protocol *p, struct app *app)
+{
+    struct client *c = initClient(fd, ip, port, p, app);
+    appendToListTail(Clients, c);
+    return c;
+}
+
+static void clientsCron()
+{
+    int numclients = listLength(Clients);
+    int iteration = numclients < 50 ? numclients : numclients / 10;
+    struct client *c = NULL;
+    struct listNode *node = NULL;
+
+    while (listLength(Clients) && iteration--) {
+        node = listFirst(Clients);
+        c = listNodeValue(node);
+        ASSERT(c);
+
+        time_t idletime = Server.cron_time - c->last_io;
+        if (idletime > Server.worker_timeout) {
+            wheatLog(WHEAT_VERBOSE,"Closing idle client");
+            WorkerProcess->stat->stat_timeout_request++;
+            cleanRequest(c);
+            continue;
+        }
+
+        if ((wstrlen(c->buf) > WHEAT_IOBUF_LEN && idletime > 2) ||
+                (wstrlen(c->buf) > Server.max_buffer_size / 2)) {
+            if (wstrfree(c->buf) > 1024) {
+                wstrRemoveFreeSpace(c->buf);
+                continue;
+            }
+        }
+    }
 }
 
 void asyncWorkerCron()
@@ -17,11 +58,12 @@ void asyncWorkerCron()
     int refresh_seconds = Server.stat_refresh_seconds;
     time_t elapse, now = Server.cron_time;
     while (WorkerProcess->alive) {
-        processEvents(WorkerCenter, WHEATSERVER_IDLE_TIME);
+        processEvents(WorkerCenter, WHEATSERVER_CRON);
         if (WorkerProcess->ppid != getppid()) {
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
             return ;
         }
+        clientsCron();
         elapse = Server.cron_time;
         if (elapse - now > refresh_seconds) {
             sendStatPacket();
@@ -51,8 +93,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         if (ret == -1) {
             wheatLog(WHEAT_NOTICE, "parse http data failed:%s", c->buf);
             break;
-        }
-        if (ret == 0) {
+        } else if (ret == 0) {
             stat->stat_total_request++;
             ret = c->app->constructor(c);
             if (ret != WHEAT_OK) {
@@ -60,6 +101,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
                 wheatLog(WHEAT_NOTICE, "app construct faileds");
                 break;
             }
+        } else if (ret == 1) {
+            return ;
         }
     }
     cleanRequest(c);
@@ -82,7 +125,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
 
     struct protocol *ptcol = spotProtocol(ip, cport, cfd);
     struct app *application = spotAppInterface();
-    struct client *c = initClient(cfd, ip, cport, ptcol, application);
+    struct client *c = initRequest(cfd, ip, cport, ptcol, application);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
     WorkerProcess->stat->stat_total_connection++;
 }
@@ -90,6 +133,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
 void setupAsync()
 {
     WorkerCenter = eventcenter_init(WHEAT_ASYNC_CLIENT_MAX);
+    Clients = createList();
     if (!WorkerCenter) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
         halt(1);
@@ -140,6 +184,8 @@ int asyncSendData(struct client *c)
         return -1;
     }
 
+    c->last_io = Server.cron_time;
+
     if (bufpos < totallen) {
         createEvent(WorkerCenter, c->clifd, EVENT_WRITABLE, sendReplyToClient, c);
     }
@@ -148,5 +194,8 @@ int asyncSendData(struct client *c)
 
 int asyncRecvData(struct client *c)
 {
-    return readBulkFrom(c->clifd, &c->buf);
+    ssize_t n = readBulkFrom(c->clifd, &c->buf);
+    if (n > 0)
+        c->last_io = Server.cron_time;
+    return n;
 }

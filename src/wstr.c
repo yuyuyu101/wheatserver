@@ -230,6 +230,15 @@ int wstrIndex(wstr s, const char t)
     return (i != len) ? i : -1;
 }
 
+wstr wstrRemoveFreeSpace(wstr s)
+{
+    struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));
+
+    sh = realloc(sh, sizeof(struct wstrhd)+sh->len+1); // +1 for '\0'
+    sh->free = 0;
+    return sh->buf;
+}
+
 #ifdef WSTR_TEST_MAIN
 #include "test_help.h"
 #include <stdio.h>
