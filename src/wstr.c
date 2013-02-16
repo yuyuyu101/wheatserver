@@ -123,9 +123,8 @@ int wstrCmp(const wstr s1, const wstr s2)
 
 int wstrCmpNocaseChars(const wstr s1, const char *s2, size_t l2)
 {
-    int l1, minlen, cmp;
+    int l1, cmp;
     l1 = wstrlen(s1);
-    minlen = l1 < l2 ? l1: l2;
     cmp = strncasecmp(s1, s2, l2);
     if (cmp == 0)
         return l1 - l2;
