@@ -1,6 +1,5 @@
-#include <python2.7/Python.h>
 #include "wheatserver.h"
-#include "application.h"
+#include "wsgi.h"
 
 int envPutString(PyObject *dict, const void *key, const void *value)
 {
