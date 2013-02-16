@@ -4,4 +4,3 @@ default: all
 
 .DEFAULT:
 	cd src && $(MAKE) $@
-	cd build && $(MAKE) $@

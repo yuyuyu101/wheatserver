@@ -42,6 +42,7 @@ def test_stat_accuracy(port):
         conn.request("GET", "/")
         r1 = conn.getresponse()
         assert r1.status == 200
+    time.sleep(0.1)
     os.kill(sync_server.exec_pid, signal.SIGUSR1)
     os.kill(async_server.exec_pid, signal.SIGUSR1)
     time.sleep(0.1)
