@@ -45,12 +45,6 @@ PyTypeObject responseType;
 PyTypeObject FileWrapper_Type;
 PyTypeObject InputStream_Type;
 
-void initWsgi();
-void deallocWsgi();
-int wsgiConstructor(struct client *);
-void *initWsgiAppData();
-void freeWsgiAppData(void *app_data);
-
 #ifndef PyMODINIT_FUNC
 #define PyMODINIT_FUNC void
 #endif

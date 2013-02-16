@@ -1,13 +1,14 @@
 CC=cc
 CXX=c++
-SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c worker_process.c worker_sync.c worker_async.c util.c protocol.c application.c http_parser.c wsgi.c wsgiinput.c wsgiwrapper.c stats.c event.c
+SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c worker_process.c worker_sync.c worker_async.c util.c protocol.c application.c http_parser.c app_wsgi.c wsgiinput.c wsgiwrapper.c stats.c event.c
 OBJECTS = $(SOURCES:.c=.o)
 SERVER_OBJECTS += $(OBJECTS)
 SERVER_OBJECTS += wheatserver.o
 WORKER_OBJECTS += $(OBJECTS)
 WORKER_OBJECTS += wheatworker.o
-LIBS = -L/System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/config -lpython2.7
+LIBS += -L$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_lib()") -lpython
 CFLAGS = -O0 -Wall -g
+PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_inc()")
 
 TESTS = test_wstr test_list test_dict
 
@@ -16,7 +17,12 @@ all: wheatserver wheatworker
 wheatworker.o: wheatserver.c wheatserver.h
 	$(CC) $(CFLAGS) -c $< -o $@ -DWHEAT_DEBUG_WORKER
 
-.c.o:
+%wsgi.o: %wsgi.c
+	$(CC) $(CFLAGS) $(PYTHON_FLAGS) -c $< -o $@
+wsgi%.o: wsgi%.c
+	$(CC) $(CFLAGS) $(PYTHON_FLAGS) -c $< -o $@
+
+%.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 ################
 

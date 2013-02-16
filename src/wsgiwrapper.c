@@ -26,8 +26,8 @@
  * $Id$
  */
 
-#include <python2.7/Python.h>
-#include "application.h"
+#include <Python.h>
+#include "app_wsgi.h"
 
 static void FileWrapper_dealloc(FileWrapper *self)
 {

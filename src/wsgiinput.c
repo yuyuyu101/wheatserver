@@ -1,5 +1,5 @@
-#include <Python2.7/Python.h>
-#include "application.h"
+#include <Python.h>
+#include "app_wsgi.h"
 
 /* Find occurrence of a character within our buffers */
 static int InputStream_findChar(InputStream *self, int start, int c)
