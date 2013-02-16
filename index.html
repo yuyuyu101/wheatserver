@@ -38,32 +38,169 @@
           <span class="credits right">Hosted on GitHub Pages &mdash; Theme by <a href="http://twitter.com/#!/michigangraham">mattgraham</a></span>
         </div>
 
-        <h3>Welcome to GitHub Pages.</h3>
+        <h1>wheatserver(Alpha)</h1>
 
-<p>This automatic page generator is the easiest way to create beautiful pages for all of your projects. Author your page content here using GitHub Flavored Markdown, select a template crafted by a designer, and publish. After your page is generated, you can check out the new branch:</p>
+<p>Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
+<a href="http://projects.unbit.it/uwsgi/">uWSGI</a>.</p>
 
-<pre><code>$ cd your_repo_root/repo_name
-$ git fetch origin
-$ git checkout gh-pages
-</code></pre>
+<h1>Build</h1>
 
-<p>If you're using the GitHub for Mac, simply sync your repository and you'll see the new branch.</p>
+<p>shell &gt; cd wheatserver</p>
 
-<h3>Designer Templates</h3>
+<p>shell &gt; cd src</p>
 
-<p>We've crafted some handsome templates for you to use. Go ahead and continue to layouts to browse through them. You can easily go back to edit your page before publishing. After publishing your page, you can revisit the page generator and switch to another theme. Your Page content will be preserved if it remained markdown format.</p>
+<p>shell &gt; make</p>
 
-<h3>Rather Drive Stick?</h3>
+<h1>Run</h1>
 
-<p>If you prefer to not use the automatic generator, push a branch named <code>gh-pages</code> to your repository to create a page manually. In addition to supporting regular HTML content, GitHub Pages support Jekyll, a simple, blog aware static site generator written by our own Tom Preston-Werner. Jekyll makes it easy to create site-wide headers and footers without having to copy them across every page. It also offers intelligent blog support and other advanced templating features.</p>
+<p>-./wheatserver --app-module-path {your app path } --app-module-name {app filename} --app-name {callable object}</p>
 
-<h3>Authors and Contributors</h3>
+<h1>Config</h1>
 
-<p>You can <a href="https://github.com/blog/821" class="user-mention">@mention</a> a GitHub username to generate a link to their profile. The resulting <code>&lt;a&gt;</code> element will link to the contributor's GitHub Profile. For example: In 2007, Chris Wanstrath (<a href="https://github.com/defunkt" class="user-mention">@defunkt</a>), PJ Hyett (<a href="https://github.com/pjhyett" class="user-mention">@pjhyett</a>), and Tom Preston-Werner (<a href="https://github.com/mojombo" class="user-mention">@mojombo</a>) founded GitHub.</p>
+<p>See <a href="https://github.com/yuyuyu101/wheatserver/blob/master/wheatserver.conf">wheatserver.conf</a></p>
 
-<h3>Support or Contact</h3>
+<h1>Example(Sample)</h1>
 
-<p>Having trouble with Pages? Check out the documentation at <a href="http://help.github.com/pages">http://help.github.com/pages</a> or contact <a href="mailto:support@github.com">support@github.com</a> and we’ll help you sort it out.</p>
+<pre>
+#sample.py which is in the wheatserver/src
+HELLO_WORLD = b"Hello world!\n"
+
+def simple_app(environ, start_response):
+    """Simplest possible application object"""
+    status = '200 OK'
+    response_headers = [('Content-type', 'text/plain')]
+    start_response(status, response_headers)
+    return [HELLO_WORLD]
+</pre>
+
+<p>-./wheatserver --app-module-name sample --app-name simple_app</p>
+
+<h1>Example(Django)</h1>
+
+<p>-My Django Project Directory:</p>
+
+<pre>
+|-signup
+   |-wsgi.py
+   |-bin
+   |-include
+   |-lib
+   |-signup
+   |---activity
+   |-----fixtures
+   |-----static
+   |-------css
+   |-------img
+   |-------js
+   |---assets
+   |-----static
+   |---benefits
+   |-----templatetags
+   |---finance
+   |-----templatetags
+   |---fixtures
+   |---logs
+   |---match
+   |-----......
+   |---media
+   |-----......
+   |---snapboard
+   |-----.......
+   |---specialist
+   |-----static
+   |-------css
+   |-------js
+   |-----templates
+   |-------admin
+   |---------specialist
+   |---static
+   |---templates
+   |-----......
+   |---third_user
+   |-----static
+   |---settings.py
+   |---urls.py
+</pre>
+
+<p>wsgi.py at the top of tree is the entry of Django WSGI.</p>
+
+<pre>
+import os, sys
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'signup'))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "signup.settings")
+
+# This application object is used by the development server
+# as well as any WSGI server configured to use this file.
+from django.core.wsgi import get_wsgi_application
+application = get_wsgi_application()
+</pre>
+
+<p>-shell&gt; ./wheatserver --app-module-path /Users/abcd/signup/ --app-module-name wsgi --app-name application</p>
+
+<h1>Signals for controlling</h1>
+
+<pre>
+# using reload to send the signal
+kill -HUP `cat /tmp/wheatserver.pid`
+# using kill to send the signal
+kill -INT `cat /tmp/project-master.pid`
+</pre>
+
+<table>
+<tr>
+<td>Signal</td>
+      <td>Description</td>
+   </tr>
+<tr>
+<td>SIGHUP</td>
+      <td>reload configuration file, gracefully reload all the workers and the master process</td>
+   </tr>
+<tr>
+<td>SIGTERM</td>
+      <td>brutally kill all the workers and the master process</td>
+   </tr>
+<tr>
+<td>SIGINT</td>
+      <td>brutally kill the workers and the master process</td>
+   </tr>
+<tr>
+<td>SIGQUIT</td>
+      <td>gracefully kill the workers and the master process</td>
+   </tr>
+<tr>
+<td>SIGUSR1</td>
+      <td>print statistics</td>
+   </tr>
+<tr>
+<td>SIGUSR2</td>
+      <td>reexec the entire master process and spawn workers</td>
+   </tr>
+<tr>
+<td>SIGTTIN</td>
+      <td>add one to workernumber</td>
+   </tr>
+<tr>
+<td>SIGTTOU</td>
+      <td>subtraction of one from workernumber</td>
+   </tr>
+<tr>
+<td>SIGWINCH</td>
+      <td>only gracefully kill the workers and the master process backend</td>
+   </tr>
+</table><h1>Design</h1>
+
+<p>Master-multi Worker mode.</p>
+
+<p>Every worker process contains Worker, Protocol, Application three levels.</p>
+
+<h2>Detail Refer</h2>
+
+<p>Worker: worker_process.h worker_sync.c</p>
+
+<p>Protocol: protocol.h http_parser.c</p>
+
+<p>Application: application.h, wsgi.c</p>
       </section>
 
     </div>
