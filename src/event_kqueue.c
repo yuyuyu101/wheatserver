@@ -45,7 +45,8 @@ static void eventDeinit(struct apiState *data)
     free(data);
 }
 
-static int addEvent(struct apiState *state, int fd, int mask) {
+static int addEvent(struct evcenter *center, int fd, int mask) {
+    struct apiState *state = center->apidata;
     struct kevent ke;
 
     if (mask & EVENT_READABLE) {
@@ -59,7 +60,8 @@ static int addEvent(struct apiState *state, int fd, int mask) {
     return 0;
 }
 
-static void delEvent(struct apiState *state, int fd, int mask) {
+static void delEvent(struct evcenter *center, int fd, int mask) {
+    struct apiState *state = center->apidata;
     struct kevent ke;
 
     if (mask & EVENT_READABLE) {

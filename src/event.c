@@ -1,14 +1,14 @@
 #include "wheatserver.h"
 
-//#ifdef HAVE_EPOLL
-//#include "event_epoll.c"
-//#else
-//#ifdef HAVE_KQUEUE
+#ifdef HAVE_EPOLL
+#include "event_epoll.c"
+#else
+#ifdef HAVE_KQUEUE
 #include "event_kqueue.c"
-//#else
-//#include "event_select.c"
-//#endif
-//#endif
+#else
+#include "event_select.c"
+#endif
+#endif
 
 struct evcenter *eventcenter_init(int nevent)
 {
@@ -70,7 +70,7 @@ int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void
     }
     struct event *event = &center->events[fd];
 
-    if (addEvent(center->apidata, fd, mask) == -1)
+    if (addEvent(center, fd, mask) == -1)
         return WHEAT_WRONG;
     event->mask |= mask;
     if (mask & EVENT_READABLE) event->readProc = proc;
@@ -86,7 +86,7 @@ void deleteEvent(struct evcenter *center, int fd, int mask)
 
     if (event->mask == EVENT_NONE) return;
     event->mask = event->mask & (~mask);
-    delEvent(center->apidata, fd, mask);
+    delEvent(center, fd, mask);
 }
 
 int processEvents(struct evcenter *center, int timeout_seconds)
