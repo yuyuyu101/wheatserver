@@ -317,7 +317,6 @@ static void commandParse(struct evcenter *center, int fd, void *client_data, int
 {
     struct masterClient *client = client_data;
     ssize_t nread = readBulkFrom(fd, &client->request_buf);
-    ssize_t ret = WHEAT_OK;
     if (nread == -1) {
         freeMasterClient(client);
         return ;
@@ -344,7 +343,7 @@ static void commandParse(struct evcenter *center, int fd, void *client_data, int
         if (!client->argv || count < 1)
             break;
         client->argc = count;
-        ret = processCommand(client);
+        processCommand(client);
         resetMasterClient(client);
         wstrFree(packet);
     }

@@ -6,7 +6,9 @@ SERVER_OBJECTS += $(OBJECTS)
 SERVER_OBJECTS += wheatserver.o
 WORKER_OBJECTS += $(OBJECTS)
 WORKER_OBJECTS += wheatworker.o
-LIBS += -L$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_lib()") -lpython
+PYTHON_VERSION = $(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_version()")
+PYTHON_LIBS = ./
+LIBS += -L$(PYTHON_LIBS) -lpython$(PYTHON_VERSION)
 CFLAGS = -O0 -Wall -g
 PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_inc()")
 

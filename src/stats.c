@@ -80,7 +80,6 @@ struct workerStat *initWorkerStat(int only_malloc)
 
 static ssize_t parseStat(struct masterClient *client, struct workerStat *stat, struct workerProcess **owner)
 {
-    ssize_t is_ok;
     pid_t pid;
     if (client->argc != WHEAT_STATCOMMAND_PACKET_FIELD)
         return WHEAT_WRONG;
@@ -95,10 +94,7 @@ static ssize_t parseStat(struct masterClient *client, struct workerStat *stat, s
     }
     freeListIterator(iter);
 
-    if (!worker) {
-        is_ok = 0;
-        return WHEAT_WRONG;
-    }
+    if (!worker) return WHEAT_WRONG;
     *owner = worker;
 
     stat->stat_total_connection = atoi(client->argv[2]);
