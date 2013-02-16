@@ -1,4 +1,3 @@
-#include "sig.h"
 #include "wheatserver.h"
 
 #define MASTER_SIGNAL_COUNT 10

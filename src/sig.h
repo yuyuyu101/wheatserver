@@ -1,8 +1,6 @@
 #ifndef _SIGNAL_H
 #define _SIGNAL_H
 
-#include <signal.h>
-
 void initMasterSignals();
 void initWorkerSignals();
 void signalProc(int signal);
