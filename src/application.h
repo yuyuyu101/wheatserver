@@ -1,5 +1,5 @@
-#ifndef _APPLICANT_H
-#define _APPLICANT_H
+#ifndef WHEATSERVER_APPLICANT_H
+#define WHEATSERVER_APPLICANT_H
 /* ========== wsgi callback ========== */
 #include <python2.7/Python.h>
 #include "wstr.h"

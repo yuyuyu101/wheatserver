@@ -1,5 +1,5 @@
-#ifndef _HOOK_H
-#define _HOOK_H
+#ifndef WHEATSERVER_HOOK_H
+#define WHEATSERVER_HOOK_H
 
 #include "list.h"
 

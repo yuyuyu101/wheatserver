@@ -1,5 +1,5 @@
-#ifndef _SIGNAL_H
-#define _SIGNAL_H
+#ifndef WHEATSEVER_SIGNAL_H
+#define WHEATSEVER_SIGNAL_H
 
 void initMasterSignals();
 void initWorkerSignals();

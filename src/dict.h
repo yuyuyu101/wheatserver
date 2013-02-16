@@ -1,5 +1,5 @@
-#ifndef _DICT_H
-#define _DICT_H
+#ifndef WHEATSERVER_DICT_H
+#define WHEATSERVER_DICT_H
 
 #define DICT_OK 0
 #define DICT_WRONG 1

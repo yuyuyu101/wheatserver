@@ -1,5 +1,5 @@
-#ifndef _LIST_H
-#define _LIST_H
+#ifndef WHEATSERVER_LIST_H
+#define WHEATSERVER_LIST_H
 
 /* `value` is pointer, generally, list not own it only store
  * the pointer value. But if dup and free exist, list own it. */

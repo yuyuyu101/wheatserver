@@ -1,5 +1,5 @@
-#ifndef __TEST_HELP_H
-#define __TEST_HELP_H
+#ifndef WHEATSERVER_TEST_HELP_H
+#define WHEATSERVER_TEST_HELP_H
 
 
 int __failed_tests = 0;

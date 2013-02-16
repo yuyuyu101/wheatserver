@@ -1,5 +1,5 @@
-#ifndef _STATS_H_
-#define _STATS_H_
+#ifndef WHEATSERVER_STATS_H_
+#define WHEATSERVER_STATS_H_
 
 #define WHEAT_STATCOMMAND_PACKET_FIELD       9
 #define WHEAT_STAT_SEND_FORMAT \

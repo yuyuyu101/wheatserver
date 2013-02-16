@@ -1,5 +1,5 @@
-#ifndef _PROTOCOL_H
-#define _PROTOCOL_H
+#ifndef WHEATSERVER_PROTOCOL_H
+#define WHEATSERVER_PROTOCOL_H
 
 #include "wstr.h"
 #include "http_parser.h"

@@ -1,5 +1,5 @@
-#ifndef _NET_H
-#define _NET_H
+#ifndef WHEATSERVER_NET_H
+#define WHEATSERVER_NET_H
 
 #define NET_OK 0
 #define NET_WRONG -1

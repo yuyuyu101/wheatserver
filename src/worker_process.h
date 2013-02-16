@@ -1,5 +1,5 @@
-#ifndef _WORKER_H
-#define _WORKER_H
+#ifndef WHEATSERVER_WORKER_PROCESS_H
+#define WHEATSERVER_WORKER_PROCESS_H
 
 #include <unistd.h>
 #include <setjmp.h>

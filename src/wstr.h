@@ -1,5 +1,5 @@
-#ifndef _WSTR_H
-#define _WSTR_H
+#ifndef WHEATSERVER_WSTR_H
+#define WHEATSERVER_WSTR_H
 
 #include <stddef.h>
 

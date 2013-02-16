@@ -1,5 +1,5 @@
-#ifndef _NETWORKING_H
-#define _NETWORKING_H
+#ifndef WHEATSERVER_NETWORKING_H
+#define WHEATSERVER_NETWORKING_H
 
 #include "wstr.h"
 

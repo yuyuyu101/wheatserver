@@ -1,5 +1,5 @@
-#ifndef _UTIL_H
-#define _UTIL_H
+#ifndef WHEATSERVER_UTIL_H
+#define WHEATSERVER_UTIL_H
 
 /* Hash Type Dict */
 struct dictType wstrDictType;

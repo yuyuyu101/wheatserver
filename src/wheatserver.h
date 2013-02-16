@@ -1,5 +1,5 @@
-#ifndef _WHEATSSERVER_H
-#define _WHEATSSERVER_H
+#ifndef WHEATSEVER_WHEATSSERVER_H
+#define WHEATSEVER_WHEATSSERVER_H
 
 #include <stdio.h>
 #include <stdlib.h>
