@@ -184,16 +184,16 @@ void logStat()
     wheatLog(WHEAT_LOG_RAW, "%s", buf);
     getWorkerStatFormat(Server.aggregate_workers_stat, buf, 1024);
     wheatLog(WHEAT_LOG_RAW, "%s", buf);
-    wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
-    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
-    while ((node = listNext(iter)) != NULL) {
-        worker = listNodeValue(node);
-        stat = worker->stat;
-        wheatLog(WHEAT_LOG_RAW, "\nStart Time: %s", ctime(&worker->start_time));
-        getWorkerStatFormat(stat, buf, 1024);
-        wheatLog(WHEAT_LOG_RAW, "%s", buf);
-    }
-    freeListIterator(iter);
+//    wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
+//    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
+//    while ((node = listNext(iter)) != NULL) {
+//        worker = listNodeValue(node);
+//        stat = worker->stat;
+//        wheatLog(WHEAT_LOG_RAW, "\nStart Time: %s", ctime(&worker->start_time));
+//        getWorkerStatFormat(stat, buf, 1024);
+//        wheatLog(WHEAT_LOG_RAW, "%s", buf);
+//    }
+//    freeListIterator(iter);
     wheatLog(WHEAT_LOG_RAW, "---------------------------------------\n");
 }
 
