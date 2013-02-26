@@ -37,6 +37,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
     if (Server.stat_fd != 0)
         close(Server.stat_fd);
+    setProctitle(worker_name);
     worker->pid = getpid();
     worker->ppid = getppid();
     worker->alive = 1;

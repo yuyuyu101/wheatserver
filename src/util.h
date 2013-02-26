@@ -19,6 +19,7 @@ void wheat_assert(const char *cond, const char *file, int line, int panic);
 
 int daemonize(int coredump);
 void createPidFile();
+void setProctitle(const char *title);
 
 void setTimer(int milliseconds);
 

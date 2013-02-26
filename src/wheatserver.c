@@ -515,6 +515,7 @@ int main(int argc, const char *argv[])
 
     initServer();
     if (Server.daemon) createPidFile();
+    setProctitle(argv[0]);
 
     run();
     return 0;

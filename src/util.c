@@ -260,6 +260,25 @@ void createPidFile()
     }
 }
 
+/* Check if we can use setproctitle().
+ * BSD systems have support for it, we provide an implementation for
+ * Linux and osx. */
+#if (defined __NetBSD__ || defined __FreeBSD__ || defined __OpenBSD__)
+#define USE_SETPROCTITLE
+#endif
+
+#if (defined __linux || defined __APPLE__)
+#define USE_SETPROCTITLE
+void setproctitle(const char *fmt, ...);
+#endif
+
+void setProctitle(const char *title)
+{
+    setproctitle("wheatserver: %s %s:%d", title,
+            Server.bind_addr ? Server.bind_addr : "*",
+            Server.port);
+}
+
 void setTimer(int milliseconds)
 {
     struct itimerval it;
