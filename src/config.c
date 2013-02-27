@@ -46,6 +46,9 @@ struct configuration configTable[] = {
     {"timeout-seconds",   2, unsignedIntValidator, {.val=WHEATSERVER_TIMEOUT},
         (void *)300,            INT_FORMAT},
 
+    {"prealloc-client",   2, unsignedIntValidator, {.val=WHEAT_PREALLOC_CLIENT},
+        (void *)WHEAT_PREALLOC_CLIENT_LIMIT, INT_FORMAT},
+
     // Http
     {"access-log",        2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},

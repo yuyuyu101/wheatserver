@@ -2,19 +2,21 @@
 
 struct workerProcess *WorkerProcess = NULL;
 
-struct worker workerTable[] = {
+static struct worker WorkerTable[] = {
     {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRecvData},
     {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRecvData}
 };
 
 /* ========== Worker Area ========== */
 
+static struct list *ClientPool = NULL;
+
 struct worker *spotWorker(char *worker_name)
 {
     int i;
-    for (i = 0; i < sizeof(workerTable)/sizeof(struct worker); i++) {
-        if (strcmp(workerTable[i].name, worker_name) == 0) {
-            return &workerTable[i];
+    for (i = 0; i < sizeof(WorkerTable)/sizeof(struct worker); i++) {
+        if (strcmp(WorkerTable[i].name, worker_name) == 0) {
+            return &WorkerTable[i];
         }
     }
     return NULL;
@@ -33,6 +35,20 @@ void workerProcessCron()
     WorkerProcess->worker->cron();
 }
 
+static struct list *createAndFillPool()
+{
+    struct list *l = createList();
+    struct configuration *conf = getConfiguration("prealloc-client");
+    int i = 0;
+    ASSERT(conf);
+    ASSERT(l);
+    for (; i < conf->target.val; ++i) {
+        struct client *c = malloc(sizeof(*c));
+        appendToListTail(l, c);
+    }
+    return l;
+}
+
 void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
     if (Server.stat_fd != 0)
@@ -47,6 +63,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     ASSERT(worker->worker);
     worker->stat = initWorkerStat(0);
     initWorkerSignals();
+    ClientPool = createAndFillPool();
     worker->worker->setup();
 }
 
@@ -57,9 +74,16 @@ void freeWorkerProcess(void *w)
     free(worker);
 }
 
-struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct app *app)
+struct client *createClient(int fd, char *ip, int port, struct protocol *p, struct app *app)
 {
-    struct client *c = malloc(sizeof(struct client));
+    struct client *c;
+    struct listNode *node;
+    if ((node = listFirst(ClientPool)) == NULL) {
+        c = malloc(sizeof(*c));
+    } else {
+        c = listNodeValue(node);
+        removeListNode(ClientPool, node);
+    }
     if (c == NULL)
         return NULL;
     c->clifd = fd;
@@ -85,5 +109,9 @@ void freeClient(struct client *c)
     wstrFree(c->res_buf);
     c->protocol->freeProtocolData(c->protocol_data);
     c->app->freeAppData(c->app_private_data);
-    free(c);
+    if (listLength(ClientPool) > 100) {
+        appendToListTail(ClientPool, c);
+    } else {
+        free(c);
+    }
 }

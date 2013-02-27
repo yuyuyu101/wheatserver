@@ -18,7 +18,7 @@ static void cleanRequest(struct client *c)
 
 static struct client *initRequest(int fd, char *ip, int port, struct protocol *p, struct app *app)
 {
-    struct client *c = initClient(fd, ip, port, p, app);
+    struct client *c = createClient(fd, ip, port, p, app);
     appendToListTail(Clients, c);
     return c;
 }

@@ -52,8 +52,6 @@ struct worker {
     int (*recvData)(struct client *);
 };
 
-extern struct worker workerTable[];
-
 struct app {
     char *name;
     int (*constructor)(struct client *);
@@ -82,7 +80,7 @@ struct client {
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);
 void workerProcessCron();
-struct client *initClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
+struct client *createClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
 void freeClient(struct client *);
 
 /* worker's flow:

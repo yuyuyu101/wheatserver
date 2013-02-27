@@ -40,6 +40,8 @@
 #define WHEATSERVER_TIMEOUT           30
 #define WHEAT_NOTFREE                 1
 #define WHEATSERVER_CRON              1
+#define WHEAT_PREALLOC_CLIENT         100
+#define WHEAT_PREALLOC_CLIENT_LIMIT   10000
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829

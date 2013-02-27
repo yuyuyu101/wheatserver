@@ -4,7 +4,7 @@ void dispatchRequest(int fd, char *ip, int port)
 {
     struct protocol *ptcol = spotProtocol(ip, port, fd);
     struct app *application = spotAppInterface();
-    struct client *c = initClient(fd, ip, port, ptcol, application);
+    struct client *c = createClient(fd, ip, port, ptcol, application);
     if (c == NULL)
         return ;
     struct workerStat *stat = WorkerProcess->stat;
