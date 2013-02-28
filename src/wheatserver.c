@@ -10,7 +10,7 @@ void initGlobalServerConfig()
     Server.stat_fd = 0;
     Server.master_center = NULL;
     Server.logfile = NULL;
-    Server.verbose = WHEAT_VERBOSE;
+    Server.verbose = WHEAT_NOTICE;
     Server.worker_number = 2;
     Server.worker_type = NULL;
     Server.graceful_timeout = WHEATSERVER_GRACEFUL_TIME;

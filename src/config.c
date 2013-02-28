@@ -31,7 +31,7 @@ struct configuration configTable[] = {
         NULL,                   STRING_FORMAT},
     {"logfile-level",     2, enumValidator,        {.enum_ptr=&Verbose[0]},
         &Verbose[0],            ENUM_FORMAT},
-    {"daemon",            2, boolValidator,        {.val=0},
+    {"daemon",            2, boolValidator,        {.val=WHEAT_NOTICE},
         NULL,                   BOOL_FORMAT},
     {"pidfile",           2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
