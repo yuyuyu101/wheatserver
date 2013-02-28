@@ -390,9 +390,9 @@ struct list *createResHeader(struct client *client)
     snprintf(buf, 255, "Date: %s\r\n", httpDate());
     if (appendToListTail(headers, wstrNew(buf)) == NULL)
         goto cleanup;
-    snprintf(buf, 255, "Connection: %s\r\n", connection);
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
+    //snprintf(buf, 255, "Connection: %s\r\n", connection);
+    //if (appendToListTail(headers, wstrNew(buf)) == NULL)
+    //    goto cleanup;
 
     if (is_chunked(wsgi_data->response_length, http_data->protocol_version, wsgi_data->status)) {
         snprintf(buf, 255, "Transfer-Encoding: chunked\r\n");
