@@ -105,7 +105,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             return ;
         }
     }
-    cleanRequest(c);
+    if (!wstrlen(c->res_buf))
+        cleanRequest(c);
     gettimeofday(&end, NULL);
     time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
     stat->stat_work_time += time_use;

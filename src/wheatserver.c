@@ -31,7 +31,7 @@ void initGlobalServerConfig()
     Server.master_clients = createList();
     Server.pid = getpid();
     Server.relaunch_pid = 0;
-    memcpy(Server.master_name, "master", 7);
+    memcpy(Server.master_name, "wheatserver", 12);
     Server.configfile_path[0] = '\0';
     initMasterSignals();
     nonBlockCloseOnExecPipe(&Server.pipe_readfd, &Server.pipe_writefd);
