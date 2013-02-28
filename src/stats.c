@@ -175,9 +175,6 @@ static size_t getWorkerStatFormat(struct workerStat *stat, char *buf, size_t len
 
 void logStat()
 {
-    struct listNode *node = NULL;
-    struct workerProcess *worker = NULL;
-    struct workerStat *stat;
     char buf[1024];
     wheatLog(WHEAT_LOG_RAW, "---- Master Statistic Information -----\n");
     getMasterStatFormat(Server.master_stat, buf, 1024);

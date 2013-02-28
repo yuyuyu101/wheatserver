@@ -163,6 +163,7 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
         return ;
     }
 
+    c->last_io = Server.cron_time;
     if (bufpos >= totallen) {
         deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
     }
@@ -187,6 +188,7 @@ int asyncSendData(struct client *c)
     c->last_io = Server.cron_time;
 
     if (bufpos < totallen) {
+        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d %d", bufpos, totallen);
         createEvent(WorkerCenter, c->clifd, EVENT_WRITABLE, sendReplyToClient, c);
     }
     return nwritten;

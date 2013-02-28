@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#include <sys/wait.h>
 #include <stddef.h>
 #include <errno.h>
 #include <signal.h>
