@@ -74,7 +74,7 @@ void freeWorkerProcess(void *w)
     free(worker);
 }
 
-struct client *createClient(int fd, char *ip, int port, struct protocol *p, struct app *app)
+struct client *createClient(int fd, char *ip, int port, struct protocol *p)
 {
     struct client *c;
     struct listNode *node;
@@ -90,13 +90,13 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p, stru
     c->ip = wstrNew(ip);
     c->port = port;
     c->protocol_data = p->initProtocolData();
-    c->app_private_data = app->initAppData();
     c->protocol = p;
-    c->app = app;
+    c->app_private_data = NULL;
+    c->app = NULL;
     c->buf = wstrEmpty();
     c->res_buf = wstrEmpty();
     c->should_close = 0;
-    ASSERT(c->protocol_data && c->app_private_data);
+    ASSERT(c->protocol_data);
     return c;
 }
 
@@ -107,7 +107,6 @@ void freeClient(struct client *c)
     wstrFree(c->buf);
     wstrFree(c->res_buf);
     c->protocol->freeProtocolData(c->protocol_data);
-    c->app->freeAppData(c->app_private_data);
     if (listLength(ClientPool) > 100) {
         appendToListTail(ClientPool, c);
     } else {
@@ -115,12 +114,9 @@ void freeClient(struct client *c)
     }
 }
 
-void readyClient(struct client *c)
+void resetProtocol(struct client *c)
 {
     if (c->protocol_data)
         c->protocol->freeProtocolData(c->protocol_data);
-    if (c->app_private_data)
-        c->app->freeAppData(c->app_private_data);
     c->protocol_data = c->protocol->initProtocolData();
-    c->app_private_data = c->app->initAppData();
 }

@@ -3,8 +3,7 @@
 void dispatchRequest(int fd, char *ip, int port)
 {
     struct protocol *ptcol = spotProtocol(ip, port, fd);
-    struct app *application = spotAppInterface();
-    struct client *c = createClient(fd, ip, port, ptcol, application);
+    struct client *c = createClient(fd, ip, port, ptcol);
     if (c == NULL)
         return ;
     struct workerStat *stat = WorkerProcess->stat;
@@ -24,7 +23,7 @@ parser:
             goto cleanup;
         }
     } while(ret == 1);
-    ret = application->constructor(c);
+    ret = c->protocol->spotAppAndCall(c);
     if (ret != WHEAT_OK) {
         stat->stat_failed_request++;
         wheatLog(WHEAT_NOTICE, "app construct faileds");
@@ -33,7 +32,7 @@ parser:
         goto cleanup;
     stat->stat_total_request++;
     if (wstrlen(c->buf)) {
-        readyClient(c);
+        resetProtocol(c);
         goto parser;
     }
 

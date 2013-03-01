@@ -1,11 +1,16 @@
 #ifndef WHEATSERVER_APPLICANT_H
 #define WHEATSERVER_APPLICANT_H
 
-struct app *spotAppInterface();
+int wsgiCall(struct client *, void *);
 void initWsgi();
 void deallocWsgi();
-int wsgiConstructor(struct client *);
 void *initWsgiAppData();
 void freeWsgiAppData(void *app_data);
+
+int staticFileCall(struct client *, void *);
+void initStaticFile();
+void deallocStaticFile();
+void *initStaticFileData();
+void freeStaticFileData(void *app_data);
 
 #endif

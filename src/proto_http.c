@@ -1,8 +1,10 @@
 #include "wheatserver.h"
 #include "proto_http.h"
 
+extern struct app appTable[];
 static FILE *access_log_fp = NULL;
 static struct http_parser_settings settings;
+static char *static_file_path = NULL;
 
 const char *URL_SCHEME[] = {
     "http",
@@ -50,40 +52,41 @@ static const char *connectionField(struct client *c)
     return connection;
 }
 
-struct list *createResHeader(struct client *client)
+static int insertResHeader(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
     const char *connection = connectionField(client);
     char buf[256];
-    struct list *headers = createList();
-    listSetFree(headers, (void (*)(void *))wstrFree);
+    struct list *headers = http_data->res_headers;
 
-    snprintf(buf, 255, "%s %d %s\r\n", http_data->protocol_version,
-            http_data->res_status, http_data->res_status_msg);
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
     snprintf(buf, 255, "Server: %s\r\n", Server.master_name);
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
+    if (insertToListHead(headers, wstrNew(buf)) == NULL)
         goto cleanup;
     snprintf(buf, 255, "Date: %s\r\n", httpDate());
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
+    if (insertToListHead(headers, wstrNew(buf)) == NULL)
         goto cleanup;
     if (connection) {
         snprintf(buf, 255, "Connection: %s\r\n", connection);
-        if (appendToListTail(headers, wstrNew(buf)) == NULL)
+        if (insertToListHead(headers, wstrNew(buf)) == NULL)
             goto cleanup;
     }
 
     if (is_chunked(http_data->response_length, http_data->protocol_version, http_data->res_status)) {
         snprintf(buf, 255, "Transfer-Encoding: chunked\r\n");
-        if (appendToListTail(headers, wstrNew(buf)) == NULL)
+        if (insertToListHead(headers, wstrNew(buf)) == NULL)
             goto cleanup;
     }
-    return headers;
+
+    snprintf(buf, 255, "%s %d %s\r\n", http_data->protocol_version,
+            http_data->res_status, http_data->res_status_msg);
+    if (insertToListHead(headers, wstrNew(buf)) == NULL)
+        goto cleanup;
+
+    return 0;
 
 cleanup:
     freeList(headers);
-    return NULL;
+    return -1;
 }
 
 
@@ -278,7 +281,10 @@ void *initHttpData()
     data->res_status = 0;
     data->res_status_msg = wstrEmpty();
     data->response_length = 0;
-    data->res_headers = dictCreate(&wstrDictType);
+    data->res_headers = createList();
+    listSetFree(data->res_headers, (void (*)(void *))wstrFree);
+    data->headers_sent = 0;
+    data->send = 0;
     if (data && data->parser)
         return data;
     return NULL;
@@ -294,9 +300,7 @@ void freeHttpData(void *data)
     wstrFree(d->query_string);
     free(d->parser);
     wstrFree(d->res_status_msg);
-    if (d->res_headers) {
-        dictRelease(d->res_headers);
-    }
+    freeList(d->res_headers);
     free(d);
 }
 
@@ -323,6 +327,9 @@ void initHttp()
             halt(1);
         }
     }
+    conf = getConfiguration("static-file");
+    static_file_path = conf->target.ptr;
+
     memset(&settings, 0 , sizeof(http_parser_settings));
     settings.on_header_field = on_header_field;
     settings.on_header_value = on_header_value;
@@ -391,4 +398,124 @@ void logAccess(struct client *client)
         wheatLog(WHEAT_WARNING, "log access failed: %s", strerror(errno));
     else
         fflush(access_log_fp);
+}
+
+int httpSpot(struct client *c)
+{
+    struct httpData *http_data = c->protocol_data;
+    int i = 0, ret;
+    wstr path = wstrNew(static_file_path);
+    if (static_file_path) {
+        path = wstrCat(path, http_data->path);
+        if (isRegFile(path)) {
+            i = 1;
+        }
+    }
+    if (!appTable[i].is_init) {
+        appTable[i].initApp();
+        appTable[i].is_init = 1;
+    }
+    c->app = &appTable[i];
+    c->app_private_data = appTable[i].initAppData();
+    ret = appTable[i].appCall(c, path);
+    c->app->freeAppData(c->app_private_data);
+    wstrfree(path);
+    return ret;
+}
+
+/* Send a chunk of data */
+int httpSendBody(struct client *client, const char *data, size_t len)
+{
+    struct httpData *http_data = client->protocol_data;
+    size_t tosend = len, restsend;
+    ssize_t ret;
+    if (!len)
+        return 0;
+    if (http_data->response_length != 0) {
+        if (http_data->send > http_data->response_length)
+            return 0;
+        restsend = http_data->response_length - http_data->send;
+        tosend = restsend > tosend ? tosend: restsend;
+    }
+    if (is_chunked(http_data->response_length, http_data->protocol_version, http_data->res_status) && tosend == 0)
+        return 0;
+
+    http_data->send += tosend;
+    client->res_buf = wstrCatLen(client->res_buf, data, tosend);
+    if (client->res_buf == NULL)
+        return -1;
+    ret = WorkerProcess->worker->sendData(client);
+    if (ret == WHEAT_WRONG)
+        return -1;
+    return 0;
+}
+
+int httpSendHeaders(struct client *client)
+{
+    struct httpData *http_data = client->protocol_data;
+    int len;
+    int ok = 1;
+
+    if (http_data->headers_sent)
+        return 0;
+    insertResHeader(client);
+    struct listIterator *liter = listGetIterator(http_data->res_headers, START_HEAD);
+    struct listNode *node = NULL;
+    while ((node = listNext(liter)) != NULL) {
+        client->res_buf = wstrCat(client->res_buf, listNodeValue(node));
+        if (client->res_buf == NULL) {
+            ok = 0;
+            goto cleanup;
+        }
+    }
+    client->res_buf = wstrCatLen(client->res_buf, "\r\n", 2);
+    if (client->res_buf == NULL) {
+        ok = 0;
+        goto cleanup;
+    }
+
+    if ((len = WorkerProcess->worker->sendData(client)) < 0) {
+        ok = 0;
+        goto cleanup;
+    }
+    http_data->headers_sent = 1;
+
+cleanup:
+    freeListIterator(liter);
+    return ok? 0 : -1;
+}
+
+void sendResponse404(struct client *c)
+{
+    struct httpData *http_data = c->protocol_data;
+    static const char *body =
+        "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
+        "<html><head>\n"
+        "<title>404 Not Found --- From Wheatserver</title>\n"
+        "</head><body>\n"
+        "<h1>Not Found</h1>\n"
+        "<p>The requested URL was not found on this server</p>\n"
+        "</body></html>\n";
+    http_data->res_status = 404;
+
+    if (!httpSendHeaders(c))
+        httpSendBody(c, body, strlen(body));
+}
+
+void sendResponse500(struct client *c)
+{
+    struct httpData *http_data = c->protocol_data;
+    static const char *body =
+        "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
+        "<html><head>\n"
+        "<title>500 Internal Error --- From Wheatserver</title>\n"
+        "</head><body>\n"
+        "<h1>Internal Error</h1>\n"
+        "<p>The server encountered an unexpected condition which\n"
+        "prevented it from fulfilling the request.</p>\n"
+        "</body></html>\n";
+    http_data->res_status = 500;
+
+    if (!httpSendHeaders(c))
+        httpSendBody(c, body, strlen(body));
 }

@@ -42,6 +42,7 @@
 #define WHEATSERVER_CRON              1
 #define WHEAT_PREALLOC_CLIENT         100
 #define WHEAT_PREALLOC_CLIENT_LIMIT   10000
+#define WHEAT_MAX_BUFFER_SIZE         64*1024
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829

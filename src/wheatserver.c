@@ -18,7 +18,7 @@ void initGlobalServerConfig()
     Server.cron_time = time(NULL);
     Server.daemon = 0;
     Server.pidfile = NULL;
-    Server.max_buffer_size = 0;
+    Server.max_buffer_size = WHEAT_MAX_BUFFER_SIZE;
     Server.worker_number = WHEATSERVER_TIMEOUT;
     Server.stat_addr = NULL;
     Server.stat_port = WHEAT_STATS_PORT;

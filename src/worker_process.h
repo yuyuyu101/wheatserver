@@ -30,14 +30,13 @@ struct protocol {
      * if return 0 imply parser success,
      * return -1 imply parser error,
      * return 1 imply request incomplete */
+    int (*spotAppAndCall)(struct client *);
     int (*parser)(struct client *);
     void *(*initProtocolData)();
     void (*freeProtocolData)(void *ptcol_data);
     void (*initProtocol)();
     void (*deallocProtocol)();
 };
-
-extern struct protocol protocolTable[];
 
 struct worker {
     char *name;
@@ -53,12 +52,14 @@ struct worker {
 };
 
 struct app {
+    char *proto_belong;
     char *name;
-    int (*constructor)(struct client *);
+    int (*appCall)(struct client *, void *arg);
     void (*initApp)();
     void (*deallocApp)();
     void *(*initAppData)();
     void (*freeAppData)(void *app_data);
+    int is_init;
 };
 
 struct client {
@@ -81,9 +82,9 @@ struct client {
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);
 void workerProcessCron();
-struct client *createClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
+struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
-void readyClient(struct client *c);
+void resetProtocol(struct client *c);
 
 /* worker's flow:
  * 0. setup filling workerProcess members

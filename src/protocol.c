@@ -2,7 +2,8 @@
 #include "protocol.h"
 
 struct protocol protocolTable[] = {
-    {"Http", parseHttp, initHttpData, freeHttpData, initHttp, deallocHttp}
+    {"Http", httpSpot, parseHttp, initHttpData, freeHttpData,
+        initHttp, deallocHttp}
 };
 
 struct protocol *spotProtocol(char *ip, int port, int fd)

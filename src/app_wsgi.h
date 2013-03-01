@@ -14,7 +14,6 @@ struct response {
     PyObject *result;
     PyObject *env;
     PyObject *input;
-    int headers_sent;
 };
 
 typedef struct {
@@ -33,7 +32,6 @@ typedef struct {
 struct wsgiData {
     PyObject *environ;
     void *response;
-    int send;
     char *err;
 };
 
@@ -47,7 +45,7 @@ PyTypeObject InputStream_Type;
 PyMODINIT_FUNC
 init_wsgisup(void);
 PyObject *create_environ(struct client *client);
-void sendResponse500(struct response *response);
+void sendResponse500(struct client *c);
 void responseClear(struct response *);
 void wsgiCallClose(PyObject *result);
 int wsgiSendResponse(struct response *self, PyObject *result);

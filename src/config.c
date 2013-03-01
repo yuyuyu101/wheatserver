@@ -35,7 +35,7 @@ struct configuration configTable[] = {
         NULL,                   BOOL_FORMAT},
     {"pidfile",           2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
-    {"max-buffer-size",   2, unsignedIntValidator, {.val=0},
+    {"max-buffer-size",   2, unsignedIntValidator, {.val=WHEAT_MAX_BUFFER_SIZE},
         NULL,                   INT_FORMAT},
     {"stat-bind-addr",    2, stringValidator,      {.ptr=WHEAT_STATS_ADDR},
         (void *)WHEAT_NOTFREE, STRING_FORMAT},
@@ -60,6 +60,12 @@ struct configuration configTable[] = {
         NULL,                   STRING_FORMAT},
     {"app-name",          2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
+
+    // Static File Configuration
+    {"static-file",       2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_BUFFER_SIZE},
+        NULL,                   INT_FORMAT}
 };
 
 void fillServerConfig()

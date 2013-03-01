@@ -20,6 +20,8 @@ void wheat_assert(const char *cond, const char *file, int line, int panic);
 int daemonize(int coredump);
 void createPidFile();
 void setProctitle(const char *title);
+int getFileSize(int fd, off_t *len);
+int isRegFile(const char *path);
 
 void setTimer(int milliseconds);
 
@@ -29,4 +31,17 @@ void setTimer(int milliseconds);
     }                                              \
 } while (0)
 
+#endif
+
+
+/* Check if we can use setproctitle().
+ * BSD systems have support for it, we provide an implementation for
+ * Linux and osx. */
+#if (defined __NetBSD__ || defined __FreeBSD__ || defined __OpenBSD__)
+#define USE_SETPROCTITLE
+#endif
+
+#if (defined __linux || defined __APPLE__)
+#define USE_SETPROCTITLE
+void setproctitle(const char *fmt, ...);
 #endif

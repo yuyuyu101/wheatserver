@@ -16,9 +16,10 @@ static void cleanRequest(struct client *c)
     freeClient(c);
 }
 
-static struct client *initRequest(int fd, char *ip, int port, struct protocol *p, struct app *app)
+static struct client *initRequest(int fd, char *ip, int port, struct protocol *p)
 {
-    struct client *c = createClient(fd, ip, port, p, app);
+    struct client *c = createClient(fd, ip, port, p);
+    c->last_io = Server.cron_time;
     appendToListTail(Clients, c);
     return c;
 }
@@ -42,9 +43,9 @@ static void clientsCron()
         c = listNodeValue(node);
         ASSERT(c);
 
-        time_t idletime = Server.cron_time - c->last_io;
+        int idletime = Server.cron_time - c->last_io;
         if (idletime > Server.worker_timeout) {
-            wheatLog(WHEAT_VERBOSE,"Closing idle client");
+            wheatLog(WHEAT_VERBOSE,"Closing idle client %d %d", Server.cron_time, c->last_io);
             WorkerProcess->stat->stat_timeout_request++;
             cleanRequest(c);
             continue;
@@ -95,6 +96,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     }
     if (wstrlen(c->buf) > stat->stat_buffer_size)
         stat->stat_buffer_size = wstrlen(c->buf);
+    wheatLog(WHEAT_NOTICE, "%s", c->buf);
     while (ret == 0 && wstrlen(c->buf)) {
         ret = c->protocol->parser(c);
         if (ret == -1) {
@@ -102,8 +104,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             break;
         } else if (ret == 0) {
             stat->stat_total_request++;
-            ret = c->app->constructor(c);
-            readyClient(c);
+            ret = c->protocol->spotAppAndCall(c);
+            resetProtocol(c);
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
                 wheatLog(WHEAT_NOTICE, "app construct faileds");
@@ -132,8 +134,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     wheatCloseOnExec(Server.neterr, cfd);
 
     struct protocol *ptcol = spotProtocol(ip, cport, cfd);
-    struct app *application = spotAppInterface();
-    struct client *c = initRequest(cfd, ip, cport, ptcol, application);
+    struct client *c = initRequest(cfd, ip, cport, ptcol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
     WorkerProcess->stat->stat_total_connection++;
 }
@@ -190,7 +191,6 @@ int asyncSendData(struct client *c)
         bufpos += nwritten;
     }
     if (nwritten == -1) {
-        cleanRequest(c);
         return -1;
     }
 

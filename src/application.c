@@ -2,15 +2,8 @@
 #include "application.h"
 
 struct app appTable[] = {
-    {"wsgi", wsgiConstructor, initWsgi, deallocWsgi, initWsgiAppData, freeWsgiAppData}
+    {"http", "wsgi", wsgiCall, initWsgi, deallocWsgi,
+        initWsgiAppData, freeWsgiAppData, 0},
+    {"http", "static-file", staticFileCall, initStaticFile, deallocStaticFile,
+        initStaticFileData, freeStaticFileData, 0}
 };
-
-struct app *spotAppInterface()
-{
-    static int is_init = 0;
-    if (!is_init) {
-        appTable[0].initApp();
-        is_init = 1;
-    }
-    return &appTable[0];
-}
