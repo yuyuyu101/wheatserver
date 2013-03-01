@@ -122,5 +122,5 @@ int syncRecvData(struct client *c)
     ssize_t n = readBulkFrom(c->clifd, &c->buf);
     if (n > 0)
         c->last_io = Server.cron_time;
-    return n;
+    return (int)n;
 }

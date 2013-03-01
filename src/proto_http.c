@@ -234,7 +234,7 @@ int parseHttp(struct client *client)
         else
             return WHEAT_WRONG;
     }
-    wstrRange(client->buf, nparsed, 0);
+    wstrRange(client->buf, (int)nparsed, 0);
     if (http_data->complete) {
         http_data->method = http_method_str(http_data->parser->method);
         if (http_data->parser->http_minor == 0)

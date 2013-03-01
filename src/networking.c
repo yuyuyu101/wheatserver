@@ -61,7 +61,7 @@ int writeBulkTo(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     }
-    wstrRange(buf, nwritten, 0);
+    wstrRange(buf, (int)nwritten, 0);
     return (int)nwritten;
 }
 

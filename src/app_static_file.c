@@ -29,7 +29,7 @@ int staticFileCall(struct client *c, void *arg)
     ret = sendfile(file_d, c->clifd, 0, &send, NULL, 0);
     while (send < len) {
         int nread;
-        ret = lseek(file_d, send, SEEK_SET);
+        lseek(file_d, send, SEEK_SET);
         if (ret == -1) {
             goto failed;
         }

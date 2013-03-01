@@ -33,8 +33,8 @@ static void tryCleanRequest(struct client *c)
 
 static void clientsCron()
 {
-    int numclients = listLength(Clients);
-    int iteration = numclients < 50 ? numclients : numclients / 10;
+    unsigned long numclients = listLength(Clients);
+    unsigned long iteration = numclients < 50 ? numclients : numclients / 10;
     struct client *c = NULL;
     struct listNode *node = NULL;
 
@@ -43,7 +43,7 @@ static void clientsCron()
         c = listNodeValue(node);
         ASSERT(c);
 
-        int idletime = Server.cron_time - c->last_io;
+        long idletime = Server.cron_time - c->last_io;
         if (idletime > Server.worker_timeout) {
             wheatLog(WHEAT_VERBOSE,"Closing idle client %d %d", Server.cron_time, c->last_io);
             WorkerProcess->stat->stat_timeout_request++;
