@@ -182,7 +182,7 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
 int asyncSendData(struct client *c)
 {
     size_t bufpos = 0, totallen = wstrlen(c->res_buf);
-    ssize_t nwritten;
+    ssize_t nwritten = 0;
 
     while (bufpos < totallen) {
         nwritten = writeBulkTo(c->clifd, &c->res_buf);

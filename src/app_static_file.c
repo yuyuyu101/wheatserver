@@ -27,6 +27,10 @@ int staticFileCall(struct client *c, void *arg)
     if (ret == -1)
         goto failed;
     ret = sendfile(file_d, c->clifd, 0, &send, NULL, 0);
+    if (ret < 0) {
+        wheatLog(WHEAT_VERBOSE, "send file wrong %s", strerror(errno));
+        goto failed;
+    }
     while (send < len) {
         int nread;
         lseek(file_d, send, SEEK_SET);
