@@ -28,7 +28,6 @@
 #include "util.h"
 #include "worker_process.h"
 #include "networking.h"
-#include "protocol.h"
 
 /* Server Configuration */
 #define WHEAT_SERVERPORT              10828

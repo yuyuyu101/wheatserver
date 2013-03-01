@@ -70,6 +70,7 @@ struct client {
     struct app *app;
     void *app_private_data;
     time_t last_io;
+    int should_close;
 
     wstr buf;
     wstr res_buf;
@@ -82,6 +83,7 @@ void freeWorkerProcess(void *worker);
 void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p, struct app *app);
 void freeClient(struct client *);
+void readyClient(struct client *c);
 
 /* worker's flow:
  * 0. setup filling workerProcess members
@@ -98,6 +100,7 @@ void freeClient(struct client *);
  * 3. if alive == 0, worker must exit
  * 4. send worker status every refresh time
  * 5. guarantee closing client in Server.worker_timeout
+ * 6. support pipeline processing must reset client use readyClient()
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();

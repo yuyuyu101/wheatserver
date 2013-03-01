@@ -89,14 +89,13 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p, stru
     c->clifd = fd;
     c->ip = wstrNew(ip);
     c->port = port;
-
-    c->protocol = p;
     c->protocol_data = p->initProtocolData();
-    c->app = app;
     c->app_private_data = app->initAppData();
+    c->protocol = p;
+    c->app = app;
     c->buf = wstrEmpty();
     c->res_buf = wstrEmpty();
-    c->last_io = Server.cron_time;
+    c->should_close = 0;
     ASSERT(c->protocol_data && c->app_private_data);
     return c;
 }
@@ -114,4 +113,14 @@ void freeClient(struct client *c)
     } else {
         free(c);
     }
+}
+
+void readyClient(struct client *c)
+{
+    if (c->protocol_data)
+        c->protocol->freeProtocolData(c->protocol_data);
+    if (c->app_private_data)
+        c->app->freeAppData(c->app_private_data);
+    c->protocol_data = c->protocol->initProtocolData();
+    c->app_private_data = c->app->initAppData();
 }

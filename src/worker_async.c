@@ -23,6 +23,13 @@ static struct client *initRequest(int fd, char *ip, int port, struct protocol *p
     return c;
 }
 
+static void tryCleanRequest(struct client *c)
+{
+    if (wstrlen(c->res_buf) || !c->should_close)
+        return;
+    cleanRequest(c);
+}
+
 static void clientsCron()
 {
     int numclients = listLength(Clients);
@@ -96,6 +103,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         } else if (ret == 0) {
             stat->stat_total_request++;
             ret = c->app->constructor(c);
+            readyClient(c);
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
                 wheatLog(WHEAT_NOTICE, "app construct faileds");
@@ -105,8 +113,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             return ;
         }
     }
-    if (!wstrlen(c->res_buf))
-        cleanRequest(c);
+    tryCleanRequest(c);
     gettimeofday(&end, NULL);
     time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
     stat->stat_work_time += time_use;
@@ -167,6 +174,7 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
     c->last_io = Server.cron_time;
     if (bufpos >= totallen) {
         deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
+        tryCleanRequest(c);
     }
 }
 

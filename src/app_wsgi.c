@@ -1,5 +1,6 @@
 #include "wheatserver.h"
 #include "app_wsgi.h"
+#include "proto_http.h"
 
 static PyObject *pApp = NULL;
 
@@ -70,8 +71,7 @@ out:
 
     PyGILState_Release(gstate);
 
-    struct wsgiData *wsgi_data = client->app_private_data;
-    logAccess(client, wsgi_data->response_length, wsgi_data->status);
+    logAccess(client);
     if (is_ok)
         return WHEAT_OK;
     return WHEAT_WRONG;
@@ -84,11 +84,7 @@ void *initWsgiAppData()
         return NULL;
     data->environ = NULL;
     data->response = NULL;
-    data->status = 0;
-    data->status_msg = wstrEmpty();
     data->send = 0;
-    data->response_length = 0;
-    data->headers = dictCreate(&wstrDictType);
     data->err = NULL;
 
     return data;
@@ -97,7 +93,6 @@ void *initWsgiAppData()
 void freeWsgiAppData(void *data)
 {
     struct wsgiData *d = data;
-    dictRelease(d->headers);
     free(d);
 }
 
@@ -263,7 +258,7 @@ PyObject *create_environ(struct client *client)
     }
 
     /* HTTP headers */
-    struct dictIterator *iter = dictGetIterator(http_data->headers);
+    struct dictIterator *iter = dictGetIterator(http_data->req_headers);
     struct dictEntry *entry;
     wstr host = NULL, port, server = NULL, script_name = NULL;
     while ((entry = dictNext(iter)) != NULL) {
@@ -365,60 +360,20 @@ cleanup:
     return environ;
 }
 
-struct list *createResHeader(struct client *client)
-{
-    struct wsgiData *wsgi_data = client->app_private_data;
-    struct httpData *http_data = client->protocol_data;
-    char *connection = NULL;
-    char buf[256];
-    struct list *headers = createList();
-    if (http_data->upgrade)
-        connection = "upgrade";
-    else if (http_data->keep_live)
-        connection = "close";
-    else
-        connection = "keep-live";
-
-    listSetFree(headers, (void (*)(void *))wstrFree);
-
-    snprintf(buf, 255, "%s %d %s\r\n", http_data->protocol_version, wsgi_data->status, wsgi_data->status_msg);
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
-    snprintf(buf, 255, "Server: %s\r\n", Server.master_name);
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
-    snprintf(buf, 255, "Date: %s\r\n", httpDate());
-    if (appendToListTail(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
-    //snprintf(buf, 255, "Connection: %s\r\n", connection);
-    //if (appendToListTail(headers, wstrNew(buf)) == NULL)
-    //    goto cleanup;
-
-    if (is_chunked(wsgi_data->response_length, http_data->protocol_version, wsgi_data->status)) {
-        snprintf(buf, 255, "Transfer-Encoding: chunked\r\n");
-        if (appendToListTail(headers, wstrNew(buf)) == NULL)
-            goto cleanup;
-    }
-    return headers;
-
-cleanup:
-    freeList(headers);
-    return NULL;
-}
-
 
 static int wsgiSendHeaders(struct response *self)
 {
     struct client *client = self->client;
-    struct wsgiData *wsgi_data = client->app_private_data;
+    struct httpData *http_data = client->protocol_data;
+    struct response *response;
     int len;
     char buf[256];
 
     if (self->headers_sent)
         return 0;
     struct list *headers = createResHeader(client);
-    if (wsgi_data->headers) {
-        struct dictIterator *iter = dictGetIterator(wsgi_data->headers);
+    if (http_data->res_headers) {
+        struct dictIterator *iter = dictGetIterator(http_data->res_headers);
         struct dictEntry *entry = NULL;
         while ((entry = dictNext(iter)) != NULL) {
             snprintf(buf, 255, "%s: %s\r\n", (char *)dictGetKey(entry), (char *)dictGetVal(entry));
@@ -574,7 +529,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             PyErr_Restore(type, value, tb);
             return NULL;
         }
-    } else if (data->status != 0) {
+    } else if (http_data->res_status != 0) {
         data->err = "headers already set";
         return NULL;
     }
@@ -583,8 +538,8 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     if ((status_p = PyString_AsString(status)) == NULL)
         return NULL;
 
-    data->status = (int)strtol(status_p, NULL, 10);
-    data->status_msg = wstrNew(&status_p[4]);
+    http_data->res_status = (int)strtol(status_p, NULL, 10);
+    http_data->res_status_msg = wstrNew(&status_p[4]);
 
     PyObject *iterator = PyObject_GetIter(headers);
     PyObject *item;
@@ -603,12 +558,12 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             return NULL;
         }
         if (!strcasecmp(field, "content-length"))
-            data->response_length = atoi(field);
+            http_data->response_length = atoi(field);
         else if (!strcasecmp(field, "connection")){
             if (!strcasecmp(value, "upgrade"))
                 http_data->upgrade = 1;
         }
-        ret = dictReplace(data->headers, wstrNew(field), wstrNew(value), NULL);
+        ret = dictReplace(http_data->res_headers, wstrNew(field), wstrNew(value), NULL);
         Py_DECREF(item);
         if (ret == DICT_WRONG) {
             Py_DECREF(iterator);
@@ -635,13 +590,13 @@ static int wsgiSendBody(struct response *response, const char *data, size_t len)
     ssize_t ret;
     if (!len)
         return 0;
-    if (wsgi_data->response_length != 0) {
-        if (wsgi_data->send > wsgi_data->response_length)
+    if (http_data->response_length != 0) {
+        if (wsgi_data->send > http_data->response_length)
             return 0;
-        restsend = wsgi_data->response_length - wsgi_data->send;
+        restsend = http_data->response_length - wsgi_data->send;
         tosend = restsend > tosend ? tosend: restsend;
     }
-    if (is_chunked(wsgi_data->response_length, http_data->protocol_version, wsgi_data->status) && tosend == 0)
+    if (is_chunked(http_data->response_length, http_data->protocol_version, http_data->res_status) && tosend == 0)
         return 0;
 
     wsgi_data->send += tosend;
@@ -658,10 +613,11 @@ static int wsgiSendBody(struct response *response, const char *data, size_t len)
 static PyObject *responseWrite(struct response *self, PyObject *args)
 {
     struct wsgiData *wsgi_data = self->client->app_private_data;
+    struct httpData *http_data = self->client->protocol_data;
     const char *data;
     int dataLen;
 
-    if (wsgi_data->status == 0 && wsgi_data->headers == NULL) {
+    if (http_data->res_status == 0 && http_data->res_headers == NULL) {
         wsgi_data->err = "write() before start_response()";
         return NULL;
     }
@@ -768,7 +724,7 @@ init_wsgisup(void)
 
 void sendResponse500(struct response *response)
 {
-    struct wsgiData *wsgi_data = response->client->app_private_data;
+    struct httpData *http_data = response->client->protocol_data;
     static const char *body =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
         "<html><head>\n"
@@ -778,7 +734,7 @@ void sendResponse500(struct response *response)
         "<p>The server encountered an unexpected condition which\n"
         "prevented it from fulfilling the request.</p>\n"
         "</body></html>\n";
-    wsgi_data->status = 500;
+    http_data->res_status = 500;
 
     if (!wsgiSendHeaders(response))
         wsgiSendBody(response, body, strlen(body));

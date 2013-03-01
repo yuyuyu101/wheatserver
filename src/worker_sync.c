@@ -33,10 +33,7 @@ parser:
         goto cleanup;
     stat->stat_total_request++;
     if (wstrlen(c->buf)) {
-        c->protocol->freeProtocolData(c->protocol_data);
-        c->app->freeAppData(c->app_private_data);
-        c->app_private_data = application->initAppData();
-        c->protocol_data = c->protocol->initProtocolData();
+        readyClient(c);
         goto parser;
     }
 

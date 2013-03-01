@@ -1,6 +1,6 @@
 CC=cc
 CXX=c++
-SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c worker_process.c worker_sync.c worker_async.c util.c protocol.c application.c http_parser.c app_wsgi.c wsgiinput.c wsgiwrapper.c stats.c event.c setproctitle.c
+SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c worker_process.c worker_sync.c worker_async.c util.c protocol.c application.c http_parser.c app_wsgi.c wsgiinput.c wsgiwrapper.c stats.c event.c setproctitle.c proto_http.c
 OBJECTS = $(SOURCES:.c=.o)
 SERVER_OBJECTS += $(OBJECTS)
 SERVER_OBJECTS += wheatserver.o

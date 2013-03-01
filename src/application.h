@@ -1,6 +1,7 @@
 #ifndef WHEATSERVER_APPLICANT_H
 #define WHEATSERVER_APPLICANT_H
 
+struct app *spotAppInterface();
 void initWsgi();
 void deallocWsgi();
 int wsgiConstructor(struct client *);

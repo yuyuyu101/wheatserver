@@ -37,8 +37,8 @@ def test_config_command(port):
 
 def test_stat_accuracy(port):
     global sync_server, async_server
-    conn = httplib.HTTPConnection("127.0.0.1", port-1);
     for i in range(100):
+        conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=10);
         conn.request("GET", "/")
         r1 = conn.getresponse()
         assert r1.status == 200
@@ -61,7 +61,6 @@ def setup_module(module):
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
     time.sleep(0.5)
-
 
 def teardown_module(module):
     global sync_server, async_server
