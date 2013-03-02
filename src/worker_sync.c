@@ -26,10 +26,9 @@ parser:
     ret = c->protocol->spotAppAndCall(c);
     if (ret != WHEAT_OK) {
         stat->stat_failed_request++;
-        wheatLog(WHEAT_NOTICE, "app construct faileds");
-    }
-    if (ret == WHEAT_WRONG)
+        wheatLog(WHEAT_NOTICE, "app failed");
         goto cleanup;
+    }
     stat->stat_total_request++;
     if (wstrlen(c->buf)) {
         resetProtocol(c);
@@ -106,11 +105,15 @@ void setupSync()
 
 int syncSendData(struct client *c)
 {
+    if (!isClientValid(c))
+        return -1;
     ssize_t bufpos = 0, total = wstrlen(c->res_buf), nwritten;
     while(bufpos < total) {
         nwritten = writeBulkTo(c->clifd, &c->res_buf);
-        if (nwritten == -1)
+        if (nwritten == -1) {
+            setClientUnvalid(c);
             break;
+        }
         bufpos += nwritten;
     }
     c->last_io = Server.cron_time;
@@ -119,8 +122,12 @@ int syncSendData(struct client *c)
 
 int syncRecvData(struct client *c)
 {
+    if (!isClientValid(c))
+        return -1;
     ssize_t n = readBulkFrom(c->clifd, &c->buf);
     if (n > 0)
         c->last_io = Server.cron_time;
+    else
+        setClientUnvalid(c);
     return (int)n;
 }

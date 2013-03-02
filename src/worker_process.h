@@ -54,6 +54,8 @@ struct worker {
 struct app {
     char *proto_belong;
     char *name;
+    /* Return WHEAT_OK means all is ok and return WEHAT_WRONG means something
+     * wrong inside and worker will clean this connection */
     int (*appCall)(struct client *, void *arg);
     void (*initApp)();
     void (*deallocApp)();
@@ -72,8 +74,8 @@ struct client {
     void *app_private_data;
     time_t last_io;
     int should_close;
-    int valid;
-
+    int valid;       // Intern: used to indicate client fd is unused and
+                     // need closing, only used by worker IO methods.
     wstr buf;
     wstr res_buf;
 };

@@ -26,7 +26,7 @@ static struct client *initRequest(int fd, char *ip, int port, struct protocol *p
 
 static void tryCleanRequest(struct client *c)
 {
-    if (wstrlen(c->res_buf) || !c->should_close)
+    if (isClientValid(c) && (wstrlen(c->res_buf) || !c->should_close))
         return;
     cleanRequest(c);
 }
@@ -109,7 +109,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
                 c->should_close = 1;
-                wheatLog(WHEAT_NOTICE, "app construct faileds");
+                wheatLog(WHEAT_NOTICE, "app failed");
                 break;
             }
         } else if (ret == 1) {
@@ -182,6 +182,8 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
 
 int asyncSendData(struct client *c)
 {
+    if (!isClientValid(c))
+        return -1;
     size_t bufpos = 0, totallen = wstrlen(c->res_buf);
     ssize_t nwritten = 0;
 
@@ -192,6 +194,7 @@ int asyncSendData(struct client *c)
         bufpos += nwritten;
     }
     if (nwritten == -1) {
+        setClientUnvalid(c);
         return -1;
     }
 
@@ -206,8 +209,12 @@ int asyncSendData(struct client *c)
 
 int asyncRecvData(struct client *c)
 {
+    if (!isClientValid(c))
+        return -1;
     ssize_t n = readBulkFrom(c->clifd, &c->buf);
     if (n > 0)
         c->last_io = Server.cron_time;
+    else
+        setClientUnvalid(c);
     return n;
 }
