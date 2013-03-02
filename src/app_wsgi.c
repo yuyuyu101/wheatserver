@@ -3,6 +3,7 @@
 #include "proto_http.h"
 
 static PyObject *pApp = NULL;
+static PyObject *WsgiStderr = NULL;
 
 int wsgiCall(struct client *client, void *arg)
 {
@@ -16,7 +17,7 @@ int wsgiCall(struct client *client, void *arg)
     if (res == NULL)
         goto out;
 
-    env = create_environ(client);
+    env = createEnviron(client);
     if (env == NULL)
         goto out;
 
@@ -112,6 +113,8 @@ void initWsgi()
     conf = getConfiguration("app-module-name");
     app_t = conf->target.ptr;
 
+    if (!app_t)
+        goto err;
     PyObject *pModule, *pName = PyString_FromString(app_t);
     if (pName == NULL)
         goto err;
@@ -123,12 +126,25 @@ void initWsgi()
 
     conf = getConfiguration("app-name");
     app_t = conf->target.ptr;
+    if (!app_t)
+        goto err;
     pApp = PyObject_GetAttrString(pModule, app_t);
     Py_DECREF(pModule);
     if (pApp == NULL || !PyCallable_Check(pApp)) {
         Py_XDECREF(pApp);
         goto err;
     }
+
+    pName = PyString_FromString("sys");
+    if (pName == NULL)
+        goto err;
+    pModule = PyImport_Import(pName);
+    if (pModule == NULL)
+        goto err;
+
+    WsgiStderr = PyObject_GetAttrString(pModule, "stderr");
+    Py_DECREF(pName);
+    Py_DECREF(pModule);
 
     return ;
 err:
@@ -140,6 +156,7 @@ err:
 void deallocWsgi()
 {
     Py_DECREF(pApp);
+    Py_DECREF(WsgiStderr);
     Py_Finalize();
 }
 
@@ -198,22 +215,9 @@ const char *wsgiUnquote(const char *s)
 
 PyObject *default_environ(PyObject *env, struct httpData *http_data)
 {
-    PyObject *pName, *pModule, *wsgiStderr, *val;
-    pName = PyString_FromString("sys");
-    if (pName == NULL)
+    PyObject *val;
+    if (PyDict_SetItemString(env, "wsgi.errors", WsgiStderr) != 0)
         return NULL;
-    pModule = PyImport_Import(pName);
-    if (pModule == NULL)
-        return NULL;
-
-    wsgiStderr = PyObject_GetAttrString(pModule, "stderr");
-    Py_DECREF(pName);
-    Py_DECREF(pModule);
-    if (wsgiStderr == NULL)
-        return NULL;
-    if (PyDict_SetItemString(env, "wsgi.errors", wsgiStderr) != 0)
-        return NULL;
-    Py_DECREF(wsgiStderr);
     if ((val = Py_BuildValue("(ii)", 1, 0)) == NULL)
         return NULL;
     if (PyDict_SetItemString(env, "wsgi.version", val) != 0)
@@ -241,7 +245,7 @@ PyObject *default_environ(PyObject *env, struct httpData *http_data)
     return env;
 }
 
-PyObject *create_environ(struct client *client)
+PyObject *createEnviron(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
     const char *req_uri = NULL;
@@ -261,7 +265,7 @@ PyObject *create_environ(struct client *client)
     /* HTTP headers */
     struct dictIterator *iter = dictGetIterator(http_data->req_headers);
     struct dictEntry *entry;
-    wstr host = NULL, port, server = NULL, script_name = NULL;
+    wstr host = NULL, port = NULL, server = NULL;
     while ((entry = dictNext(iter)) != NULL) {
         int k, j;
         wstr header = dictGetKey(entry);
@@ -304,8 +308,7 @@ PyObject *create_environ(struct client *client)
                 goto cleanup;
             server = wstrDup(value);
         } else if (!strcmp(buf, "HTTP_SCRIPT_NAME")) {
-            script_name = wstrNew(value);
-            if (envPutString(environ, "SCRIPT_NAME", script_name))
+            if (envPutString(environ, "SCRIPT_NAME", value))
                 goto cleanup;
         } else {
             if (envPutString(environ, buf, value))
@@ -314,7 +317,7 @@ PyObject *create_environ(struct client *client)
     }
     dictReleaseIterator(iter);
     if (!host) {
-        host = client->ip;
+        host = wstrNew(client->ip);
         snprintf(buf, 255, "%d", client->port);
         port = wstrNew(buf);
     }
@@ -347,10 +350,8 @@ PyObject *create_environ(struct client *client)
 cleanup:
     if (req_uri)
         free((void *)req_uri);
-    if (!host) {
-        wstrFree(host);
-        wstrFree(port);
-    }
+    wstrFree(host);
+    wstrFree(port);
 
     if (server)
         wstrFree(server);

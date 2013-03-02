@@ -22,7 +22,7 @@ void freeList(struct list *l)
     current = l->first;
     while (len--) {
         next = current->next;
-        if (isListOwnValue(l))
+        if (l->free)
             l->free(current->value);
         free(current);
         current = next;
@@ -35,7 +35,7 @@ struct list *appendToListTail(struct list *l, void *ptr)
     struct listNode *newNode = malloc(sizeof(struct listNode));
     if (newNode == NULL)
         return NULL;
-    if (isListOwnValue(l))
+    if (l->dup)
         newNode->value = l->dup(ptr);
     else
         newNode->value = ptr;
@@ -56,7 +56,7 @@ struct list *insertToListHead(struct list *l, void *ptr)
     struct listNode *newNode = malloc(sizeof(struct listNode));
     if (newNode == NULL)
         return NULL;
-    if (isListOwnValue(l))
+    if (l->dup)
         newNode->value = l->dup(ptr);
     else
         newNode->value = ptr;

@@ -73,6 +73,7 @@ static int insertResHeader(struct client *client)
     const char *connection = connectionField(client);
     char buf[256];
     struct list *headers = http_data->res_headers;
+    ASSERT(http_data->res_status && http_data->res_status_msg);
 
     snprintf(buf, 255, "Server: %s\r\n", Server.master_name);
     if (insertToListHead(headers, wstrNew(buf)) == NULL)
@@ -100,7 +101,6 @@ static int insertResHeader(struct client *client)
     return 0;
 
 cleanup:
-    freeList(headers);
     return -1;
 }
 
@@ -294,7 +294,7 @@ void *initHttpData()
     data->protocol_version = NULL;
     data->body = wstrEmpty();
     data->res_status = 0;
-    data->res_status_msg = wstrEmpty();
+    data->res_status_msg = NULL;
     data->response_length = 0;
     data->res_headers = createList();
     listSetFree(data->res_headers, (void (*)(void *))wstrFree);
@@ -315,6 +315,7 @@ void freeHttpData(void *data)
     wstrFree(d->query_string);
     free(d->parser);
     wstrFree(d->res_status_msg);
+    wstrFree(d->path);
     freeList(d->res_headers);
     free(d);
 }
@@ -343,7 +344,6 @@ static FILE *openAccessLog()
 void initHttp()
 {
     struct configuration *conf1, *conf2;
-    int separator;
 
     memset(&StaticPathHandler, 0 , sizeof(struct staticHandler));
     conf1 = getConfiguration("static-file-root");
@@ -474,7 +474,8 @@ int httpSendHeaders(struct client *client)
     struct listIterator *liter = listGetIterator(http_data->res_headers, START_HEAD);
     struct listNode *node = NULL;
     while ((node = listNext(liter)) != NULL) {
-        client->res_buf = wstrCat(client->res_buf, listNodeValue(node));
+        wstr header = listNodeValue(node);
+        client->res_buf = wstrCatLen(client->res_buf, header, wstrlen(header));
         if (client->res_buf == NULL) {
             ok = 0;
             goto cleanup;
@@ -500,7 +501,7 @@ cleanup:
 void sendResponse404(struct client *c)
 {
     struct httpData *http_data = c->protocol_data;
-    static const char *body =
+    static const char body[] =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
         "<html><head>\n"
         "<title>404 Not Found --- From Wheatserver</title>\n"
@@ -508,8 +509,7 @@ void sendResponse404(struct client *c)
         "<h1>Not Found</h1>\n"
         "<p>The requested URL was not found on this server</p>\n"
         "</body></html>\n";
-    http_data->res_status = 404;
-    http_data->res_status_msg = wstrNew("Not Found");
+    fillResInfo(http_data, sizeof(body), 404, "NotFound");
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
@@ -518,7 +518,7 @@ void sendResponse404(struct client *c)
 void sendResponse500(struct client *c)
 {
     struct httpData *http_data = c->protocol_data;
-    static const char *body =
+    static const char body[] =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
         "<html><head>\n"
         "<title>500 Internal Error --- From Wheatserver</title>\n"
@@ -527,8 +527,7 @@ void sendResponse500(struct client *c)
         "<p>The server encountered an unexpected condition which\n"
         "prevented it from fulfilling the request.</p>\n"
         "</body></html>\n";
-    http_data->res_status = 500;
-    http_data->res_status_msg = wstrNew("Internal Error");
+    fillResInfo(http_data, sizeof(body), 500, "Internal Error");
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
@@ -538,7 +537,7 @@ int httpSpot(struct client *c)
 {
     struct httpData *http_data = c->protocol_data;
     int i = 0, ret;
-    wstr path = wstrEmpty();
+    wstr path = NULL;
     if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
         path = wstrNew(StaticPathHandler.root);
         path = wstrCat(path, http_data->path);
@@ -554,7 +553,7 @@ int httpSpot(struct client *c)
     c->app_private_data = c->app->initAppData(c);
     ret = appTable[i].appCall(c, path);
     c->app->freeAppData(c->app_private_data);
-    wstrfree(path);
+    wstrFree(path);
     if (http_data->response_length == 0)
         c->should_close = 1;
     return ret;
