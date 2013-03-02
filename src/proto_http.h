@@ -24,7 +24,7 @@ struct httpData {
     int res_status;
     wstr res_status_msg;
     int response_length;
-    
+
     struct list *res_headers;
     int headers_sent;
     int send;
@@ -37,6 +37,7 @@ int httpSendBody(struct client *client, const char *data, size_t len);
 int httpSendHeaders(struct client *client);
 void sendResponse500(struct client *c);
 void sendResponse404(struct client *c);
+void fillResInfo(struct httpData *, int, int status, const char *);
 
 void logAccess(struct client *client);
 

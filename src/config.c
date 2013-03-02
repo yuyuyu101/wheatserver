@@ -67,7 +67,7 @@ struct configuration configTable[] = {
         NULL,                   STRING_FORMAT},
     {"static-file-dir",   2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
-    {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_BUFFER_SIZE},
+    {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_FILE_LIMIT},
         NULL,                   INT_FORMAT},
     {"allowed-extension", 2, stringValidator,      {.ptr=WHEAT_ASTERISK},
         (void *)WHEAT_NOTFREE,  STRING_FORMAT},

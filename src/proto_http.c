@@ -40,7 +40,7 @@ int is_chunked(int response_length, const char *version, int status)
         return 0;
     else if (status != 200)
         return 0;
-    return 1;
+    return 0;
 }
 
 static const char *connectionField(struct client *c)
@@ -57,6 +57,14 @@ static const char *connectionField(struct client *c)
         c->should_close = 1;
     }
     return connection;
+}
+
+void fillResInfo(struct httpData *data, int response_length, int status,
+        const char *msg)
+{
+    data->response_length = response_length;
+    data->res_status = status;
+    data->res_status_msg = wstrNew(msg);
 }
 
 static int insertResHeader(struct client *client)
@@ -328,7 +336,7 @@ static FILE *openAccessLog()
             wheatLog(WHEAT_NOTICE, "open access log failed");
         }
     }
-        
+
     return fp;
 }
 
@@ -428,30 +436,6 @@ void logAccess(struct client *client)
         fflush(AccessFp);
 }
 
-int httpSpot(struct client *c)
-{
-    struct httpData *http_data = c->protocol_data;
-    int i = 0, ret;
-    wstr path = wstrEmpty();
-    if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
-        path = wstrNew(StaticPathHandler.root);
-        path = wstrCat(path, http_data->path);
-        if (isRegFile(path) != WHEAT_WRONG) {
-            i = 1;
-        }
-    }
-    if (!appTable[i].is_init) {
-        appTable[i].initApp();
-        appTable[i].is_init = 1;
-    }
-    c->app = &appTable[i];
-    c->app_private_data = appTable[i].initAppData(c);
-    ret = appTable[i].appCall(c, path);
-    c->app->freeAppData(c->app_private_data);
-    wstrfree(path);
-    return ret;
-}
-
 /* Send a chunk of data */
 int httpSendBody(struct client *client, const char *data, size_t len)
 {
@@ -549,4 +533,30 @@ void sendResponse500(struct client *c)
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
+}
+
+int httpSpot(struct client *c)
+{
+    struct httpData *http_data = c->protocol_data;
+    int i = 0, ret;
+    wstr path = wstrEmpty();
+    if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
+        path = wstrNew(StaticPathHandler.root);
+        path = wstrCat(path, http_data->path);
+        if (isRegFile(path) != WHEAT_WRONG) {
+            i = 1;
+        }
+    }
+    if (!appTable[i].is_init) {
+        appTable[i].initApp();
+        appTable[i].is_init = 1;
+    }
+    c->app = &appTable[i];
+    c->app_private_data = appTable[i].initAppData(c);
+    ret = appTable[i].appCall(c, path);
+    c->app->freeAppData(c->app_private_data);
+    wstrfree(path);
+    if (http_data->response_length == 0)
+        c->should_close = 1;
+    return ret;
 }

@@ -51,7 +51,8 @@
 #define WHEAT_DEFAULT_WORKER   "SyncWorker"
 #define WHEAT_ASTERISK         "*"
 #define WHEAT_PREALLOC_CLIENT  100
-#define WHEAT_MAX_BUFFER_SIZE  64*1024
+#define WHEAT_MAX_BUFFER_SIZE  640*1024
+#define WHEAT_MAX_FILE_LIMIT   2*1024*1024
 
 /* Command Format */
 #define WHEAT_START_SPLIT     "\r\r"

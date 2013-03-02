@@ -36,6 +36,12 @@ static int connectWithMaster(struct workerStat *stat)
 void sendStatPacket()
 {
     struct workerStat *stat = WorkerProcess->stat;
+    if (stat->master_stat_fd <= 0) {
+        int ret;
+        ret = connectWithMaster(WorkerProcess->stat);
+        if (ret == WHEAT_WRONG)
+            return ;
+    }
     char buf[WHEAT_STAT_PACKET_MAX];
     snprintf(buf, WHEAT_STAT_PACKET_MAX, WHEAT_STAT_SEND_FORMAT,
             WorkerProcess->pid,
@@ -47,7 +53,7 @@ void sendStatPacket()
     ssize_t nwrite = writeBulkTo(stat->master_stat_fd, &send);
     if (nwrite == -1) {
         wheatLog(WHEAT_DEBUG, "Master close connection");
-        connectWithMaster(WorkerProcess->stat);
+        stat->master_stat_fd = -1;
     } else if (wstrlen(send) != 0) {
         wheatLog(WHEAT_DEBUG,
                 "send statistic info failed, total %d sended %d",

@@ -206,13 +206,15 @@ int staticFileCall(struct client *c, void *arg)
         goto failed404;
     }
     ret = getFileSize(file_d, &len);
-    if (ret == WHEAT_WRONG || len > MaxFileSize) {
+    if (ret == WHEAT_WRONG) {
+        goto failed404;
+    }
+    if (len > MaxFileSize) {
+        wheatLog(WHEAT_NOTICE, "file exceed max limit %d", len);
         goto failed404;
     }
 
-    http_data->response_length = len;
-    http_data->res_status = 200;
-    http_data->res_status_msg = wstrNew("OK");
+    fillResInfo(http_data, len, 200, "OK");
     ret = fillResHeaders(c);
     if (ret == -1)
         goto failed404;
@@ -230,6 +232,9 @@ int staticFileCall(struct client *c, void *arg)
             goto failed;
         }
         send += nread;
+        ret = WorkerProcess->worker->sendData(c);
+        if (ret == -1)
+            goto failed;
     }
     if (wstrlen(c->res_buf))
         ret = WorkerProcess->worker->sendData(c);

@@ -464,6 +464,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     struct wsgiData *data = self->client->app_private_data;
     struct httpData *http_data = self->client->protocol_data;
     const char *status_p;
+    int response_length = 0;
 
     if (!PyArg_ParseTuple(args, "SO!|O:start_response", &status,
                 &PyList_Type, &headers,
@@ -488,13 +489,6 @@ static PyObject * startResponse(struct response *self, PyObject *args)
         return NULL;
     }
 
-    /* TODO validation of status and headers */
-    if ((status_p = PyString_AsString(status)) == NULL)
-        return NULL;
-
-    http_data->res_status = (int)strtol(status_p, NULL, 10);
-    http_data->res_status_msg = wstrNew(&status_p[4]);
-
     PyObject *iterator = PyObject_GetIter(headers);
     PyObject *item;
 
@@ -513,7 +507,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             return NULL;
         }
         if (!strcasecmp(field, "content-length"))
-            http_data->response_length = atoi(value);
+            response_length = atoi(value);
         else if (!strcasecmp(field, "connection")){
             if (!strcasecmp(value, "upgrade"))
                 http_data->upgrade = 1;
@@ -532,6 +526,13 @@ static PyObject * startResponse(struct response *self, PyObject *args)
         PyErr_Print();
         return NULL;
     }
+
+    /* TODO validation of status and headers */
+    if ((status_p = PyString_AsString(status)) == NULL)
+        return NULL;
+
+    fillResInfo(http_data, response_length,
+            (int)strtol(status_p, NULL, 10), &status_p[4]);
 
     return PyObject_GetAttrString((PyObject *)self, "write");
 }
