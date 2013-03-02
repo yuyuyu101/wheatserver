@@ -22,6 +22,7 @@ void createPidFile();
 void setProctitle(const char *title);
 int getFileSize(int fd, off_t *len);
 int isRegFile(const char *path);
+int fromSameParentDir(wstr left, wstr right);
 
 void setTimer(int milliseconds);
 

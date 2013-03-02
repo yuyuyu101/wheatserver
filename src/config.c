@@ -55,7 +55,7 @@ struct configuration configTable[] = {
         NULL,                   STRING_FORMAT},
 
     // WSGI Configuration
-    {"app-module-path",   2, stringValidator,      {.ptr=NULL},
+    {"app-project-path",  2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
     {"app-module-name",   2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
@@ -63,7 +63,9 @@ struct configuration configTable[] = {
         NULL,                   STRING_FORMAT},
 
     // Static File Configuration
-    {"static-file",       2, stringValidator,      {.ptr=NULL},
+    {"static-file-root",  2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"static-file-dir",   2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
     {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_BUFFER_SIZE},
         NULL,                   INT_FORMAT},
@@ -124,24 +126,39 @@ void applyConfig(wstr config)
 {
     int count, args;
     wstr *lines = wstrNewSplit(config, "\n", 1, &count);
-    char *err;
+    char *err = NULL;
     struct configuration *conf;
 
-    int i;
-    if (lines == NULL)
+    int i = 0;
+    if (lines == NULL) {
+        err = "Memory alloc failed";
         goto loaderr;
+    }
     for (i = 0; i < count; i++) {
         wstr line = wstrStrip(lines[i], "\t\n\r ");
-        if (line[0] == '#' || line[0] == '\0')
+        if (line[0] == '#' || line[0] == '\0' || line[0] == ' ')
             continue;
 
         wstr *argvs = wstrNewSplit(line, " ", 1, &args);
-        if (argvs == NULL)
+        if (argvs == NULL) {
+            err = "Memory alloc failed";
             goto loaderr;
+        }
 
         if ((conf = getConfiguration(argvs[0])) == NULL) {
             err = "Unknown configuration name";
             goto loaderr;
+        }
+
+        if (args != conf->args && args == 2) {
+            int j;
+            for (j = 2; j < args; ++j) {
+                argvs[1] = wstrCatLen(argvs[1], argvs[j], wstrlen(argvs[j]));
+                if (!argvs[1]) {
+                    err = "Unknown configuration name";
+                    goto loaderr;
+                }
+            }
         }
         if (args != conf->args && args != WHEAT_ARGS_NO_LIMIT) {
             err = "Incorrect args";

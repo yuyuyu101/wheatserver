@@ -298,5 +298,15 @@ int isRegFile(const char *path)
     int ret = lstat(path, &stat);
     if (ret == -1)
         return WHEAT_WRONG;
-    return S_ISREG(stat.st_mode);
+    return S_ISREG(stat.st_mode) == 0 ? WHEAT_WRONG : WHEAT_OK;
+}
+
+int fromSameParentDir(wstr left, wstr right)
+{
+    int i = 0;
+    int len;
+    len = wstrlen(left) > wstrlen(right) ? wstrlen(right) : wstrlen(left);
+    if (left[0] != right[0])
+        ++i;
+    return memcmp(left+i, right+i, len-i) == 0;
 }

@@ -20,7 +20,7 @@ def test_timeout():
 def setup_module(module):
     global async_server
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
-                               "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"),
+                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--timeout-seconds 3", "--stat-refresh-time 1")
     time.sleep(0.5)
 

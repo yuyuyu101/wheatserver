@@ -2,7 +2,6 @@ from wheatserver_test import WheatServer, server_socket, construct_command, PROJ
 import os
 import signal
 import time
-import httplib
 
 async_server = None
 
@@ -16,7 +15,7 @@ def test_reload():
 def setup_module(module):
     global async_server
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
-                               "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
+                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"))
     time.sleep(0.5)
 
 

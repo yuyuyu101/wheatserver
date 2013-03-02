@@ -50,16 +50,24 @@ def test_stat_accuracy(port):
     s.send(construct_command("stat", "worker"))
     assert "Total Connection: 100" in s.recv(1000)
 
+def test_static_file(port):
+    global sync_server, async_server
+    for i in range(100):
+        conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=10);
+        conn.request("GET", "/example/static/example.jpg")
+        r1 = conn.getresponse()
+        assert r1.status == 200
+
 sync_server = async_server = None
 
 def setup_module(module):
     global sync_server, async_server
     sync_server = WheatServer("", "--port 10826", "--stat-port 10827",
                               "--worker-type %s" % "SyncWorker",
-                              "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
+                              "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"))
 
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
-                               "--app-module-path %s" % os.path.join(PROJECT_PATH, "src"))
+                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"))
     time.sleep(0.5)
 
 def teardown_module(module):

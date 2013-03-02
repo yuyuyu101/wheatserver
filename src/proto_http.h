@@ -24,6 +24,7 @@ struct httpData {
     int res_status;
     wstr res_status_msg;
     int response_length;
+    
     struct list *res_headers;
     int headers_sent;
     int send;

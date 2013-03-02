@@ -103,7 +103,7 @@ void initWsgi()
     struct configuration *conf;
     Py_Initialize();
 
-    conf = getConfiguration("app-module-path");
+    conf = getConfiguration("app-project-path");
     snprintf(buf, WHEATSERVER_PATH_LEN, "import sys, os\n"
             "sys.path.append(os.getcwd())\nsys.path.append('%s')", conf->target.ptr);
     PyRun_SimpleString(buf);
@@ -513,7 +513,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             return NULL;
         }
         if (!strcasecmp(field, "content-length"))
-            http_data->response_length = atoi(field);
+            http_data->response_length = atoi(value);
         else if (!strcasecmp(field, "connection")){
             if (!strcasecmp(value, "upgrade"))
                 http_data->upgrade = 1;

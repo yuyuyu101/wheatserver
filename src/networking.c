@@ -33,7 +33,7 @@ int readBulkFrom(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     } else if (nread == 0) {
-        wheatLog(WHEAT_VERBOSE, "Peer close file descriptor %d", fd);
+        wheatLog(WHEAT_DEBUG, "Peer close file descriptor %d", fd);
         return WHEAT_WRONG;
     }
     if (nread) {
@@ -53,7 +53,7 @@ int writeBulkTo(int fd, wstr *clientbuf)
         if (errno == EAGAIN) {
             nwritten = 0;
         } else if (errno == EPIPE) {
-            wheatLog(WHEAT_VERBOSE, "Receive RST, peer closed", strerror(errno));
+            wheatLog(WHEAT_DEBUG, "Receive RST, peer closed", strerror(errno));
             return WHEAT_WRONG;
         } else {
             wheatLog(WHEAT_NOTICE,

@@ -2,9 +2,16 @@
 #include "proto_http.h"
 
 extern struct app appTable[];
-static FILE *access_log_fp = NULL;
-static struct http_parser_settings settings;
-static char *static_file_path = NULL;
+static FILE *AccessFp = NULL;
+static struct http_parser_settings HttpPaserSettings;
+
+struct staticHandler {
+    wstr abs_path;
+    wstr root;
+    wstr static_dir;
+};
+
+static struct staticHandler StaticPathHandler;
 
 const char *URL_SCHEME[] = {
     "http",
@@ -31,7 +38,7 @@ int is_chunked(int response_length, const char *version, int status)
         return 0;
     else if (version == PROTOCOL_VERSION[0])
         return 0;
-    else if (status == 304 || status == 204)
+    else if (status != 200)
         return 0;
     return 1;
 }
@@ -224,7 +231,7 @@ int parseHttp(struct client *client)
     size_t recved = wstrlen(client->buf);
     struct httpData *http_data = client->protocol_data;
 
-    nparsed = http_parser_execute(http_data->parser, &settings, client->buf, recved);
+    nparsed = http_parser_execute(http_data->parser, &HttpPaserSettings, client->buf, recved);
 
     if (http_data->parser->upgrade) {
         /* handle new protocol */
@@ -304,45 +311,58 @@ void freeHttpData(void *data)
     free(d);
 }
 
-static void openAccessLog(char *access_log)
+static FILE *openAccessLog()
 {
+    struct configuration *conf;
+    FILE *fp;
+    char *access_log;
+    conf = getConfiguration("access-log");
+    access_log = conf->target.ptr;
     if (access_log == NULL)
-        access_log_fp = NULL;
+        fp = NULL;
     else if (!strcasecmp(access_log, "stdout"))
-        access_log_fp = stdout;
-    else
-        access_log_fp = fopen(access_log, "a");
+        fp = stdout;
+    else {
+        fp = fopen(access_log, "a");
+        if (!fp) {
+            wheatLog(WHEAT_NOTICE, "open access log failed");
+        }
+    }
+        
+    return fp;
 }
 
 void initHttp()
 {
-    struct configuration *conf;
-    char *access_log;
-    conf = getConfiguration("access-log");
-    access_log = conf->target.ptr;
-    if (access_log && access_log_fp == NULL) {
-        openAccessLog(access_log);
-        if (!access_log_fp) {
-            wheatLog(WHEAT_WARNING, "init Http failed");
-            halt(1);
-        }
-    }
-    conf = getConfiguration("static-file");
-    static_file_path = conf->target.ptr;
+    struct configuration *conf1, *conf2;
+    int separator;
 
-    memset(&settings, 0 , sizeof(http_parser_settings));
-    settings.on_header_field = on_header_field;
-    settings.on_header_value = on_header_value;
-    settings.on_headers_complete = on_header_complete;
-    settings.on_body = on_body;
-    settings.on_url = on_url;
+    memset(&StaticPathHandler, 0 , sizeof(struct staticHandler));
+    conf1 = getConfiguration("static-file-root");
+    conf2 = getConfiguration("static-file-dir");
+    if (conf1->target.ptr && conf2->target.ptr) {
+        StaticPathHandler.abs_path = wstrNew(conf1->target.ptr);
+        StaticPathHandler.root = wstrDup(StaticPathHandler.abs_path);
+        separator = wstrlen(StaticPathHandler.abs_path);
+        StaticPathHandler.static_dir = wstrNew(conf2->target.ptr);
+        StaticPathHandler.abs_path = wstrCat(StaticPathHandler.abs_path,
+                StaticPathHandler.static_dir);
+    }
+
+    memset(&HttpPaserSettings, 0 , sizeof(HttpPaserSettings));
+    HttpPaserSettings.on_header_field = on_header_field;
+    HttpPaserSettings.on_header_value = on_header_value;
+    HttpPaserSettings.on_headers_complete = on_header_complete;
+    HttpPaserSettings.on_body = on_body;
+    HttpPaserSettings.on_url = on_url;
 }
 
 void deallocHttp()
 {
-    if (access_log_fp)
-        fclose(access_log_fp);
-    static_file_path = NULL;
+    if (AccessFp)
+        fclose(AccessFp);
+    wstrFree(StaticPathHandler.abs_path);
+    memset(&StaticPathHandler, 0, sizeof(struct staticHandler));
 }
 
 static const char *apacheDateFormat()
@@ -356,7 +376,7 @@ static const char *apacheDateFormat()
 
 void logAccess(struct client *client)
 {
-    if (!access_log_fp)
+    if (!AccessFp)
         return ;
     struct httpData *http_data = client->protocol_data;
     const char *remote_addr, *hyphen, *user, *datetime, *request;
@@ -391,24 +411,32 @@ void logAccess(struct client *client)
         user_agent = "-";
     wstrFree(temp);
 
-    ret = fprintf(access_log_fp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
+    ret = fprintf(AccessFp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
             remote_addr, hyphen, user, datetime, request, status_str,
             resp_length, refer, user_agent);
     wheatLog(WHEAT_DEBUG, "fprintf %d", ret);
-    if (ret == -1)
-        wheatLog(WHEAT_WARNING, "log access failed: %s", strerror(errno));
+    if (ret == -1) {
+        wheatLog(WHEAT_NOTICE, "log access failed: %s", strerror(errno));
+        fclose(AccessFp);
+        AccessFp = openAccessLog();
+        if (!AccessFp) {
+            wheatLog(WHEAT_WARNING, "open access log failed");
+            halt(1);
+        }
+    }
     else
-        fflush(access_log_fp);
+        fflush(AccessFp);
 }
 
 int httpSpot(struct client *c)
 {
     struct httpData *http_data = c->protocol_data;
     int i = 0, ret;
-    wstr path = wstrNew(static_file_path);
-    if (static_file_path) {
+    wstr path = wstrEmpty();
+    if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
+        path = wstrNew(StaticPathHandler.root);
         path = wstrCat(path, http_data->path);
-        if (isRegFile(path)) {
+        if (isRegFile(path) != WHEAT_WRONG) {
             i = 1;
         }
     }
@@ -498,6 +526,7 @@ void sendResponse404(struct client *c)
         "<p>The requested URL was not found on this server</p>\n"
         "</body></html>\n";
     http_data->res_status = 404;
+    http_data->res_status_msg = wstrNew("Not Found");
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
@@ -516,6 +545,7 @@ void sendResponse500(struct client *c)
         "prevented it from fulfilling the request.</p>\n"
         "</body></html>\n";
     http_data->res_status = 500;
+    http_data->res_status_msg = wstrNew("Internal Error");
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));

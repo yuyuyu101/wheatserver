@@ -96,7 +96,6 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     }
     if (wstrlen(c->buf) > stat->stat_buffer_size)
         stat->stat_buffer_size = wstrlen(c->buf);
-    wheatLog(WHEAT_NOTICE, "%s", c->buf);
     while (ret == 0 && wstrlen(c->buf)) {
         ret = c->protocol->parser(c);
         if (ret == -1) {

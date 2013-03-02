@@ -66,7 +66,7 @@ wstr *wstrNewSplit(wstr s, const char *sep, int sep_len, int *count)
 {
     int slots_count = 5, s_len = wstrlen(s);
     wstr *slots;
-    slots = malloc(sizeof(wstr*)*slots_count);
+    slots = malloc(sizeof(wstr)*slots_count);
 
     wstr fixed = s;
     int fixed_i = 0, c = 0, i;
@@ -374,6 +374,26 @@ int main(void) {
         test_cond("wstrNewSplit() split 'port 10000'",
                 count == 2 && memcmp(lines[0], "port\0", 5) == 0
                 && memcmp(lines[1], "10000\0", 6) == 0);
+        wstrFreeSplit(lines, count);
+        wstrFree(x);
+
+        x = wstrNewLen("port  10000", 11);
+        lines = wstrNewSplit(x, " ", 1, &count);
+        test_cond("wstrNewSplit() split 'port  10000'",
+                count == 3 && memcmp(lines[0], "port\0", 5) == 0
+                && memcmp(lines[2], "10000\0", 6) == 0 &&
+                memcmp(lines[1], "", 1) == 0);
+        wstrFreeSplit(lines, count);
+        wstrFree(x);
+
+        x = wstrNewLen("port   10000", 12);
+        lines = wstrNewSplit(x, " ", 1, &count);
+        test_cond("wstrNewSplit() split 'port  10000'",
+                count == 4 && memcmp(lines[0], "port\0", 5) == 0
+                && memcmp(lines[3], "10000\0", 6) == 0);
+        wstrFreeSplit(lines, count);
+        wstrFree(x);
+
         {
             int oldfree;
 

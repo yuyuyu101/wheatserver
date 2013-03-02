@@ -1,0 +1,43 @@
+app_static_file.c:250:19:    MaxFileSize = conf->target.val;
+app_static_file.c:255:31:    wstr extensions = wstrNew(conf->target.ptr);
+app_wsgi.c:108:68:            "sys.path.append(os.getcwd())\nsys.path.append('%s')", conf->target.ptr);
+app_wsgi.c:113:13:    app_t = conf->target.ptr;
+app_wsgi.c:125:13:    app_t = conf->target.ptr;
+config.c:80:24:    Server.bind_addr = conf->target.ptr;
+config.c:82:19:    Server.port = conf->target.val;
+config.c:84:28:    Server.worker_number = conf->target.val;
+config.c:86:26:    Server.worker_type = conf->target.enum_ptr->name;
+config.c:88:22:    Server.logfile = conf->target.ptr;
+config.c:90:22:    Server.verbose = conf->target.enum_ptr->id;
+config.c:92:21:    Server.daemon = conf->target.val;
+config.c:94:22:    Server.pidfile = conf->target.ptr;
+config.c:96:30:    Server.max_buffer_size = conf->target.val;
+config.c:98:24:    Server.stat_addr = conf->target.ptr;
+config.c:100:24:    Server.stat_port = conf->target.val;
+config.c:102:35:    Server.stat_refresh_seconds = conf->target.val;
+config.c:104:29:    Server.worker_timeout = conf->target.val;
+config.c:153:21:        if (args != conf->args && args == 2) {
+config.c:163:21:        if (args != conf->args && args != WHEAT_ARGS_NO_LIMIT) {
+config.c:167:13:        if (conf->validator(conf, argvs[0], argvs[1]) != VALIDATE_OK) {
+config.c:242:9:    if (conf->format == STRING_FORMAT)
+config.c:243:44:        ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.ptr);
+config.c:244:14:    else if (conf->format == INT_FORMAT)
+config.c:245:44:        ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+config.c:246:14:    else if (conf->format == ENUM_FORMAT) {
+config.c:247:44:        ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.enum_ptr->name);
+config.c:248:16:    } else if (conf->format == BOOL_FORMAT) {
+config.c:249:44:        ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+proto_http.c:320:18:    access_log = conf->target.ptr;
+util.c:66:9:    if (conf->target.ptr && !conf->helper) {
+util.c:67:14:        free(conf->target.ptr);
+util.c:68:9:        conf->helper = NULL;
+util.c:70:5:    conf->target.ptr = strdup(val);
+util.c:80:9:    if (conf->helper)
+util.c:81:31:        max_limit = (intptr_t)conf->helper;
+util.c:90:5:    conf->target.val = atoi(val);
+util.c:97:12:    ASSERT(conf->helper);
+util.c:99:56:    struct enumIdName *sentinel = (struct enumIdName *)conf->helper;
+util.c:102:13:            conf->target.enum_ptr = sentinel;
+util.c:117:9:        conf->target.val = 1;
+util.c:119:9:        conf->target.val = 0;
+worker_process.c:45:16:    for (; i < conf->target.val; ++i) {

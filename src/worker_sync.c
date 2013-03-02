@@ -105,8 +105,11 @@ void setupSync()
 
 int syncSendData(struct client *c)
 {
-    if (!isClientValid(c))
+    if (!isClientValid(c)) {
+        wheatLog(WHEAT_DEBUG, "client is unvalid");
         return -1;
+    }
+        
     ssize_t bufpos = 0, total = wstrlen(c->res_buf), nwritten;
     while(bufpos < total) {
         nwritten = writeBulkTo(c->clifd, &c->res_buf);
@@ -122,10 +125,12 @@ int syncSendData(struct client *c)
 
 int syncRecvData(struct client *c)
 {
-    if (!isClientValid(c))
+    if (!isClientValid(c)) {
+        wheatLog(WHEAT_DEBUG, "client is unvalid");
         return -1;
+    }
     ssize_t n = readBulkFrom(c->clifd, &c->buf);
-    if (n > 0)
+    if (n >= 0)
         c->last_io = Server.cron_time;
     else
         setClientUnvalid(c);

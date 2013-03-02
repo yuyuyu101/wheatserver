@@ -201,7 +201,8 @@ int staticFileCall(struct client *c, void *arg)
     if (file_d == -1) {
         goto failed404;
     }
-    if (dictFetchValue(AllowExtensions, static_data->extension) == NULL) {
+    if (AllowExtensions &&
+            !dictFetchValue(AllowExtensions, static_data->extension)) {
         goto failed404;
     }
     ret = getFileSize(file_d, &len);
@@ -210,6 +211,8 @@ int staticFileCall(struct client *c, void *arg)
     }
 
     http_data->response_length = len;
+    http_data->res_status = 200;
+    http_data->res_status_msg = wstrNew("OK");
     ret = fillResHeaders(c);
     if (ret == -1)
         goto failed404;
@@ -248,23 +251,30 @@ void initStaticFile()
 {
     struct configuration *conf = getConfiguration("file-maxsize");
     MaxFileSize = conf->target.val;
-    AllowExtensions = dictCreate(&wstrDictType);
+
     conf = getConfiguration("allowed-extension");
+    wstr extensions = wstrNew(conf->target.ptr);
+    if (wstrIndex(extensions, '*') != -1) {
+        AllowExtensions = NULL;
+    } else {
+        AllowExtensions = dictCreate(&wstrDictType);
 
-    int args, i, ret;
-    wstr *argvs = wstrNewSplit(conf->target.ptr, ",", 1, &args);
-    if (!argvs) {
-        wheatLog(WHEAT_WARNING, "init Static File failed");
-        return ;
+        int args, i, ret;
+        wstr *argvs = wstrNewSplit(extensions, ",", 1, &args);
+        if (!argvs) {
+            wheatLog(WHEAT_WARNING, "init Static File failed");
+            return ;
+        }
+
+        for (i = 0; i < args; ++i) {
+            ret = dictAdd(AllowExtensions, wstrNew(argvs[i]), wstrNew("allowed"));
+            if (ret == DICT_WRONG)
+                break;
+        }
+
+        wstrFreeSplit(argvs, args);
     }
-
-    for (i = 0; i < args; ++i) {
-        ret = dictAdd(AllowExtensions, wstrNew(argvs[0]), wstrNew("allowed"));
-        if (ret == DICT_WRONG)
-            break;
-    }
-
-    wstrFreeSplit(argvs, args);
+    wstrFree(extensions);
 }
 
 void deallocStaticFile()
@@ -280,7 +290,7 @@ void *initStaticFileData(struct client *c)
     struct staticFileData *data = malloc(sizeof(*data));
     if (!data)
         return NULL;
-    memset(data, 0, sizeof(data));
+    memset(data, 0, sizeof(*data));
     if (http_data->path) {
         char *point = strrchr(http_data->path, '.');
         char *slash = strrchr(http_data->path, '/');
