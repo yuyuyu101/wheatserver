@@ -40,9 +40,8 @@
 #define WHEATSERVER_TIMEOUT           30
 #define WHEAT_NOTFREE                 1
 #define WHEATSERVER_CRON              1
-#define WHEAT_PREALLOC_CLIENT         100
 #define WHEAT_PREALLOC_CLIENT_LIMIT   10000
-#define WHEAT_MAX_BUFFER_SIZE         64*1024
+#define WHEAT_ARGS_NO_LIMIT    -1
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
@@ -50,6 +49,9 @@
 #define WHEAT_STAT_REFRESH     10
 #define WHEAT_STAT_PACKET_MAX  512
 #define WHEAT_DEFAULT_WORKER   "SyncWorker"
+#define WHEAT_ASTERISK         "*"
+#define WHEAT_PREALLOC_CLIENT  100
+#define WHEAT_MAX_BUFFER_SIZE  64*1024
 
 /* Command Format */
 #define WHEAT_START_SPLIT     "\r\r"
@@ -135,7 +137,7 @@ enum printFormat {
 
 struct configuration {
     char *name;
-    int args;
+    int args;               // -1 means no limit on args
     int (*validator)(struct configuration *conf,  const char *key, const char *value);
     union {
         int val;

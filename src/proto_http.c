@@ -342,6 +342,7 @@ void deallocHttp()
 {
     if (access_log_fp)
         fclose(access_log_fp);
+    static_file_path = NULL;
 }
 
 static const char *apacheDateFormat()

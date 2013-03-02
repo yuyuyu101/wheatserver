@@ -142,6 +142,7 @@ void deallocWsgi()
     Py_DECREF(pApp);
     Py_Finalize();
 }
+
 int envPutString(PyObject *dict, const void *key, const void *value)
 {
     PyObject *val;

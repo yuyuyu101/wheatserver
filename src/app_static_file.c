@@ -7,7 +7,8 @@
 #include "wheatserver.h"
 #include "proto_http.h"
 
-static unsigned int max_filesize = WHEAT_MAX_BUFFER_SIZE;
+static unsigned int MaxFileSize = WHEAT_MAX_BUFFER_SIZE;
+static struct dict *AllowExtensions = NULL;
 
 struct contenttype {
     const char *extension;
@@ -196,11 +197,15 @@ int staticFileCall(struct client *c, void *arg)
     int file_d = open(path, O_RDONLY), ret;
     off_t len, send = 0;
     struct httpData *http_data = c->protocol_data;
+    struct staticFileData *static_data = c->app_private_data;
     if (file_d == -1) {
         goto failed404;
     }
+    if (dictFetchValue(AllowExtensions, static_data->extension) == NULL) {
+        goto failed404;
+    }
     ret = getFileSize(file_d, &len);
-    if (ret == WHEAT_WRONG || len > max_filesize) {
+    if (ret == WHEAT_WRONG || len > MaxFileSize) {
         goto failed404;
     }
 
@@ -242,11 +247,31 @@ failed:
 void initStaticFile()
 {
     struct configuration *conf = getConfiguration("file-maxsize");
-    max_filesize = conf->target.val;
+    MaxFileSize = conf->target.val;
+    AllowExtensions = dictCreate(&wstrDictType);
+    conf = getConfiguration("allowed-extension");
+
+    int args, i, ret;
+    wstr *argvs = wstrNewSplit(conf->target.ptr, ",", 1, &args);
+    if (!argvs) {
+        wheatLog(WHEAT_WARNING, "init Static File failed");
+        return ;
+    }
+
+    for (i = 0; i < args; ++i) {
+        ret = dictAdd(AllowExtensions, wstrNew(argvs[0]), wstrNew("allowed"));
+        if (ret == DICT_WRONG)
+            break;
+    }
+
+    wstrFreeSplit(argvs, args);
 }
 
 void deallocStaticFile()
 {
+    if (AllowExtensions)
+        dictRelease(AllowExtensions);
+    MaxFileSize = 0;
 }
 
 void *initStaticFileData(struct client *c)

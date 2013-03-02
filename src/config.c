@@ -10,6 +10,7 @@ static struct enumIdName Workers[] = {
     {0, "SyncWorker"}, {1, "AsyncWorker"}
 };
 
+// configTable is immutable after worker setuped in *Worker Process*
 // Attention: If modify configTable, three places should be attention to.
 // 1. initGlobalServerConfig() in wheatserver.c
 // 2. wheatserver.conf
@@ -65,7 +66,9 @@ struct configuration configTable[] = {
     {"static-file",       2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
     {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_BUFFER_SIZE},
-        NULL,                   INT_FORMAT}
+        NULL,                   INT_FORMAT},
+    {"allowed-extension", 2, stringValidator,      {.ptr=WHEAT_ASTERISK},
+        (void *)WHEAT_NOTFREE,  STRING_FORMAT},
 };
 
 void fillServerConfig()
@@ -125,18 +128,22 @@ void applyConfig(wstr config)
     struct configuration *conf;
 
     int i;
+    if (lines == NULL)
+        goto loaderr;
     for (i = 0; i < count; i++) {
         wstr line = wstrStrip(lines[i], "\t\n\r ");
         if (line[0] == '#' || line[0] == '\0')
             continue;
 
         wstr *argvs = wstrNewSplit(line, " ", 1, &args);
+        if (argvs == NULL)
+            goto loaderr;
 
         if ((conf = getConfiguration(argvs[0])) == NULL) {
             err = "Unknown configuration name";
             goto loaderr;
         }
-        if (args != conf->args) {
+        if (args != conf->args && args != WHEAT_ARGS_NO_LIMIT) {
             err = "Incorrect args";
             goto loaderr;
         }
