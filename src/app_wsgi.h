@@ -45,7 +45,6 @@ PyTypeObject InputStream_Type;
 PyMODINIT_FUNC
 init_wsgisup(void);
 PyObject *create_environ(struct client *client);
-void sendResponse500(struct client *c);
 void responseClear(struct response *);
 void wsgiCallClose(PyObject *result);
 int wsgiSendResponse(struct response *self, PyObject *result);

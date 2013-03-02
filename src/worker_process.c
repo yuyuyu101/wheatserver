@@ -96,6 +96,7 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->buf = wstrEmpty();
     c->res_buf = wstrEmpty();
     c->should_close = 0;
+    c->valid = 0;
     ASSERT(c->protocol_data);
     return c;
 }

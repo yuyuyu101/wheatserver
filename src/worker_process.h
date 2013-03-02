@@ -57,7 +57,7 @@ struct app {
     int (*appCall)(struct client *, void *arg);
     void (*initApp)();
     void (*deallocApp)();
-    void *(*initAppData)();
+    void *(*initAppData)(struct client *);
     void (*freeAppData)(void *app_data);
     int is_init;
 };
@@ -72,6 +72,7 @@ struct client {
     void *app_private_data;
     time_t last_io;
     int should_close;
+    int valid;
 
     wstr buf;
     wstr res_buf;
@@ -85,6 +86,9 @@ void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void resetProtocol(struct client *c);
+
+#define isClientValid(c) (c)->valid
+#define setClientUnvalid(c) (c)->valid = 0
 
 /* worker's flow:
  * 0. setup filling workerProcess members

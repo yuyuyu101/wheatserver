@@ -108,6 +108,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             resetProtocol(c);
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
+                c->should_close = 1;
                 wheatLog(WHEAT_NOTICE, "app construct faileds");
                 break;
             }

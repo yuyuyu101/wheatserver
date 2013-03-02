@@ -27,7 +27,7 @@ char *httpDate()
 
 int is_chunked(int response_length, const char *version, int status)
 {
-    if (response_length == 0)
+    if (response_length != 0)
         return 0;
     else if (version == PROTOCOL_VERSION[0])
         return 0;
@@ -416,7 +416,7 @@ int httpSpot(struct client *c)
         appTable[i].is_init = 1;
     }
     c->app = &appTable[i];
-    c->app_private_data = appTable[i].initAppData();
+    c->app_private_data = appTable[i].initAppData(c);
     ret = appTable[i].appCall(c, path);
     c->app->freeAppData(c->app_private_data);
     wstrfree(path);

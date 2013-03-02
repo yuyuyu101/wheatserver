@@ -78,7 +78,7 @@ out:
     return WHEAT_WRONG;
 }
 
-void *initWsgiAppData()
+void *initWsgiAppData(struct client *c)
 {
     struct wsgiData *data = malloc(sizeof(struct wsgiData));
     if (data == NULL)
