@@ -221,13 +221,15 @@ int staticFileCall(struct client *c, void *arg)
     ret = httpSendHeaders(c);
     if (ret == -1)
         goto failed;
+    size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
+        Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
     while (send < len) {
         int nread;
         lseek(file_d, send, SEEK_SET);
         if (ret == -1) {
             goto failed;
         }
-        nread = readBulkFrom(file_d, &c->res_buf);
+        nread = readBulkFrom(file_d, &c->res_buf, unit_read);
         if (nread <= 0) {
             goto failed;
         }

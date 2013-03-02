@@ -5,13 +5,13 @@
  * pass a pointer point pointer is needed.
  * return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN */
-int readBulkFrom(int fd, wstr *clientbuf)
+int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
 {
     ssize_t nread, readlen;
     int qblen;
     wstr buf = *clientbuf;
 
-    readlen = WHEAT_IOBUF_LEN;
+    readlen = limit == 0 ? WHEAT_IOBUF_LEN : limit;
 
     qblen = wstrlen(buf);
     buf = wstrMakeRoom(buf, readlen);

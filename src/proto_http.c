@@ -351,7 +351,6 @@ void initHttp()
     if (conf1->target.ptr && conf2->target.ptr) {
         StaticPathHandler.abs_path = wstrNew(conf1->target.ptr);
         StaticPathHandler.root = wstrDup(StaticPathHandler.abs_path);
-        separator = wstrlen(StaticPathHandler.abs_path);
         StaticPathHandler.static_dir = wstrNew(conf2->target.ptr);
         StaticPathHandler.abs_path = wstrCat(StaticPathHandler.abs_path,
                 StaticPathHandler.static_dir);
@@ -552,7 +551,7 @@ int httpSpot(struct client *c)
         appTable[i].is_init = 1;
     }
     c->app = &appTable[i];
-    c->app_private_data = appTable[i].initAppData(c);
+    c->app_private_data = c->app->initAppData(c);
     ret = appTable[i].appCall(c, path);
     c->app->freeAppData(c->app_private_data);
     wstrfree(path);

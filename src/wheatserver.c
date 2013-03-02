@@ -287,8 +287,8 @@ void freeMasterClient(struct masterClient *c)
     struct listNode *node = searchListKey(Server.master_clients, c);
     ASSERT(node);
     removeListNode(Server.master_clients, node);
-    free(c);
     wheatLog(WHEAT_DEBUG, "delete readable fd: %d", c->fd);
+    free(c);
 }
 
 static void resetMasterClient(struct masterClient *c)
@@ -316,7 +316,7 @@ static ssize_t processCommand(struct masterClient *c)
 static void commandParse(struct evcenter *center, int fd, void *client_data, int mask)
 {
     struct masterClient *client = client_data;
-    ssize_t nread = readBulkFrom(fd, &client->request_buf);
+    ssize_t nread = readBulkFrom(fd, &client->request_buf, 0);
     if (nread == -1) {
         freeMasterClient(client);
         return ;

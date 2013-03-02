@@ -12,8 +12,9 @@ WORKER_OBJECTS += wheatworker.o
 PYTHON_VERSION = $(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_version()")
 PYTHON_LIBS = ./
 LIBS += -L$(PYTHON_LIBS) -lpython$(PYTHON_VERSION)
-CFLAGS = -O0 -Wall -g
 PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_inc()")
+EXTRA ?=  
+CFLAGS = -O0 -Wall -g $(EXTRA)
 
 TESTS = test_wstr test_list test_dict
 
@@ -32,10 +33,10 @@ wsgi%.o: wsgi%.c
 ################
 
 wheatserver: $(SERVER_OBJECTS)
-	$(CC) -o wheatserver $(SERVER_OBJECTS) $(LIBS)
+	$(CC) $(CFLAGS) -o wheatserver $(SERVER_OBJECTS) $(LIBS)
 
 wheatworker: $(WORKER_OBJECTS)
-	$(CC) -o wheatworker $(WORKER_OBJECTS) $(LIBS)
+	$(CC) $(CFLAGS) -o wheatworker $(WORKER_OBJECTS) $(LIBS)
 
 ###########
 test: $(TESTS)

@@ -158,16 +158,16 @@ wstr wstrCatLen(wstr s, const char *t, size_t tlen)
 {
     if (s == NULL || t == NULL)
         return NULL;
-    int slen;
+    int slen, addlen;
     slen = wstrlen(s);
     wstr new_s;
-    new_s = wstrMakeRoom(s, tlen);
+    addlen = tlen < (slen/2) ? slen/2 : tlen;
+    new_s = wstrMakeRoom(s, addlen);
     if (new_s == NULL)
         return NULL;
     memcpy(new_s+slen, t, tlen);
     wstrupdatelen(new_s, (int)tlen+slen);
     return new_s;
-
 }
 
 wstr wstrCat(wstr s, const char *t)

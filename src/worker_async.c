@@ -210,7 +210,7 @@ int asyncRecvData(struct client *c)
 {
     if (!isClientValid(c))
         return -1;
-    ssize_t n = readBulkFrom(c->clifd, &c->buf);
+    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
     if (n >= 0)
         c->last_io = Server.cron_time;
     else
