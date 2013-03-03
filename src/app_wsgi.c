@@ -7,8 +7,6 @@ static PyObject *WsgiStderr = NULL;
 
 int wsgiCall(struct client *client, void *arg)
 {
-    PyGILState_STATE gstate;
-    gstate = PyGILState_Ensure();
     /* Create Request object, passing it the context as a CObject */
     int is_ok = 1;
     PyObject *start_resp, *result, *args, *env;
@@ -71,8 +69,6 @@ out:
         Py_DECREF(req_obj);
     }
 
-    PyGILState_Release(gstate);
-
     logAccess(client);
     if (is_ok)
         return WHEAT_OK;
@@ -106,7 +102,8 @@ void initWsgi()
 
     conf = getConfiguration("app-project-path");
     snprintf(buf, WHEATSERVER_PATH_LEN, "import sys, os\n"
-            "sys.path.append(os.getcwd())\nsys.path.append('%s')", conf->target.ptr);
+            "sys.path.append(os.getcwd())\n"
+            "sys.path.append('%s')" , conf->target.ptr);
     PyRun_SimpleString(buf);
 
     init_wsgisup();
@@ -213,7 +210,7 @@ const char *wsgiUnquote(const char *s)
     return result;
 }
 
-PyObject *default_environ(PyObject *env, struct httpData *http_data)
+static PyObject *defaultEnviron(PyObject *env, struct httpData *http_data)
 {
     PyObject *val;
     if (PyDict_SetItemString(env, "wsgi.errors", WsgiStderr) != 0)
@@ -256,7 +253,7 @@ PyObject *createEnviron(struct client *client)
 
     if (!environ)
         return NULL;
-    environ = default_environ(environ, http_data);
+    environ = defaultEnviron(environ, http_data);
     if (environ == NULL) {
         Py_DECREF(environ);
         return NULL;

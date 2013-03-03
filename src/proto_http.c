@@ -345,6 +345,7 @@ void initHttp()
 {
     struct configuration *conf1, *conf2;
 
+    AccessFp = openAccessLog();
     memset(&StaticPathHandler, 0 , sizeof(struct staticHandler));
     conf1 = getConfiguration("static-file-root");
     conf2 = getConfiguration("static-file-dir");
@@ -421,9 +422,8 @@ void logAccess(struct client *client)
     ret = fprintf(AccessFp, "%s %s %s [%s] %s %s \"%s\" %s %s\n",
             remote_addr, hyphen, user, datetime, request, status_str,
             resp_length, refer, user_agent);
-    wheatLog(WHEAT_DEBUG, "fprintf %d", ret);
     if (ret == -1) {
-        wheatLog(WHEAT_NOTICE, "log access failed: %s", strerror(errno));
+        wheatLog(WHEAT_WARNING, "log access failed: %s", strerror(errno));
         fclose(AccessFp);
         AccessFp = openAccessLog();
         if (!AccessFp) {

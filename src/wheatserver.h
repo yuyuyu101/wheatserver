@@ -180,6 +180,7 @@ void wheatLog(int level, const char *fmt, ...);
 
 struct masterClient *createMasterClient(int fd);
 void freeMasterClient(struct masterClient *c);
+void logRedirect();
 
 #define WHEAT_WRONG -1
 #define WHEAT_OK 0

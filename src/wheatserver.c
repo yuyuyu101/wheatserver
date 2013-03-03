@@ -432,6 +432,7 @@ void reload()
         deleteEvent(Server.master_center, Server.stat_port, EVENT_READABLE);
         initStatListen();
     }
+    logRedirect();
 
     int i;
     for (i = 0; i < Server.worker_number; i++) {
@@ -458,6 +459,7 @@ void initServer()
 
     initStatListen();
     initMainListen();
+    logRedirect();
 }
 
 void version() {

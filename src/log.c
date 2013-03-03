@@ -1,5 +1,31 @@
 #include "wheatserver.h"
 
+// TODO: When reload config file if specify logfile is stdout,
+// now code can't redirect back to stdout.
+void logRedirect()
+{
+    if (Server.logfile && strcasecmp(Server.logfile, "stdout")) {
+        FILE *fp;
+        fclose(stdin);
+        fclose(stdout);
+        fclose(stderr);
+        fp = freopen(Server.logfile, "a", stdout);
+        if (!fp) {
+            wheatLog(WHEAT_WARNING, "file redirect failed %s",
+                    strerror(errno));
+            halt(1);
+        }
+        setbuf(fp, NULL);
+        fp = freopen(Server.logfile, "a", stderr);
+        if (!fp) {
+            wheatLog(WHEAT_WARNING, "file redirect failed %s",
+                    strerror(errno));
+            halt(1);
+        }
+        setbuf(fp, NULL);
+    }
+}
+
 void wheatLogRaw(int level, const char *msg)
 {
     const char *c = ".-* #";
