@@ -43,7 +43,36 @@
 <p>Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
 <a href="http://projects.unbit.it/uwsgi/">uWSGI</a>.</p>
 
+<h1>Feature</h1>
+
+<p>Fast: Full C implemented, and discards any module unnecessary.</p>
+
+<p>Pluggable: Worker type, protocol implement and application server all can be
+remove and add. You can construct your own worker, application server and
+other.</p>
+
+<p>Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
+information from wheatserver. </p>
+
+<p>Reload: If you change config file and apply it without restart wheatserver.
+Only you need to do is 'kill -s sighup PID' let wheatserver reload file and
+reset workers.</p>
+
+<p>Implemented:</p>
+
+<p>Workers: Sync Worker and Async Worker</p>
+
+<p>Protocol: Http 1.0 and Http 1.1</p>
+
+<p>Application Server: WSGI support and static file support both under Http</p>
+
 <h1>Build</h1>
+
+<p>Requestments: python, python-dev </p>
+
+<p>Support Platform: Linux,  Macosx</p>
+
+<p>Support Web Service: WSGI</p>
 
 <p>shell &gt; cd wheatserver</p>
 
@@ -53,7 +82,7 @@
 
 <h1>Run</h1>
 
-<p>-./wheatserver --app-module-path {your app path } --app-module-name {app filename} --app-name {callable object}</p>
+<p>-./wheatserver --app-project-path {your app path } --app-project-name {app filename} --app-name {callable object}</p>
 
 <h1>Config</h1>
 
@@ -73,7 +102,7 @@ def simple_app(environ, start_response):
     return [HELLO_WORLD]
 </pre>
 
-<p>-./wheatserver --app-module-name sample --app-name simple_app</p>
+<p>-./wheatserver --app-project-name sample --app-name simple_app</p>
 
 <h1>Example(Django)</h1>
 
@@ -136,7 +165,7 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 </pre>
 
-<p>-shell&gt; ./wheatserver --app-module-path /Users/abcd/signup/ --app-module-name wsgi --app-name application</p>
+<p>-shell&gt; ./wheatserver --app-project-path /Users/abcd/signup/ --app-module-name wsgi --app-name application</p>
 
 <h1>Signals for controlling</h1>
 
@@ -188,19 +217,7 @@ kill -INT `cat /tmp/project-master.pid`
 <td>SIGWINCH</td>
       <td>only gracefully kill the workers and the master process backend</td>
    </tr>
-</table><h1>Design</h1>
-
-<p>Master-multi Worker mode.</p>
-
-<p>Every worker process contains Worker, Protocol, Application three levels.</p>
-
-<h2>Detail Refer</h2>
-
-<p>Worker: worker_process.h worker_sync.c</p>
-
-<p>Protocol: protocol.h http_parser.c</p>
-
-<p>Application: application.h, wsgi.c</p>
+</table>
       </section>
 
     </div>
