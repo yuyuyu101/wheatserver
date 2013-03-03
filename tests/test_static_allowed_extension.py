@@ -40,3 +40,4 @@ def test_allowed_extension():
     r1 = conn.getresponse()
     assert r1.status == 200
     del async_server
+    time.sleep(0.5)

@@ -85,7 +85,7 @@ void removeListNode(struct list *l, struct listNode *node)
         node->next->prev = node->prev;
     else
         l->last = node->prev;
-    if (isListOwnValue(l)) l->free(node->value);
+    if (l->free) l->free(node->value);
     free(node);
     l->len--;
 }

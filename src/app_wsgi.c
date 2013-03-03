@@ -297,9 +297,11 @@ PyObject *createEnviron(struct client *client)
             if (envPutString(environ, buf, value))
                 goto cleanup;
             wstrLower(value);
-            client->res_buf = wstrCat(client->res_buf, "HTTP/1.1 100 Continue\r\n\r\n");
-            if (!strcmp(value, "100-continue"))
-                WorkerProcess->worker->sendData(client);
+            if (!strcmp(value, "100-continue")) {
+                // No need to free `h`
+                wstr h = wstrNew("HTTP/1.1 100 Continue\r\n\r\n");
+                WorkerProcess->worker->sendData(client, h);
+            }
         } else if (!strcmp(buf, "HTTP_HOST")) {
             if (envPutString(environ, buf, value))
                 goto cleanup;
@@ -652,20 +654,7 @@ init_wsgisup(void)
    Non-sendfile(2) version. */
 int sendFile(struct client *client, int fd)
 {
-    int len, readlen = 0, writelen = 0;
-
-    do {
-        if ((len = WorkerProcess->worker->recvData(client)) < 0)
-            return -1;
-        readlen += len;
-    } while (len == WHEAT_IOBUF_LEN);
-
-    do {
-        if ((len = WorkerProcess->worker->sendData(client)) < -1)
-            return -1;
-        writelen += len;
-    } while (writelen == readlen);
-
+    ASSERT(0);
     return 0;
 }
 

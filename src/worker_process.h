@@ -46,8 +46,11 @@ struct worker {
      * return -1 imply send data failed and the remaining length
      * of bufmeans the length of data not sended.
      * return others means the length of data.
+     *
+     * Caller will lose ownership of `data` in order to avoid big copy,
+     * sendData will free `data`
      */
-    int (*sendData)(struct client *);
+    int (*sendData)(struct client *, wstr data);
     int (*recvData)(struct client *);
 };
 
@@ -77,7 +80,7 @@ struct client {
     int valid;       // Intern: used to indicate client fd is unused and
                      // need closing, only used by worker IO methods.
     wstr buf;
-    wstr res_buf;
+    struct list *res_buf;
 };
 
 
@@ -88,9 +91,12 @@ void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void resetProtocol(struct client *c);
+int clientSendPacketList(struct client *c);
 
-#define isClientValid(c) (c)->valid
+#define isClientValid(c)    (c)->valid
 #define setClientUnvalid(c) (c)->valid = 0
+#define isClientNeedSend(c) (listFirst((c)->res_buf))
+#define refreshClient(c, t) ((c)->last_io = (t))
 
 /* worker's flow:
  * 0. setup filling workerProcess members
@@ -116,13 +122,13 @@ struct app *spotAppInterface();
 /* Sync worker Area */
 void setupSync();
 void syncWorkerCron();
-int syncSendData(struct client *c);
+int syncSendData(struct client *c, wstr data); // pass `data` ownership to
 int syncRecvData(struct client *c);
 
 /* Async worker Area */
 void setupAsync();
 void asyncWorkerCron();
-int asyncSendData(struct client *c);
+int asyncSendData(struct client *c, wstr data); // pass `data` ownership to
 int asyncRecvData(struct client *c);
 
 #endif

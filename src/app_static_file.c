@@ -229,17 +229,16 @@ int staticFileCall(struct client *c, void *arg)
         if (ret == -1) {
             goto failed;
         }
-        nread = readBulkFrom(file_d, &c->res_buf, unit_read);
+        wstr ctx = wstrEmpty();
+        nread = readBulkFrom(file_d, &ctx, unit_read);
         if (nread <= 0) {
             goto failed;
         }
         send += nread;
-        ret = WorkerProcess->worker->sendData(c);
+        ret = WorkerProcess->worker->sendData(c, ctx);
         if (ret == -1)
             goto failed;
     }
-    if (wstrlen(c->res_buf))
-        ret = WorkerProcess->worker->sendData(c);
     if (ret == -1)
         goto failed;
 
@@ -251,6 +250,7 @@ failed404:
 
 failed:
     if (file_d > 0) close(file_d);
+    wheatLog(WHEAT_WARNING, "send file failed");
     return WHEAT_WRONG;
 }
 

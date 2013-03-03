@@ -41,7 +41,8 @@
 #define WHEAT_NOTFREE                 1
 #define WHEATSERVER_CRON              1
 #define WHEAT_PREALLOC_CLIENT_LIMIT   10000
-#define WHEAT_ARGS_NO_LIMIT    -1
+#define WHEAT_BUFLIMIT                (1024*1024*1024)
+#define WHEAT_ARGS_NO_LIMIT           -1
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829

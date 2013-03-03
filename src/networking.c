@@ -7,19 +7,26 @@
  * return 0 means EAGAIN */
 int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
 {
-    ssize_t nread, readlen;
-    int qblen;
+    ssize_t nread;
+    size_t readlen;
     wstr buf = *clientbuf;
+    int qblen = wstrlen(buf);;
 
-    readlen = limit == 0 ? WHEAT_IOBUF_LEN : limit;
-
-    qblen = wstrlen(buf);
-    buf = wstrMakeRoom(buf, readlen);
-
-    if (wstrlen(buf) > Server.max_buffer_size) {
+    if (qblen > Server.max_buffer_size) {
         wheatLog(WHEAT_NOTICE, "buffer size larger than max limit");
         return WHEAT_WRONG;
     }
+
+    if (limit == 0) {
+        if (qblen < WHEAT_IOBUF_LEN)
+            readlen = WHEAT_IOBUF_LEN;
+        else
+            readlen = qblen * 2;
+    } else {
+        readlen = limit;
+    }
+
+    buf = wstrMakeRoom(buf, readlen);
 
     // Important ! buf may changed
     *clientbuf = buf;
@@ -61,7 +68,11 @@ int writeBulkTo(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     }
-    wstrRange(buf, (int)nwritten, 0);
+    if (wstrlen(buf) == nwritten) {
+        wstrClear(buf);
+    } else {
+        wstrRange(buf, (int)nwritten, 0);
+    }
     return (int)nwritten;
 }
 

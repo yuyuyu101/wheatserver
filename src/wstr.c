@@ -32,6 +32,11 @@ wstr wstrEmpty()
     return wstrNewLen(NULL, 0);
 }
 
+void wstrClear(wstr s)
+{
+    wstrupdatelen(s, 0);
+}
+
 wstr wstrMakeRoom(wstr s, size_t add_size)
 {
     struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));

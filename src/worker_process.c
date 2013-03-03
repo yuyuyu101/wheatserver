@@ -94,7 +94,8 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->app_private_data = NULL;
     c->app = NULL;
     c->buf = wstrEmpty();
-    c->res_buf = wstrEmpty();
+    c->res_buf = createList();
+    listSetFree(c->res_buf, (void (*)(void *))wstrFree);
     c->should_close = 0;
     c->valid = 1;
     ASSERT(c->protocol_data);
@@ -106,7 +107,7 @@ void freeClient(struct client *c)
     close(c->clifd);
     wstrFree(c->ip);
     wstrFree(c->buf);
-    wstrFree(c->res_buf);
+    freeList(c->res_buf);
     c->protocol->freeProtocolData(c->protocol_data);
     if (listLength(ClientPool) > 100) {
         appendToListTail(ClientPool, c);
@@ -121,3 +122,37 @@ void resetProtocol(struct client *c)
         c->protocol->freeProtocolData(c->protocol_data);
     c->protocol_data = c->protocol->initProtocolData();
 }
+
+int clientSendPacketList(struct client *c)
+{
+    struct listNode *node = NULL;
+    struct listIterator *iter = listGetIterator(c->res_buf, START_HEAD);
+    size_t allsend = 0;
+    while ((node = listNext(iter)) != NULL) {
+        wstr packet = listNodeValue(node);
+        size_t bufpos = 0, totallen = wstrlen(packet);
+        ssize_t nwritten = 0;
+
+        while (bufpos < totallen) {
+            nwritten = writeBulkTo(c->clifd, &packet);
+            if (nwritten <= 0)
+                break;
+            bufpos += nwritten;
+            allsend += nwritten;
+        }
+
+        if (nwritten == -1) {
+            setClientUnvalid(c);
+            break;
+        }
+
+        if (nwritten == 0) {
+            break;
+        }
+        removeListNode(c->res_buf, node);
+    }
+    freeListIterator(iter);
+    return allsend;
+}
+
+

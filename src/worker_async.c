@@ -26,7 +26,7 @@ static struct client *initRequest(int fd, char *ip, int port, struct protocol *p
 
 static void tryCleanRequest(struct client *c)
 {
-    if (isClientValid(c) && (wstrlen(c->res_buf) || !c->should_close))
+    if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
         return;
     cleanRequest(c);
 }
@@ -69,7 +69,7 @@ void asyncWorkerCron()
         processEvents(WorkerCenter, WHEATSERVER_CRON);
         if (WorkerProcess->ppid != getppid()) {
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
-            return ;
+            break;
         }
         clientsCron();
         elapse = Server.cron_time;
@@ -78,6 +78,11 @@ void asyncWorkerCron()
             now = elapse;
         }
         Server.cron_time = time(NULL);
+    }
+    now = Server.cron_time;
+    while (elapse - now > Server.graceful_timeout) {
+        elapse = time(NULL);
+        processEvents(WorkerCenter, WHEATSERVER_CRON);
     }
 }
 
@@ -158,52 +163,39 @@ void setupAsync()
 static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)
 {
     struct client *c = data;
-    size_t bufpos = 0, totallen = wstrlen(c->res_buf);
-    ssize_t nwritten;
-
-    while (bufpos < totallen) {
-        nwritten = writeBulkTo(c->clifd, &c->res_buf);
-        if (nwritten <= 0)
-            break;
-        bufpos += nwritten;
-    }
-    if (nwritten == -1) {
-        cleanRequest(c);
+    if (!isClientValid(c))
         return ;
-    }
 
-    c->last_io = Server.cron_time;
-    if (bufpos >= totallen) {
+    refreshClient(c, Server.cron_time);
+
+    clientSendPacketList(c);
+    if (!isClientValid(c) || !isClientNeedSend(c)) {
         deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
         tryCleanRequest(c);
     }
 }
 
-int asyncSendData(struct client *c)
+int asyncSendData(struct client *c, wstr data)
 {
     if (!isClientValid(c))
         return -1;
-    size_t bufpos = 0, totallen = wstrlen(c->res_buf);
-    ssize_t nwritten = 0;
+    if (!wstrlen(data))
+        return 0;
 
-    while (bufpos < totallen) {
-        nwritten = writeBulkTo(c->clifd, &c->res_buf);
-        if (nwritten <= 0)
-            break;
-        bufpos += nwritten;
-    }
-    if (nwritten == -1) {
-        setClientUnvalid(c);
+    appendToListTail(c->res_buf, data);
+    ssize_t sended = clientSendPacketList(c);
+    refreshClient(c, Server.cron_time);
+    if (!isClientValid(c)) {
+        // This function is IO interface, we shouldn't clean client in order
+        // to caller to deal with error.
         return -1;
     }
-
-    c->last_io = Server.cron_time;
-
-    if (bufpos < totallen) {
-        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d %d", bufpos, totallen);
+    if (isClientNeedSend(c)) {
+        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d ", sended);
         createEvent(WorkerCenter, c->clifd, EVENT_WRITABLE, sendReplyToClient, c);
     }
-    return nwritten;
+
+    return sended;
 }
 
 int asyncRecvData(struct client *c)
@@ -212,7 +204,7 @@ int asyncRecvData(struct client *c)
         return -1;
     ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
     if (n >= 0)
-        c->last_io = Server.cron_time;
+        refreshClient(c, Server.cron_time);
     else
         setClientUnvalid(c);
     return n;

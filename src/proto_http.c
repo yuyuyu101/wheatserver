@@ -26,9 +26,12 @@ const char *PROTOCOL_VERSION[] = {
 char *httpDate()
 {
     static char buf[255];
-    time_t now = time(0);
-    struct tm tm = *gmtime(&now);
-    strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    static time_t now = 0;
+    if (now != Server.cron_time || now == 0) {
+        now = Server.cron_time;
+        struct tm tm = *gmtime(&now);
+        strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    }
     return buf;
 }
 
@@ -453,10 +456,7 @@ int httpSendBody(struct client *client, const char *data, size_t len)
         return 0;
 
     http_data->send += tosend;
-    client->res_buf = wstrCatLen(client->res_buf, data, tosend);
-    if (client->res_buf == NULL)
-        return -1;
-    ret = WorkerProcess->worker->sendData(client);
+    ret = WorkerProcess->worker->sendData(client, wstrNewLen(data, len));
     if (ret == WHEAT_WRONG)
         return -1;
     return 0;
@@ -473,21 +473,23 @@ int httpSendHeaders(struct client *client)
     insertResHeader(client);
     struct listIterator *liter = listGetIterator(http_data->res_headers, START_HEAD);
     struct listNode *node = NULL;
+    wstr headers = wstrEmpty();
     while ((node = listNext(liter)) != NULL) {
         wstr header = listNodeValue(node);
-        client->res_buf = wstrCatLen(client->res_buf, header, wstrlen(header));
+        headers = wstrCatLen(headers, header, wstrlen(header));
         if (client->res_buf == NULL) {
             ok = 0;
             goto cleanup;
         }
     }
-    client->res_buf = wstrCatLen(client->res_buf, "\r\n", 2);
+    headers = wstrCatLen(headers, "\r\n", 2);
     if (client->res_buf == NULL) {
         ok = 0;
         goto cleanup;
     }
 
-    if ((len = WorkerProcess->worker->sendData(client)) < 0) {
+    len = WorkerProcess->worker->sendData(client, headers);
+    if (len < 0) {
         ok = 0;
         goto cleanup;
     }

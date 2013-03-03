@@ -37,7 +37,7 @@ struct configuration configTable[] = {
     {"pidfile",           2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
     {"max-buffer-size",   2, unsignedIntValidator, {.val=WHEAT_MAX_BUFFER_SIZE},
-        NULL,                   INT_FORMAT},
+        (void *)WHEAT_BUFLIMIT, INT_FORMAT},
     {"stat-bind-addr",    2, stringValidator,      {.ptr=WHEAT_STATS_ADDR},
         (void *)WHEAT_NOTFREE, STRING_FORMAT},
     {"stat-port",         2, unsignedIntValidator, {.val=WHEAT_STATS_PORT},
