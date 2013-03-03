@@ -4,6 +4,30 @@ wheatserver(Alpha)
 Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
 [uWSGI](http://projects.unbit.it/uwsgi/).
 
+Feature
+===========
+
+Fast: Full C implemented, and discards any module unnecessary.
+
+Pluggable: Worker type, protocol implement and application server all can be
+remove and add. You can construct your own worker, application server and
+other.
+
+Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
+information from wheatserver. 
+
+Reload: If you change config file and apply it without restart wheatserver.
+Only you need to do is 'kill -s sighup PID' let wheatserver reload file and
+reset workers.
+
+Implemented:
+
+Workers: Sync Worker and Async Worker
+
+Protocol: Http 1.0 and Http 1.1
+
+Application Server: WSGI support and static file support both under Http
+
 Build
 ===========
 
@@ -22,7 +46,7 @@ shell > make
 Run
 ===========
 
--./wheatserver --app-module-path {your app path } --app-module-name {app filename} --app-name {callable object}
+-./wheatserver --app-project-path {your app path } --app-project-name {app filename} --app-name {callable object}
 
 Config
 ===========
@@ -44,7 +68,7 @@ def simple_app(environ, start_response):
     return [HELLO_WORLD]
 </pre>
 
--./wheatserver --app-module-name sample --app-name simple_app
+-./wheatserver --app-project-name sample --app-name simple_app
 
 Example(Django)
 ===========
@@ -107,7 +131,7 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 </pre>
 
--shell> ./wheatserver --app-module-path /Users/abcd/signup/ --app-module-name wsgi --app-name application
+-shell> ./wheatserver --app-project-path /Users/abcd/signup/ --app-module-name wsgi --app-name application
 
 Signals for controlling
 ===========
@@ -161,9 +185,3 @@ kill -INT `cat /tmp/project-master.pid`
       <td>only gracefully kill the workers and the master process backend</td>
    </tr>
 </table>
-
-Design
-===========
-Master-multi Worker mode.
-
-Every worker process contains Worker, Protocol, Application three levels.
