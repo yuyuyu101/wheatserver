@@ -27,6 +27,10 @@ def test_allowed_extension():
     conn.request("GET", "/static/example.jpg")
     r1 = conn.getresponse()
     assert r1.status == 200
+    conn = httplib.HTTPConnection("127.0.0.1", 10828, timeout=10);
+    conn.request("GET", "/static/")
+    r1 = conn.getresponse()
+    assert r1.status == 404
     del async_server
 
     time.sleep(0.5)

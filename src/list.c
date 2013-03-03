@@ -90,6 +90,19 @@ void removeListNode(struct list *l, struct listNode *node)
     l->len--;
 }
 
+void listRotate(struct list *l)
+{
+    if (listLength(l) < 2)
+        return ;
+    struct listNode *second = l->first->next;
+    second->prev = NULL;
+    l->first->prev = l->last;
+    l->first->next = NULL;
+    l->last->next = l->first;
+    l->last = l->first;
+    l->first = second;
+}
+
 struct listNode *searchListKey(struct list *l, void *key)
 {
     struct listIterator *iter = listGetIterator(l, START_HEAD);
@@ -200,9 +213,18 @@ int main(void)
         struct listIterator *iter = listGetIterator(l, 0);
         for (i = 0; i < 10; i++) {
             int *n = listNodeValue(listNext(iter));
-            test_cond("append to list equal",
-                    *n == i);
+            test_cond("append to list equal", *n == i);
         }
+        listRotate(l);
+        listRotate(l);
+        listRotate(l);
+        iter = listGetIterator(l, 0);
+        for (i = 0; i < 7; i++) {
+            int *n = listNodeValue(listNext(iter));
+            test_cond("list rotate", *n == i+3);
+        }
+        int *n = listNodeValue(listNext(iter));
+        test_cond("list rotate", *n == 0);
         freeList(l);
         freeListIterator(iter);
 

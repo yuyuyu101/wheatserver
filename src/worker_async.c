@@ -43,6 +43,7 @@ static void clientsCron()
         c = listNodeValue(node);
         ASSERT(c);
 
+        listRotate(Clients);
         long idletime = Server.cron_time - c->last_io;
         if (idletime > Server.worker_timeout) {
             wheatLog(WHEAT_VERBOSE,"Closing idle client %d %d", Server.cron_time, c->last_io);

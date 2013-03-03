@@ -1,6 +1,7 @@
 #include "wheatserver.h"
 #include "app_wsgi.h"
 #include "proto_http.h"
+#include "app_static_file.h"
 
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;
@@ -650,20 +651,12 @@ init_wsgisup(void)
     PyModule_AddObject(m, "InputStream", (PyObject *)&InputStream_Type);
 }
 
-/* Dumps a file as a stream of SEND_BODY_CHUNK packets.
-   Non-sendfile(2) version. */
-int sendFile(struct client *client, int fd)
-{
-    ASSERT(0);
-    return 0;
-}
-
 /* Send a file as the HTTP response body. */
-int wsgiSendFile(void *ctxt, int fd)
+int wsgiSendFile(struct client *c, int fd)
 {
     int ret = 0;
 
-    ret = sendFile(ctxt, fd);
+    ret = sendFile(c, fd, 0);
 
     return ret;
 }

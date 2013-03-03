@@ -543,9 +543,7 @@ int httpSpot(struct client *c)
     if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
         path = wstrNew(StaticPathHandler.root);
         path = wstrCat(path, http_data->path);
-        if (isRegFile(path) != WHEAT_WRONG) {
-            i = 1;
-        }
+        i = 1;
     }
     if (!appTable[i].is_init) {
         appTable[i].initApp();

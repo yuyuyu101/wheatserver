@@ -191,17 +191,50 @@ static int fillResHeaders(struct client *c)
     return ret;
 }
 
+int sendFile(struct client *c, int fd, off_t len)
+{
+    off_t send = 0;
+    int ret;
+    if (fd < 0) {
+        return WHEAT_WRONG;
+    }
+    if (len == 0) {
+        if (getFileSize(fd, &len) == WHEAT_WRONG)
+            return WHEAT_WRONG;
+    }
+    size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
+        Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
+    while (send < len) {
+        int nread;
+        lseek(fd, send, SEEK_SET);
+        if (ret == -1)
+            return WHEAT_WRONG;
+        wstr ctx = wstrEmpty();
+        nread = readBulkFrom(fd, &ctx, unit_read);
+        if (nread <= 0)
+            return WHEAT_WRONG;
+        send += nread;
+        ret = WorkerProcess->worker->sendData(c, ctx);
+        if (ret == -1)
+            return WHEAT_WRONG;
+    }
+    return ret;
+}
+
 int staticFileCall(struct client *c, void *arg)
 {
     wstr path = arg;
     int file_d = open(path, O_RDONLY), ret;
-    off_t len, send = 0;
     struct httpData *http_data = c->protocol_data;
     struct staticFileData *static_data = c->app_private_data;
+    off_t len;
     if (file_d == -1) {
         goto failed404;
     }
-    if (AllowExtensions &&
+    if (isRegFile(path) == WHEAT_WRONG) {
+        goto failed404;
+    }
+    if (AllowExtensions && static_data->extension &&
             !dictFetchValue(AllowExtensions, static_data->extension)) {
         goto failed404;
     }
@@ -221,27 +254,9 @@ int staticFileCall(struct client *c, void *arg)
     ret = httpSendHeaders(c);
     if (ret == -1)
         goto failed;
-    size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
-        Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
-    while (send < len) {
-        int nread;
-        lseek(file_d, send, SEEK_SET);
-        if (ret == -1) {
-            goto failed;
-        }
-        wstr ctx = wstrEmpty();
-        nread = readBulkFrom(file_d, &ctx, unit_read);
-        if (nread <= 0) {
-            goto failed;
-        }
-        send += nread;
-        ret = WorkerProcess->worker->sendData(c, ctx);
-        if (ret == -1)
-            goto failed;
-    }
-    if (ret == -1)
+    ret = sendFile(c, file_d, len);
+    if (ret == WHEAT_WRONG)
         goto failed;
-
     if (file_d > 0) close(file_d);
     return WHEAT_OK;
 
