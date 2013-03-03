@@ -7,26 +7,26 @@ Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
 Feature
 ===========
 
-Fast: Full C implemented, and discards any module unnecessary.
+* Fast: Full C implemented, and discards any module unnecessary.
 
-Pluggable: Worker type, protocol implement and application server all can be
+* Pluggable: Worker type, protocol implement and application server all can be
 remove and add. You can construct your own worker, application server and
 other.
 
-Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
+* Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
 information from wheatserver. 
 
-Reload: If you change config file and apply it without restart wheatserver.
+* Reload: If you change config file and apply it without restart wheatserver.
 Only you need to do is 'kill -s sighup PID' let wheatserver reload file and
 reset workers.
 
-Implemented:
+* Implemented:
 
-Workers: Sync Worker and Async Worker
+> Workers: Sync Worker and Async Worker
 
-Protocol: Http 1.0 and Http 1.1
+> Protocol: Http 1.0 and Http 1.1
 
-Application Server: WSGI support and static file support both under Http
+> Application Server: WSGI support and static file support both under Http
 
 Build
 ===========
