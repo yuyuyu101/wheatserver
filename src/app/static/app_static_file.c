@@ -4,8 +4,8 @@
 #include <sys/uio.h>
 #include <sys/types.h>
 
-#include "wheatserver.h"
-#include "proto_http.h"
+#include "../application.h"
+#include "../../protocol/http/proto_http.h"
 
 static unsigned int MaxFileSize = WHEAT_MAX_BUFFER_SIZE;
 static struct dict *AllowExtensions = NULL;

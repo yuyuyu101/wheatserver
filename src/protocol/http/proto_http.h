@@ -1,12 +1,18 @@
 #ifndef WHEATSERVER_PROTO_HTTP_H
 #define WHEATSERVER_PROTO_HTTP_H
 
-#include "wstr.h"
+#include "../protocol.h"
 #include "http_parser.h"
-#include "dict.h"
 
 struct httpData {
     http_parser *parser;
+    struct dictEntry *last_entry;
+    int last_was_value;
+    int complete;
+    int headers_sent;
+    int send;
+
+    // Read only
     struct dict *req_headers;
     wstr query_string;
     wstr path;
@@ -16,18 +22,12 @@ struct httpData {
     const char *url_scheme;
     const char *method;
     const char *protocol_version;
-    struct dictEntry *last_entry;
-    int last_was_value;
-    int complete;
 
-    // Response
+    // App write
     int res_status;
     wstr res_status_msg;
     int response_length;
-
     struct list *res_headers;
-    int headers_sent;
-    int send;
 };
 
 void parserForward(wstr value, wstr *h, wstr *p);

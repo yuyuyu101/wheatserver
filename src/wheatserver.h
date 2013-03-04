@@ -26,8 +26,8 @@
 #include "list.h"
 #include "sig.h"
 #include "util.h"
-#include "worker_process.h"
 #include "networking.h"
+#include "worker/worker.h"
 
 /* Server Configuration */
 #define WHEAT_SERVERPORT              10828
@@ -115,8 +115,6 @@ struct globalServer {
     char neterr[NET_ERR_LEN];
 };
 
-extern struct globalServer Server;
-
 struct masterClient {
     int fd;
     wstr request_buf;
@@ -149,6 +147,10 @@ struct configuration {
     void *helper;   // using in validator, indicating target attribute
     enum printFormat format;
 };
+
+struct workerProcess;
+
+extern struct globalServer Server;
 
 void initServer();
 

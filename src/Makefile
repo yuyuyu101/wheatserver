@@ -1,10 +1,18 @@
 CC=cc
 CXX=c++
+
+APP_SOURCES = app/application.c \
+			  app/wsgi/app_wsgi.c app/wsgi/wsgiwrapper.c app/wsgi/wsgiinput.c \
+			  app/static/app_static_file.c 
+PROTO_SOURCES =  protocol/protocol.c \
+				 protocol/http/http_parser.c protocol/http/proto_http.c
+WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c
 SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c \
-		  worker_process.c worker_sync.c worker_async.c util.c protocol.c \
-		  application.c http_parser.c app_wsgi.c wsgiinput.c wsgiwrapper.c \
-		  register.c stats.c event.c setproctitle.c proto_http.c \
-		  app_static_file.c
+		  util.c register.c stats.c event.c setproctitle.c
+SOURCES += $(APP_SOURCES)
+SOURCES += $(PROTO_SOURCES)
+SOURCES += $(WORKER_SOURCES)
+
 OBJECTS = $(SOURCES:.c=.o)
 SERVER_OBJECTS += $(OBJECTS)
 SERVER_OBJECTS += wheatserver.o
@@ -29,7 +37,7 @@ wheatworker.o: wheatserver.c wheatserver.h
 wsgi%.o: wsgi%.c
 	$(CC) $(CFLAGS) $(PYTHON_FLAGS) -c $< -o $@
 
-%.o: %.c
+.c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 ################
 
@@ -58,3 +66,4 @@ test_dict: dict.c dict.h
 .PHONY: clean
 clean:
 	rm $(SERVER_OBJECTS) *.gch wheatserver wheatworker
+

@@ -2,7 +2,7 @@
 #define WHEATSERVER_WSGI_H
 /* ========== wsgi callback ========== */
 #include <Python.h>
-#include "wstr.h"
+#include "../../wstr.h"
 
 struct client;
 

@@ -1,4 +1,4 @@
-#include "wheatserver.h"
+#include "../wheatserver.h"
 #include "protocol.h"
 
 struct protocol *spotProtocol(char *ip, int port, int fd)

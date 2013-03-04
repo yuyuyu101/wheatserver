@@ -1,4 +1,4 @@
-#include "wheatserver.h"
+#include "worker.h"
 
 int syncSendData(struct client *c, wstr data)
 {

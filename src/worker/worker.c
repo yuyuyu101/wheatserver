@@ -1,4 +1,4 @@
-#include "wheatserver.h"
+#include "worker.h"
 
 struct workerProcess *WorkerProcess = NULL;
 

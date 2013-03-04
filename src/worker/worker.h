@@ -3,7 +3,7 @@
 
 #include <unistd.h>
 #include <setjmp.h>
-#include "wstr.h"
+#include "../wheatserver.h"
 
 #define WORKER_BOOT_ERROR 3
 #define WHEATSERVER_REQ_MAXLEN 8*1024
@@ -13,8 +13,6 @@ struct workerProcess {
     pid_t ppid;
     int alive;
     time_t start_time;
-
-    jmp_buf jmp;
 
     char *worker_name;
     struct worker *worker;

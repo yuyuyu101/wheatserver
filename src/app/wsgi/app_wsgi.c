@@ -1,7 +1,7 @@
-#include "wheatserver.h"
+#include "../application.h"
 #include "app_wsgi.h"
-#include "proto_http.h"
-#include "app_static_file.h"
+#include "../static/app_static_file.h"
+#include "../../protocol/http/proto_http.h"
 
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;

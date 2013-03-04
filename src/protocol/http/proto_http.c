@@ -1,4 +1,3 @@
-#include "wheatserver.h"
 #include "proto_http.h"
 
 extern struct app appTable[];
