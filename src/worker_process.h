@@ -21,8 +21,6 @@ struct workerProcess {
     struct workerStat *stat;
 };
 
-extern struct workerProcess *WorkerProcess;
-
 struct client;
 struct protocol {
     char *name;
@@ -83,6 +81,10 @@ struct client {
     struct list *res_buf;
 };
 
+#define WHEAT_WORKERS    2
+extern struct workerProcess *WorkerProcess;
+extern struct worker WorkerTable[];
+extern struct protocol ProtocolTable[];
 
 /* modify attention. Worker, Protocol, Applicantion interface */
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
@@ -117,18 +119,5 @@ int clientSendPacketList(struct client *c);
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();
-
-
-/* Sync worker Area */
-void setupSync();
-void syncWorkerCron();
-int syncSendData(struct client *c, wstr data); // pass `data` ownership to
-int syncRecvData(struct client *c);
-
-/* Async worker Area */
-void setupAsync();
-void asyncWorkerCron();
-int asyncSendData(struct client *c, wstr data); // pass `data` ownership to
-int asyncRecvData(struct client *c);
 
 #endif

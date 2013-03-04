@@ -2,11 +2,6 @@
 
 struct workerProcess *WorkerProcess = NULL;
 
-static struct worker WorkerTable[] = {
-    {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRecvData},
-    {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRecvData}
-};
-
 /* ========== Worker Area ========== */
 
 static struct list *ClientPool = NULL;
@@ -14,7 +9,7 @@ static struct list *ClientPool = NULL;
 struct worker *spotWorker(char *worker_name)
 {
     int i;
-    for (i = 0; i < sizeof(WorkerTable)/sizeof(struct worker); i++) {
+    for (i = 0; i < WHEAT_WORKERS; i++) {
         if (strcmp(WorkerTable[i].name, worker_name) == 0) {
             return &WorkerTable[i];
         }

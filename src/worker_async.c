@@ -16,19 +16,34 @@ static void cleanRequest(struct client *c)
     freeClient(c);
 }
 
+static void tryCleanRequest(struct client *c)
+{
+    if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
+        return;
+    cleanRequest(c);
+}
+
+static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)
+{
+    struct client *c = data;
+    if (!isClientValid(c))
+        return ;
+
+    refreshClient(c, Server.cron_time);
+
+    clientSendPacketList(c);
+    if (!isClientValid(c) || !isClientNeedSend(c)) {
+        deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
+        tryCleanRequest(c);
+    }
+}
+
 static struct client *initRequest(int fd, char *ip, int port, struct protocol *p)
 {
     struct client *c = createClient(fd, ip, port, p);
     c->last_io = Server.cron_time;
     appendToListTail(Clients, c);
     return c;
-}
-
-static void tryCleanRequest(struct client *c)
-{
-    if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
-        return;
-    cleanRequest(c);
 }
 
 static void clientsCron()
@@ -60,6 +75,41 @@ static void clientsCron()
             }
         }
     }
+}
+
+int asyncSendData(struct client *c, wstr data)
+{
+    if (!isClientValid(c))
+        return -1;
+    if (!wstrlen(data))
+        return 0;
+
+    appendToListTail(c->res_buf, data);
+    ssize_t sended = clientSendPacketList(c);
+    refreshClient(c, Server.cron_time);
+    if (!isClientValid(c)) {
+        // This function is IO interface, we shouldn't clean client in order
+        // to caller to deal with error.
+        return -1;
+    }
+    if (isClientNeedSend(c)) {
+        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d ", sended);
+        createEvent(WorkerCenter, c->clifd, EVENT_WRITABLE, sendReplyToClient, c);
+    }
+
+    return sended;
+}
+
+int asyncRecvData(struct client *c)
+{
+    if (!isClientValid(c))
+        return -1;
+    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
+    if (n >= 0)
+        refreshClient(c, Server.cron_time);
+    else
+        setClientUnvalid(c);
+    return n;
 }
 
 void asyncWorkerCron()
@@ -161,52 +211,3 @@ void setupAsync()
     }
 }
 
-static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)
-{
-    struct client *c = data;
-    if (!isClientValid(c))
-        return ;
-
-    refreshClient(c, Server.cron_time);
-
-    clientSendPacketList(c);
-    if (!isClientValid(c) || !isClientNeedSend(c)) {
-        deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
-        tryCleanRequest(c);
-    }
-}
-
-int asyncSendData(struct client *c, wstr data)
-{
-    if (!isClientValid(c))
-        return -1;
-    if (!wstrlen(data))
-        return 0;
-
-    appendToListTail(c->res_buf, data);
-    ssize_t sended = clientSendPacketList(c);
-    refreshClient(c, Server.cron_time);
-    if (!isClientValid(c)) {
-        // This function is IO interface, we shouldn't clean client in order
-        // to caller to deal with error.
-        return -1;
-    }
-    if (isClientNeedSend(c)) {
-        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d ", sended);
-        createEvent(WorkerCenter, c->clifd, EVENT_WRITABLE, sendReplyToClient, c);
-    }
-
-    return sended;
-}
-
-int asyncRecvData(struct client *c)
-{
-    if (!isClientValid(c))
-        return -1;
-    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
-    if (n >= 0)
-        refreshClient(c, Server.cron_time);
-    else
-        setClientUnvalid(c);
-    return n;
-}

@@ -1,5 +1,40 @@
 #include "wheatserver.h"
 
+int syncSendData(struct client *c, wstr data)
+{
+    if (!isClientValid(c)) {
+        return -1;
+    }
+
+    if (!wstrlen(data))
+        return 0;
+    ssize_t sended = 0;
+    appendToListTail(c->res_buf, data);
+    while (isClientNeedSend(c)) {
+        sended += clientSendPacketList(c);
+        refreshClient(c, Server.cron_time);
+        if (!isClientValid(c)) {
+            // This function is IO interface, we shouldn't clean client in order
+            // to caller to deal with error.
+            return -1;
+        }
+    }
+
+    return sended;
+}
+
+int syncRecvData(struct client *c)
+{
+    if (!isClientValid(c)) {
+        return -1;
+    }
+    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
+    if (n >= 0)
+        refreshClient(c, Server.cron_time);
+    else
+        setClientUnvalid(c);
+    return (int)n;
+}
 void dispatchRequest(int fd, char *ip, int port)
 {
     struct protocol *ptcol = spotProtocol(ip, port, fd);
@@ -101,40 +136,4 @@ accepterror:
 
 void setupSync()
 {
-}
-
-int syncSendData(struct client *c, wstr data)
-{
-    if (!isClientValid(c)) {
-        return -1;
-    }
-
-    if (!wstrlen(data))
-        return 0;
-    ssize_t sended = 0;
-    appendToListTail(c->res_buf, data);
-    while (isClientNeedSend(c)) {
-        sended += clientSendPacketList(c);
-        refreshClient(c, Server.cron_time);
-        if (!isClientValid(c)) {
-            // This function is IO interface, we shouldn't clean client in order
-            // to caller to deal with error.
-            return -1;
-        }
-    }
-
-    return sended;
-}
-
-int syncRecvData(struct client *c)
-{
-    if (!isClientValid(c)) {
-        return -1;
-    }
-    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
-    if (n >= 0)
-        refreshClient(c, Server.cron_time);
-    else
-        setClientUnvalid(c);
-    return (int)n;
 }
