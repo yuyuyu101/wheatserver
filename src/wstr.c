@@ -40,16 +40,17 @@ void wstrClear(wstr s)
 wstr wstrMakeRoom(wstr s, size_t add_size)
 {
     struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));
-    if (sh->free > add_size)
+    if (sh->free >= add_size)
         return s;
 
     int old_len = wstrlen(s);
     int new_len = (old_len + (int)add_size) * 2;
     if (new_len > MAX_STR)
-        return s;
-    struct wstrhd *new_sh = realloc(sh, sizeof(struct wstrhd)+new_len+1); // +1 for '\0'
-    if (new_sh == NULL)
         return NULL;
+    struct wstrhd *new_sh = realloc(sh, sizeof(struct wstrhd)+new_len+1); // +1 for '\0'
+    if (new_sh == NULL) {
+        return NULL;
+    }
     new_sh->free = new_len - old_len;
     return new_sh->buf;
 }

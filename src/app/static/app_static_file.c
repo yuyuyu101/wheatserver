@@ -29,10 +29,8 @@ static struct contenttype ContentTypes[] = {
     {"au", "audio/basic"},
     {"avi", "video/x-msvideo"},
     {"bcpio", "application/x-bcpio"},
-    {"bin", "application/octet-stream"},
     {"bmp", "image/bmp"},
     {"cdf", "application/x-netcdf"},
-    {"class", "application/octet-stream"},
     {"cpio", "application/x-cpio"},
     {"cpt", "application/mac-compactpro"},
     {"csh", "application/x-csh"},
@@ -41,14 +39,11 @@ static struct contenttype ContentTypes[] = {
     {"dir", "application/x-director"},
     {"djv", "image/vnd.djvu"},
     {"djvu", "image/vnd.djvu"},
-    {"dll", "application/octet-stream"},
-    {"dms", "application/octet-stream"},
     {"doc", "application/msword"},
     {"dvi", "application/x-dvi"},
     {"dxr", "application/x-director"},
     {"eps", "application/postscript"},
     {"etx", "text/x-setext"},
-    {"exe", "application/octet-stream"},
     {"ez", "application/andrew-inset"},
     {"gif", "image/gif"},
     {"gtar", "application/x-gtar"},
@@ -66,8 +61,6 @@ static struct contenttype ContentTypes[] = {
     {"js", "application/x-javascript"},
     {"kar", "audio/midi"},
     {"latex", "application/x-latex"},
-    {"lha", "application/octet-stream"},
-    {"lzh", "application/octet-stream"},
     {"m3u", "audio/x-mpegurl"},
     {"man", "application/x-troff-man"},
     {"me", "application/x-troff-me"},
@@ -121,7 +114,6 @@ static struct contenttype ContentTypes[] = {
     {"smi", "application/smil"},
     {"smil", "application/smil"},
     {"snd", "audio/basic"},
-    {"so", "application/octet-stream"},
     {"spl", "application/x-futuresplash"},
     {"src", "application/x-wais-source"},
     {"sv4cpio", "application/x-sv4cpio"},
@@ -183,6 +175,12 @@ static int fillResHeaders(struct client *c)
         if (i != size) {
             ret = snprintf(buf, 255, "%s: %s\r\n", "Content-Type",
                     ContentTypes[i].mime_type);
+            if (ret == -1)
+                return ret;
+            appendToListTail(http_data->res_headers, wstrNew(buf));
+        } else {
+            ret = snprintf(buf, 255, "%s: %s\r\n", "Content-Type",
+                    "application/octet-stream");
             if (ret == -1)
                 return ret;
             appendToListTail(http_data->res_headers, wstrNew(buf));
@@ -260,12 +258,13 @@ int staticFileCall(struct client *c, void *arg)
     if (file_d > 0) close(file_d);
     return WHEAT_OK;
 
+failed:
+    wheatLog(WHEAT_WARNING, "send file failed");
+
 failed404:
     sendResponse404(c);
-
-failed:
     if (file_d > 0) close(file_d);
-    wheatLog(WHEAT_WARNING, "send file failed");
+
     return WHEAT_WRONG;
 }
 

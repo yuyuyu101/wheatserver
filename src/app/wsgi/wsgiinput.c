@@ -30,11 +30,9 @@ static PyObject *InputStream_consume(InputStream *self, int new_pos)
 
     data = PyString_AS_STRING(result);
 
-    memcpy(data, self->req_data, mem_size);
+    memcpy(data, self->req_data+self->pos, mem_size);
 
     self->pos += mem_size;
-
-    data[mem_size] = '\0';
 
     /* Free fully-consumed chunks */
     return result;
@@ -93,7 +91,9 @@ static PyObject *InputStream_read(InputStream *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "|i:read", &size))
         return NULL;
 
-    if (self->pos == self->size || size <= 0)
+    if (size == -1)
+        size = self->size;
+    if (self->pos == self->size || self->size <= 0)
         return PyString_FromString("");
 
     size = self->size - self->pos > size ? size : self->size - self->pos;
@@ -110,8 +110,10 @@ static PyObject *InputStream_readline(InputStream *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "|i:readline", &size))
         return NULL;
 
-    if (self->pos == self->size || size <= 0)
+    if (self->pos == self->size || self->size <= 0)
         return PyString_FromString("");
+    if (size == -1)
+        size = self->size;
 
     size = self->size - self->pos > size ? size : self->size - self->pos;
 

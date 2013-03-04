@@ -211,14 +211,21 @@ int on_body(http_parser *parser, const char *at, size_t len)
         return 0;
 }
 
+
 int on_header_complete(http_parser *parser)
 {
     struct httpData *data = parser->data;
-    data->complete = 1;
     if (http_should_keep_alive(parser) == 0)
         data->keep_live = 0;
     else
         data->keep_live = 1;
+    return 0;
+}
+
+int on_message_complete(http_parser *parser)
+{
+    struct httpData *data = parser->data;
+    data->complete = 1;
     return 0;
 }
 
@@ -252,6 +259,7 @@ int parseHttp(struct client *client)
             return WHEAT_WRONG;
     }
     wstrRange(client->buf, (int)nparsed, 0);
+
     if (http_data->complete) {
         http_data->method = http_method_str(http_data->parser->method);
         if (http_data->parser->http_minor == 0)
@@ -365,6 +373,7 @@ void initHttp()
     HttpPaserSettings.on_headers_complete = on_header_complete;
     HttpPaserSettings.on_body = on_body;
     HttpPaserSettings.on_url = on_url;
+    HttpPaserSettings.on_message_complete = on_message_complete;
 }
 
 void deallocHttp()
@@ -552,6 +561,7 @@ int httpSpot(struct client *c)
     c->app_private_data = c->app->initAppData(c);
     ret = appTable[i].appCall(c, path);
     c->app->freeAppData(c->app_private_data);
+    logAccess(c);
     wstrFree(path);
     if (http_data->response_length == 0)
         c->should_close = 1;

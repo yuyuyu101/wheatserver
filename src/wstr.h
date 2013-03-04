@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#define MAX_STR 1024*1024
+#define MAX_STR 16*1024*1024
 
 /* 1. Return NULL means call func failed but the old value passed in stay
  * alive.

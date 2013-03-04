@@ -104,7 +104,12 @@ int asyncRecvData(struct client *c)
 {
     if (!isClientValid(c))
         return -1;
-    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
+    ssize_t n;
+    // Because os IO notify only once if you don't read all data within this
+    // buffer
+    do {
+        n = readBulkFrom(c->clifd, &c->buf, 0);
+    } while (n >= WHEAT_IOBUF_LEN);
     if (n >= 0)
         refreshClient(c, Server.cron_time);
     else

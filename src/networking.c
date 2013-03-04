@@ -10,7 +10,7 @@ int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
     ssize_t nread;
     size_t readlen;
     wstr buf = *clientbuf;
-    int qblen = wstrlen(buf);;
+    int qblen = wstrlen(buf);
 
     if (qblen > Server.max_buffer_size) {
         wheatLog(WHEAT_NOTICE, "buffer size larger than max limit");
@@ -18,7 +18,7 @@ int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
     }
 
     if (limit == 0) {
-        if (qblen < WHEAT_IOBUF_LEN)
+        if (qblen <= WHEAT_IOBUF_LEN)
             readlen = WHEAT_IOBUF_LEN;
         else
             readlen = qblen * 2;
@@ -27,6 +27,10 @@ int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
     }
 
     buf = wstrMakeRoom(buf, readlen);
+    if (buf == NULL) {
+        wheatLog(WHEAT_WARNING, "make room failed: %d", readlen);
+        return WHEAT_WARNING;
+    }
 
     // Important ! buf may changed
     *clientbuf = buf;
@@ -36,7 +40,7 @@ int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
         if (errno == EAGAIN) {
             nread = 0;
         } else {
-            wheatLog(WHEAT_VERBOSE, "Reading from fd %d: %s", fd, strerror(errno));
+            wheatLog(WHEAT_NOTICE, "Reading from fd %d: %s", fd, strerror(errno));
             return WHEAT_WRONG;
         }
     } else if (nread == 0) {

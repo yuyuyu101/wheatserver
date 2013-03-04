@@ -301,12 +301,9 @@ int isRegFile(const char *path)
     return S_ISREG(stat.st_mode) == 0 ? WHEAT_WRONG : WHEAT_OK;
 }
 
-int fromSameParentDir(wstr left, wstr right)
+int fromSameParentDir(wstr parent, wstr child)
 {
-    int i = 0;
-    int len;
-    len = wstrlen(left) > wstrlen(right) ? wstrlen(right) : wstrlen(left);
-    if (left[0] != right[0])
-        ++i;
-    return memcmp(left+i, right+i, len-i) == 0;
+    if (wstrlen(parent) > wstrlen(child))
+        return 0;
+    return memcmp(parent, child, wstrlen(parent)) == 0;
 }
