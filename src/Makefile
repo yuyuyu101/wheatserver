@@ -25,7 +25,7 @@ PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.s
 EXTRA ?=  
 CFLAGS = -O0 -Wall -g $(EXTRA)
 
-TESTS = test_wstr test_list test_dict
+TESTS = test_wstr test_list test_dict test_slice
 
 all: wheatserver wheatworker
 
@@ -62,6 +62,10 @@ test_list: list.c list.h
 test_dict: dict.c dict.h
 	$(CC) -o $@ dict.c wstr.o -DDICT_TEST_MAIN
 	./test_dict
+
+test_slice: slice.c slice.h
+	$(CC) -o $@ slice.c -DSLICE_TEST_MAIN
+	./test_slice
 
 .PHONY: clean
 clean:
