@@ -120,7 +120,7 @@ int asyncRecvData(struct client *c)
 void asyncWorkerCron()
 {
     int refresh_seconds = Server.stat_refresh_seconds;
-    time_t elapse, now = Server.cron_time;
+    time_t elapse =  Server.cron_time, now = Server.cron_time;
     while (WorkerProcess->alive) {
         processEvents(WorkerCenter, WHEATSERVER_CRON);
         if (WorkerProcess->ppid != getppid()) {

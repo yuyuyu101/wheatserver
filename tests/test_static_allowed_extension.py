@@ -15,9 +15,8 @@ def test_allowed_extension():
     conn.request("GET", "/static/example.jpg")
     r1 = conn.getresponse()
     assert r1.status == 404
-    del async_server
-    time.sleep(0.5)
 
+def test_allowed_extension2():
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--static-file-root %s" % os.path.join(PROJECT_PATH, "example/"),
@@ -31,9 +30,8 @@ def test_allowed_extension():
     conn.request("GET", "/static/")
     r1 = conn.getresponse()
     assert r1.status == 404
-    del async_server
 
-    time.sleep(0.5)
+def test_allowed_extension3():
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--static-file-root %s" % os.path.join(PROJECT_PATH, "example/"),
@@ -44,4 +42,3 @@ def test_allowed_extension():
     r1 = conn.getresponse()
     assert r1.status == 200
     del async_server
-    time.sleep(0.5)

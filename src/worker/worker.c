@@ -147,7 +147,7 @@ int clientSendPacketList(struct client *c)
         removeListNode(c->res_buf, node);
     }
     freeListIterator(iter);
-    return allsend;
+    return (int)allsend;
 }
 
 

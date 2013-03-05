@@ -1,7 +1,7 @@
 #ifndef WHEATSERVER_NETWORKING_H
 #define WHEATSERVER_NETWORKING_H
 
-#include "wstr.h"
+#include "wheatserver.h"
 
 #define WHEAT_IOBUF_LEN 1024 * 4
 

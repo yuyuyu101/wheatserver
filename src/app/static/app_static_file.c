@@ -205,8 +205,6 @@ int sendFile(struct client *c, int fd, off_t len)
     while (send < len) {
         int nread;
         lseek(fd, send, SEEK_SET);
-        if (ret == -1)
-            return WHEAT_WRONG;
         wstr ctx = wstrEmpty();
         nread = readBulkFrom(fd, &ctx, unit_read);
         if (nread <= 0)
@@ -216,7 +214,7 @@ int sendFile(struct client *c, int fd, off_t len)
         if (ret == -1)
             return WHEAT_WRONG;
     }
-    return ret;
+    return WHEAT_OK;
 }
 
 int staticFileCall(struct client *c, void *arg)
@@ -245,7 +243,7 @@ int staticFileCall(struct client *c, void *arg)
         goto failed404;
     }
 
-    fillResInfo(http_data, len, 200, "OK");
+    fillResInfo(http_data, (int)len, 200, "OK");
     ret = fillResHeaders(c);
     if (ret == -1)
         goto failed404;
@@ -317,7 +315,7 @@ void *initStaticFileData(struct client *c)
         char *slash = strrchr(http_data->path, '/');
         if (point && slash && slash < point) {
             data->extension = wstrNew(point+1);
-            data->filename = wstrNewLen(slash+1, point-slash-1);
+            data->filename = wstrNewLen(slash+1, (int)(point-slash-1));
         }
     }
     return data;

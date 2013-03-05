@@ -1,32 +1,34 @@
 #ifndef WHEATSEVER_WHEATSSERVER_H
 #define WHEATSEVER_WHEATSSERVER_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <unistd.h>
+#include <assert.h>
 #include <ctype.h>
-#include <string.h>
-#include <sys/time.h>
-#include <sys/select.h>
-#include <sys/wait.h>
-#include <stddef.h>
 #include <errno.h>
 #include <signal.h>
-#include <assert.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <sys/wait.h>
 #include <time.h>
+#include <unistd.h>
 
-#include "version.h"
-#include "event.h"
-#include "stats.h"
-#include "wstr.h"
 #include "dict.h"
-#include "net.h"
-#include "hook.h"
 #include "list.h"
-#include "sig.h"
-#include "util.h"
+#include "wstr.h"
+
+#include "event.h"
+#include "hook.h"
+#include "net.h"
 #include "networking.h"
+#include "sig.h"
+#include "slice.h"
+#include "stats.h"
+#include "util.h"
+#include "version.h"
 #include "worker/worker.h"
 
 /* Server Configuration */

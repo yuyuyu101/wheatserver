@@ -45,8 +45,6 @@ wstr wstrMakeRoom(wstr s, size_t add_size)
 
     int old_len = wstrlen(s);
     int new_len = (old_len + (int)add_size) * 2;
-    if (new_len > MAX_STR)
-        return NULL;
     struct wstrhd *new_sh = realloc(sh, sizeof(struct wstrhd)+new_len+1); // +1 for '\0'
     if (new_sh == NULL) {
         return NULL;

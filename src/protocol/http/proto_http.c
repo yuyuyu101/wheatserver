@@ -116,7 +116,7 @@ cleanup:
 void parserForward(wstr value, wstr *h, wstr *p)
 {
     wstr remote_addr = NULL;
-    wstr host = *h, port = *p;
+    wstr host, port;
     int count;
     /* took the last one http://en.wikipedia.org/wiki/X-Forwarded-For */
     if (strchr(value, ',') == NULL)
@@ -464,7 +464,7 @@ int httpSendBody(struct client *client, const char *data, size_t len)
         return 0;
 
     http_data->send += tosend;
-    ret = WorkerProcess->worker->sendData(client, wstrNewLen(data, len));
+    ret = WorkerProcess->worker->sendData(client, wstrNewLen(data, (int)len));
     if (ret == WHEAT_WRONG)
         return -1;
     return 0;

@@ -93,10 +93,11 @@ void freeClient(struct client *);
 void resetProtocol(struct client *c);
 int clientSendPacketList(struct client *c);
 
-#define isClientValid(c)    (c)->valid
-#define setClientUnvalid(c) (c)->valid = 0
-#define isClientNeedSend(c) (listFirst((c)->res_buf))
-#define refreshClient(c, t) ((c)->last_io = (t))
+#define isClientValid(c)     (c)->valid
+#define setClientUnvalid(c)  (c)->valid = 0
+#define isClientNeedSend(c)  (listFirst((c)->res_buf))
+#define isClientNeedParse(c) (listFirst(c)->req_buf))
+#define refreshClient(c, t)  ((c)->last_io = (t))
 
 /* worker's flow:
  * 0. setup filling workerProcess members
