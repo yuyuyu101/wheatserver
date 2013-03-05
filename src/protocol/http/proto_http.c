@@ -10,6 +10,34 @@ struct staticHandler {
     wstr static_dir;
 };
 
+struct httpData {
+    //Intern use
+    http_parser *parser;
+    struct dictEntry *last_entry;
+    int last_was_value;
+    int complete;
+    int send;
+    int is_chunked_in_header;
+    int upgrade;
+
+    // Read only
+    wstr query_string;
+    wstr path;
+    wstr body;
+    int keep_live;
+    int headers_sent;
+    const char *url_scheme;
+    const char *method;
+    const char *protocol_version;
+    struct dict *req_headers;
+
+    // App write
+    int res_status;
+    wstr res_status_msg;
+    int response_length;
+    struct list *res_headers;
+};
+
 static struct staticHandler StaticPathHandler;
 
 const char *URL_SCHEME[] = {
@@ -34,9 +62,64 @@ char *httpDate()
     return buf;
 }
 
+const char *httpGetUrlScheme(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->url_scheme;
+}
+
+const char *httpGetMethod(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->method;
+}
+
+const char *httpGetProtocolVersion(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->protocol_version;
+}
+
+const wstr httpGetQueryString(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->query_string;
+}
+
+const wstr httpGetPath(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->path;
+}
+
+const wstr httpGetBody(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->body;
+}
+
+struct dict *httpGetReqHeaders(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->req_headers;
+}
+
+int ishttpHeaderSended(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->headers_sent;
+}
+
+int httpGetResStatus(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->res_status;
+}
+
 int isChunked(struct httpData *http_data)
 {
-    return http_data->is_chunked && http_data->response_length == 0 &&
+    return http_data->is_chunked_in_header &&
+        http_data->response_length == 0 &&
         http_data->protocol_version == PROTOCOL_VERSION[1] &&
         http_data->res_status == 200;
 }
@@ -65,8 +148,9 @@ void appendToResHeaders(struct client *c, const char *field,
     appendToListTail(http_data->res_headers, wstrNew(value));
 }
 
-void fillResInfo(struct httpData *data, int status, const char *msg)
+void fillResInfo(struct client *c, int status, const char *msg)
 {
+    struct httpData *data = c->protocol_data;
     data->res_status = status;
     data->res_status_msg = wstrNew(msg);
 }
@@ -293,7 +377,7 @@ void *initHttpData()
     data->query_string = NULL;
     data->keep_live = 1;
     data->upgrade = 0;
-    data->is_chunked = 0;
+    data->is_chunked_in_header = 0;
     data->path = NULL;
     data->last_was_value = 0;
     data->last_entry = NULL;
@@ -495,7 +579,7 @@ int httpSendHeaders(struct client *client)
         }
         if (strncasecmp(field, TRANSFER_ENCODING,
                     sizeof(TRANSFER_ENCODING))) {
-            http_data->is_chunked = 1;
+            http_data->is_chunked_in_header = 1;
         } else if (!strncasecmp(field, CONTENT_LENGTH, sizeof(CONTENT_LENGTH))) {
             http_data->response_length = atoi(value);
         } else if (!strncasecmp(field, CONNECTION, sizeof(CONNECTION))) {
@@ -542,7 +626,7 @@ void sendResponse404(struct client *c)
         "<h1>Not Found</h1>\n"
         "<p>The requested URL was not found on this server</p>\n"
         "</body></html>\n";
-    fillResInfo(http_data, 404, "NotFound");
+    fillResInfo(c, 404, "NotFound");
     http_data->response_length = sizeof(body);
 
     if (!httpSendHeaders(c))
@@ -561,7 +645,7 @@ void sendResponse500(struct client *c)
         "<p>The server encountered an unexpected condition which\n"
         "prevented it from fulfilling the request.</p>\n"
         "</body></html>\n";
-    fillResInfo(http_data, 500, "Internal Error");
+    fillResInfo(c, 500, "Internal Error");
     http_data->response_length = sizeof(body);
 
     if (!httpSendHeaders(c))

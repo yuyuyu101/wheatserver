@@ -58,8 +58,7 @@ out:
         PyErr_Print();
 
         /* Display HTTP 500 error, if possible */
-        struct httpData *http_data = client->protocol_data;
-        if (req_obj == NULL || !http_data->headers_sent)
+        if (req_obj == NULL || !ishttpHeaderSended(client))
             sendResponse500(client);
         is_ok = 0;
     }
@@ -210,7 +209,7 @@ const char *wsgiUnquote(const char *s)
     return result;
 }
 
-static PyObject *defaultEnviron(PyObject *env, struct httpData *http_data)
+static PyObject *defaultEnviron(PyObject *env, struct client *c)
 {
     PyObject *val;
     if (PyDict_SetItemString(env, "wsgi.errors", WsgiStderr) != 0)
@@ -227,16 +226,16 @@ static PyObject *defaultEnviron(PyObject *env, struct httpData *http_data)
     if (PyDict_SetItemString(env, "wsgi.run_once", Py_False) != 0)
         return NULL;
 
-    if (envPutString(env, "wsgi.url_scheme", http_data->url_scheme))
+    if (envPutString(env, "wsgi.url_scheme", httpGetUrlScheme(c)))
         return NULL;
 
-    if (envPutString(env, "REQUEST_METHOD", http_data->method))
+    if (envPutString(env, "REQUEST_METHOD", httpGetMethod(c)))
         return NULL;
 
-    if (envPutString(env, "SERVER_PROTOCOL", http_data->protocol_version))
+    if (envPutString(env, "SERVER_PROTOCOL", httpGetProtocolVersion(c)))
         return NULL;
 
-    if (envPutString(env, "QUERY_STRING", http_data->query_string))
+    if (envPutString(env, "QUERY_STRING", httpGetQueryString(c)))
         return NULL;
 
     return env;
@@ -244,7 +243,6 @@ static PyObject *defaultEnviron(PyObject *env, struct httpData *http_data)
 
 PyObject *createEnviron(struct client *client)
 {
-    struct httpData *http_data = client->protocol_data;
     const char *req_uri = NULL;
     PyObject *environ;
     environ = PyDict_New();
@@ -253,14 +251,14 @@ PyObject *createEnviron(struct client *client)
 
     if (!environ)
         return NULL;
-    environ = defaultEnviron(environ, http_data);
+    environ = defaultEnviron(environ, client);
     if (environ == NULL) {
         Py_DECREF(environ);
         return NULL;
     }
 
     /* HTTP headers */
-    struct dictIterator *iter = dictGetIterator(http_data->req_headers);
+    struct dictIterator *iter = dictGetIterator(httpGetReqHeaders(client));
     struct dictEntry *entry;
     wstr host = NULL, port = NULL, server = NULL;
     while ((entry = dictNext(iter)) != NULL) {
@@ -329,17 +327,17 @@ PyObject *createEnviron(struct client *client)
         if (envPutString(environ, "SERVER_PORT", sep+1))
             goto cleanup;
         server = wstrRange(server, (int)(sep-server+1), 0);
-    } else if (!strcmp(http_data->url_scheme, "HTTP")) {
+    } else if (!strcmp(httpGetUrlScheme(client), "HTTP")) {
         if (envPutString(environ, "SERVER_PORT", "80"))
             goto cleanup;
-    } else if (!strcmp(http_data->url_scheme, "HTTPS")) {
+    } else if (!strcmp(httpGetUrlScheme(client), "HTTPS")) {
         if (envPutString(environ, "SERVER_PORT", "443"))
             goto cleanup;
     }
     if (envPutString(environ, "SERVER_NAME", server))
         goto cleanup;
 
-    if ((req_uri = wsgiUnquote(http_data->path)) == NULL) {
+    if ((req_uri = wsgiUnquote(httpGetPath(client))) == NULL) {
         goto cleanup;
     }
     if (envPutString(environ, "PATH_INFO", req_uri))
@@ -433,7 +431,6 @@ static PyObject * responseNew(PyTypeObject *type, PyObject *args, PyObject *kwds
 static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
 {
     PyObject *context_obj, *args2, *env, *body_obj;
-    struct httpData *http_data;
 
     if (!PyArg_ParseTuple(args, "O!O!", &PyCObject_Type, &context_obj, &PyDict_Type, &env))
         return -1;
@@ -441,9 +438,9 @@ static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
     self->client = PyCObject_AsVoidPtr(context_obj);
 
     // Build InputStream Object
-    http_data = self->client->protocol_data;
-    body_obj = PyCObject_FromVoidPtr(http_data->body, NULL);
-    if ((args2 = Py_BuildValue("(OOi)", self, body_obj, wstrlen(http_data->body))) == NULL)
+    wstr body = httpGetBody(self->client);
+    body_obj = PyCObject_FromVoidPtr(body, NULL);
+    if ((args2 = Py_BuildValue("(OOi)", self, body_obj, wstrlen(body))) == NULL)
         return -1;
     self->input = PyObject_CallObject((PyObject *)&InputStream_Type, args2);
     Py_DECREF(args2);
@@ -462,7 +459,6 @@ static PyObject * startResponse(struct response *self, PyObject *args)
 {
     PyObject *status, *headers, *exc_info = NULL;
     struct wsgiData *data = self->client->app_private_data;
-    struct httpData *http_data = self->client->protocol_data;
     const char *status_p;
 
     if (!PyArg_ParseTuple(args, "SO!|O:start_response", &status,
@@ -473,7 +469,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     if (exc_info != NULL && exc_info != Py_None) {
         /* If the headers have already been sent, just propagate the
            exception. */
-        if (http_data->headers_sent) {
+        if (ishttpHeaderSended(self->client)) {
             PyObject *type, *value, *tb;
             if (!PyArg_ParseTuple(exc_info, "OOO", &type, &value, &tb))
                 return NULL;
@@ -483,7 +479,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             PyErr_Restore(type, value, tb);
             return NULL;
         }
-    } else if (http_data->res_status != 0) {
+    } else if (ishttpHeaderSended(self->client)) {
         data->err = "headers already set";
         return NULL;
     }
@@ -518,7 +514,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     if ((status_p = PyString_AsString(status)) == NULL)
         return NULL;
 
-    fillResInfo(http_data, (int)strtol(status_p, NULL, 10), &status_p[4]);
+    fillResInfo(self->client, (int)strtol(status_p, NULL, 10), &status_p[4]);
 
     return PyObject_GetAttrString((PyObject *)self, "write");
 }
@@ -527,11 +523,11 @@ static PyObject * startResponse(struct response *self, PyObject *args)
 static PyObject *responseWrite(struct response *self, PyObject *args)
 {
     struct wsgiData *wsgi_data = self->client->app_private_data;
-    struct httpData *http_data = self->client->protocol_data;
+    struct client *c = self->client;
     const char *data;
     int dataLen;
 
-    if (http_data->res_status == 0 && http_data->res_headers == NULL) {
+    if (httpGetResStatus(c) != 0) {
         wsgi_data->err = "write() before start_response()";
         return NULL;
     }
@@ -540,12 +536,12 @@ static PyObject *responseWrite(struct response *self, PyObject *args)
         return NULL;
 
     /* Send headers if necessary */
-    if (!http_data->headers_sent) {
-        if (httpSendHeaders(self->client))
+    if (!ishttpHeaderSended(c)) {
+        if (httpSendHeaders(c))
             return NULL;
     }
 
-    if (httpSendBody(self->client, data, dataLen)) {
+    if (httpSendBody(c, data, dataLen)) {
         return NULL;
     }
 
@@ -651,7 +647,7 @@ static int wsgiSendFileWrapper(struct response *self, FileWrapper *wrapper)
 {
     PyObject *pFileno, *args, *pFD;
     int fd;
-    struct httpData *http_data = self->client->protocol_data;
+    struct client *c = self->client;
 
     /* file-like must have fileno */
     if (!PyObject_HasAttrString((PyObject *)wrapper->filelike, "fileno"))
@@ -678,10 +674,9 @@ static int wsgiSendFileWrapper(struct response *self, FileWrapper *wrapper)
         return -1;
 
     /* Send headers if necessary */
-    if (!http_data->headers_sent) {
+    if (!ishttpHeaderSended(c)) {
         if (httpSendHeaders(self->client))
             return -1;
-        http_data->headers_sent = 1;
     }
 
     if (wsgiSendFile(self->client, fd))
@@ -696,7 +691,7 @@ int wsgiSendResponse(struct response *self, PyObject *result)
     PyObject *iter;
     PyObject *item;
     int ret = 0;
-    struct httpData *http_data = self->client->protocol_data;
+    struct client *c = self->client;
 
     /* Check if it's a FileWrapper */
     if (result->ob_type == &FileWrapper_Type) {
@@ -729,13 +724,12 @@ int wsgiSendResponse(struct response *self, PyObject *result)
             }
 
             /* Send headers if necessary */
-            if (!http_data->headers_sent) {
+            if (!ishttpHeaderSended(c)) {
                 if (httpSendHeaders(self->client)) {
                     ret = -1;
                     Py_DECREF(item);
                     break;
                 }
-                http_data->headers_sent = 1;
             }
 
             if (httpSendBody(self->client, data, dataLen)) {
@@ -752,10 +746,9 @@ int wsgiSendResponse(struct response *self, PyObject *result)
         return -1;
 
     /* Send headers if they haven't been sent at this point */
-    if (!http_data->headers_sent) {
-        if (httpSendHeaders(self->client))
+    if (!ishttpHeaderSended(c)) {
+        if (httpSendHeaders(c))
             return -1;
-        http_data->headers_sent = 1;
     }
     return ret;
 }

@@ -153,14 +153,13 @@ static struct contenttype ContentTypes[] = {
     {"zip", "application/zip"},
 };
 
-static int fillResHeaders(struct client *c)
+static int fillResHeaders(struct client *c, int rep_len)
 {
     int ret;
-    struct httpData *http_data = c->protocol_data;
     struct staticFileData *static_data = c->app_private_data;
     int i;
     char buf[8];
-    ret = snprintf(buf, sizeof(buf), "%d", http_data->response_length);
+    ret = snprintf(buf, sizeof(buf), "%d", rep_len);
     if (ret < 0 || ret > sizeof(buf))
         return -1;
     appendToResHeaders(c, CONTENT_LENGTH, buf);
@@ -213,13 +212,14 @@ int staticFileCall(struct client *c, void *arg)
 {
     wstr path = arg;
     int file_d = open(path, O_RDONLY), ret;
-    struct httpData *http_data = c->protocol_data;
     struct staticFileData *static_data = c->app_private_data;
     off_t len;
     if (file_d == -1) {
+        wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
     }
     if (isRegFile(path) == WHEAT_WRONG) {
+        wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
     }
     if (AllowExtensions && static_data->extension &&
@@ -228,15 +228,17 @@ int staticFileCall(struct client *c, void *arg)
     }
     ret = getFileSize(file_d, &len);
     if (ret == WHEAT_WRONG) {
+        wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
     }
     if (len > MaxFileSize) {
         wheatLog(WHEAT_NOTICE, "file exceed max limit %d", len);
+        wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
     }
 
-    fillResInfo(http_data, 200, "OK");
-    ret = fillResHeaders(c);
+    fillResInfo(c, 200, "OK");
+    ret = fillResHeaders(c, len);
     if (ret == -1)
         goto failed404;
     ret = httpSendHeaders(c);
@@ -297,14 +299,14 @@ void deallocStaticFile()
 
 void *initStaticFileData(struct client *c)
 {
-    struct httpData *http_data = c->protocol_data;
     struct staticFileData *data = malloc(sizeof(*data));
     if (!data)
         return NULL;
     memset(data, 0, sizeof(*data));
-    if (http_data->path) {
-        char *point = strrchr(http_data->path, '.');
-        char *slash = strrchr(http_data->path, '/');
+    wstr path = httpGetPath(c);
+    if (path) {
+        char *point = strrchr(path, '.');
+        char *slash = strrchr(path, '/');
         if (point && slash && slash < point) {
             data->extension = wstrNew(point+1);
             data->filename = wstrNewLen(slash+1, (int)(point-slash-1));
