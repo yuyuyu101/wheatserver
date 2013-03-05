@@ -52,6 +52,8 @@ int wstrCmpNocaseChars(const wstr s1, const char *s2, size_t l2);
 void wstrLower(wstr s);
 void wstrUpper(wstr s);
 int wstrIndex(wstr s, const char t);
+int wstrStartWithChars(const wstr s, const char *s2, size_t len);
+int wstrStartWith(const wstr s, const wstr s2);
 
 /* May modify exists wstr */
 wstr wstrCat(wstr s, const char *t);

@@ -179,6 +179,24 @@ wstr wstrCat(wstr s, const char *t)
     return wstrCatLen(s, t, strlen(t));
 }
 
+int wstrStartWithChars(const wstr s, const char *s2, size_t s2_len)
+{
+    int s_len = wstrlen(s);
+    if (s_len < s2_len)
+        return 0;
+    int r = memcmp(s, s2, s_len);
+    if (r == 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int wstrStartWith(const wstr s, const wstr s2)
+{
+    return wstrStartWithChars(s, s2, wstrlen(s2));
+}
+
 wstr wstrRange(wstr str, int left, int right)
 {
     if (str == NULL)

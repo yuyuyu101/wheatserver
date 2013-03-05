@@ -34,15 +34,11 @@ char *httpDate()
     return buf;
 }
 
-int is_chunked(int response_length, const char *version, int status)
+int isChunked(struct httpData *http_data)
 {
-    if (response_length != 0)
-        return 0;
-    else if (version == PROTOCOL_VERSION[0])
-        return 0;
-    else if (status != 200)
-        return 0;
-    return 0;
+    return http_data->is_chunked && http_data->response_length == 0 &&
+        http_data->protocol_version == PROTOCOL_VERSION[1] &&
+        http_data->res_status == 200;
 }
 
 static const char *connectionField(struct client *c)
@@ -61,49 +57,50 @@ static const char *connectionField(struct client *c)
     return connection;
 }
 
-void fillResInfo(struct httpData *data, int response_length, int status,
-        const char *msg)
+void appendToResHeaders(struct client *c, const char *field,
+        const char *value)
 {
-    data->response_length = response_length;
+    struct httpData *http_data = c->protocol_data;
+    appendToListTail(http_data->res_headers, wstrNew(field));
+    appendToListTail(http_data->res_headers, wstrNew(value));
+}
+
+void fillResInfo(struct httpData *data, int status, const char *msg)
+{
     data->res_status = status;
     data->res_status_msg = wstrNew(msg);
 }
 
-static int insertResHeader(struct client *client)
+static wstr defaultResHeader(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
-    const char *connection = connectionField(client);
     char buf[256];
-    struct list *headers = http_data->res_headers;
+    wstr headers = wstrEmpty();
+    int ret;
     ASSERT(http_data->res_status && http_data->res_status_msg);
 
-    snprintf(buf, 255, "Server: %s\r\n", Server.master_name);
-    if (insertToListHead(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
-    snprintf(buf, 255, "Date: %s\r\n", httpDate());
-    if (insertToListHead(headers, wstrNew(buf)) == NULL)
-        goto cleanup;
-    if (connection) {
-        snprintf(buf, 255, "Connection: %s\r\n", connection);
-        if (insertToListHead(headers, wstrNew(buf)) == NULL)
-            goto cleanup;
-    }
-
-    if (is_chunked(http_data->response_length, http_data->protocol_version, http_data->res_status)) {
-        snprintf(buf, 255, "Transfer-Encoding: chunked\r\n");
-        if (insertToListHead(headers, wstrNew(buf)) == NULL)
-            goto cleanup;
-    }
-
-    snprintf(buf, 255, "%s %d %s\r\n", http_data->protocol_version,
+    ret = snprintf(buf, sizeof(buf), "%s %d %s\r\n", http_data->protocol_version,
             http_data->res_status, http_data->res_status_msg);
-    if (insertToListHead(headers, wstrNew(buf)) == NULL)
+    if (ret < 0 || ret > sizeof(buf))
+        goto cleanup;
+    if ((headers = wstrCatLen(headers, buf, ret)) == NULL)
         goto cleanup;
 
-    return 0;
+    ret = snprintf(buf, 255, "Server: %s\r\n", Server.master_name);
+    if (ret < 0 || ret > sizeof(buf))
+        goto cleanup;
+    if ((headers = wstrCatLen(headers, buf, ret)) == NULL)
+        goto cleanup;
+    ret = snprintf(buf, 255, "Date: %s\r\n", httpDate());
+    if (ret < 0 || ret > sizeof(buf))
+        goto cleanup;
+    if ((headers = wstrCatLen(headers, buf, ret)) == NULL)
+        goto cleanup;
+    return headers;;
 
 cleanup:
-    return -1;
+    wstrFree(headers);
+    return NULL;
 }
 
 
@@ -296,6 +293,7 @@ void *initHttpData()
     data->query_string = NULL;
     data->keep_live = 1;
     data->upgrade = 0;
+    data->is_chunked = 0;
     data->path = NULL;
     data->last_was_value = 0;
     data->last_entry = NULL;
@@ -459,12 +457,11 @@ int httpSendBody(struct client *client, const char *data, size_t len)
             return 0;
         restsend = http_data->response_length - http_data->send;
         tosend = restsend > tosend ? tosend: restsend;
-    }
-    if (is_chunked(http_data->response_length, http_data->protocol_version, http_data->res_status) && tosend == 0)
+    } else if (isChunked(http_data) && tosend == 0)
         return 0;
 
     http_data->send += tosend;
-    ret = WorkerProcess->worker->sendData(client, wstrNewLen(data, (int)len));
+    ret = WorkerProcess->worker->sendData(client, wstrNewLen(data, tosend));
     if (ret == WHEAT_WRONG)
         return -1;
     return 0;
@@ -474,36 +471,62 @@ int httpSendHeaders(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
     int len;
-    int ok = 1;
+    int ok = 0;
 
     if (http_data->headers_sent)
         return 0;
-    insertResHeader(client);
     struct listIterator *liter = listGetIterator(http_data->res_headers, START_HEAD);
     struct listNode *node = NULL;
-    wstr headers = wstrEmpty();
-    while ((node = listNext(liter)) != NULL) {
-        wstr header = listNodeValue(node);
-        headers = wstrCatLen(headers, header, wstrlen(header));
+    char buf[256];
+    int ret, is_connection = 0;
+    wstr field, value;
+    wstr headers = defaultResHeader(client);
+    ASSERT(listLength(http_data->res_headers) % 2 == 0);
+    while (1) {
+        node = listNext(liter);
+        if (node == NULL)
+            break;
+        field = listNodeValue(node);
+        node = listNext(liter);
+        value = listNodeValue(node);
+        ASSERT(field && value);
         if (client->res_buf == NULL) {
-            ok = 0;
             goto cleanup;
         }
+        if (strncasecmp(field, TRANSFER_ENCODING,
+                    sizeof(TRANSFER_ENCODING))) {
+            http_data->is_chunked = 1;
+        } else if (!strncasecmp(field, CONTENT_LENGTH, sizeof(CONTENT_LENGTH))) {
+            http_data->response_length = atoi(value);
+        } else if (!strncasecmp(field, CONNECTION, sizeof(CONNECTION))) {
+            is_connection = 1;
+        }
+        ret = snprintf(buf, sizeof(buf), "%s: %s\r\n", field, value);
+        if (ret == -1 || ret > sizeof(buf))
+            goto cleanup;
+        headers = wstrCatLen(headers, buf, ret);
     }
+    if (!is_connection) {
+        const char *connection = connectionField(client);
+        ret = snprintf(buf, sizeof(buf), "Connection: %s\r\n", connection);
+        if (ret == -1 || ret > sizeof(buf))
+            goto cleanup;
+        if ((headers = wstrCatLen(headers, buf, ret)) == NULL)
+            goto cleanup;
+    }
+
     headers = wstrCatLen(headers, "\r\n", 2);
-    if (client->res_buf == NULL) {
-        ok = 0;
-        goto cleanup;
-    }
 
     len = WorkerProcess->worker->sendData(client, headers);
     if (len < 0) {
-        ok = 0;
         goto cleanup;
     }
     http_data->headers_sent = 1;
+    ok = 1;
 
 cleanup:
+    if (!ok)
+        wstrFree(headers);
     freeListIterator(liter);
     return ok? 0 : -1;
 }
@@ -519,7 +542,8 @@ void sendResponse404(struct client *c)
         "<h1>Not Found</h1>\n"
         "<p>The requested URL was not found on this server</p>\n"
         "</body></html>\n";
-    fillResInfo(http_data, sizeof(body), 404, "NotFound");
+    fillResInfo(http_data, 404, "NotFound");
+    http_data->response_length = sizeof(body);
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
@@ -537,7 +561,8 @@ void sendResponse500(struct client *c)
         "<p>The server encountered an unexpected condition which\n"
         "prevented it from fulfilling the request.</p>\n"
         "</body></html>\n";
-    fillResInfo(http_data, sizeof(body), 500, "Internal Error");
+    fillResInfo(http_data, 500, "Internal Error");
+    http_data->response_length = sizeof(body);
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));

@@ -464,7 +464,6 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     struct wsgiData *data = self->client->app_private_data;
     struct httpData *http_data = self->client->protocol_data;
     const char *status_p;
-    int response_length = 0;
 
     if (!PyArg_ParseTuple(args, "SO!|O:start_response", &status,
                 &PyList_Type, &headers,
@@ -497,26 +496,14 @@ static PyObject * startResponse(struct response *self, PyObject *args)
         return NULL;
     }
 
-    char buf[256];
     while ((item = PyIter_Next(iterator)) != NULL) {
         char *field, *value;
-        int ret;
         if (!PyArg_ParseTuple(item, "ss", &field, &value)) {
             Py_DECREF(item);
             Py_DECREF(iterator);
             return NULL;
         }
-        if (!strcasecmp(field, "content-length"))
-            response_length = atoi(value);
-        else if (!strcasecmp(field, "connection")){
-            if (!strcasecmp(value, "upgrade"))
-                http_data->upgrade = 1;
-        }
-        ret = snprintf(buf, 255, "%s: %s\r\n", field, value);
-        if (ret >= 255) {
-            wheatLog(WHEAT_NOTICE, "may overflow %s", buf);
-        }
-        appendToListTail(http_data->res_headers, wstrNew(buf));
+        appendToResHeaders(self->client, field, value);
         Py_DECREF(item);
     }
 
@@ -531,8 +518,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     if ((status_p = PyString_AsString(status)) == NULL)
         return NULL;
 
-    fillResInfo(http_data, response_length,
-            (int)strtol(status_p, NULL, 10), &status_p[4]);
+    fillResInfo(http_data, (int)strtol(status_p, NULL, 10), &status_p[4]);
 
     return PyObject_GetAttrString((PyObject *)self, "write");
 }

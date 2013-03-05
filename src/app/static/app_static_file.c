@@ -155,16 +155,16 @@ static struct contenttype ContentTypes[] = {
 
 static int fillResHeaders(struct client *c)
 {
-    char buf[256];
     int ret;
     struct httpData *http_data = c->protocol_data;
     struct staticFileData *static_data = c->app_private_data;
     int i;
-    ret = snprintf(buf, 255, "%s: %d\r\n", "Content-Length",
-            http_data->response_length);
-    if (ret == -1)
-        return ret;
-    appendToListTail(http_data->res_headers, wstrNew(buf));
+    char buf[8];
+    ret = snprintf(buf, sizeof(buf), "%d", http_data->response_length);
+    if (ret < 0 || ret > sizeof(buf))
+        return -1;
+    appendToResHeaders(c, CONTENT_LENGTH, buf);
+
     if (static_data->extension && static_data->filename) {
         int size = sizeof(ContentTypes)/sizeof(struct contenttype);
         for (i = 0; i < size; ++i) {
@@ -173,17 +173,9 @@ static int fillResHeaders(struct client *c)
             }
         }
         if (i != size) {
-            ret = snprintf(buf, 255, "%s: %s\r\n", "Content-Type",
-                    ContentTypes[i].mime_type);
-            if (ret == -1)
-                return ret;
-            appendToListTail(http_data->res_headers, wstrNew(buf));
+            appendToResHeaders(c, CONTENT_TYPE, ContentTypes[i].mime_type);
         } else {
-            ret = snprintf(buf, 255, "%s: %s\r\n", "Content-Type",
-                    "application/octet-stream");
-            if (ret == -1)
-                return ret;
-            appendToListTail(http_data->res_headers, wstrNew(buf));
+            appendToResHeaders(c, CONTENT_TYPE, "application/octet-stream");
         }
     }
     return ret;
@@ -243,7 +235,7 @@ int staticFileCall(struct client *c, void *arg)
         goto failed404;
     }
 
-    fillResInfo(http_data, (int)len, 200, "OK");
+    fillResInfo(http_data, 200, "OK");
     ret = fillResHeaders(c);
     if (ret == -1)
         goto failed404;
