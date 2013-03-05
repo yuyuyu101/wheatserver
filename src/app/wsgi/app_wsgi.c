@@ -443,7 +443,6 @@ static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
     // Build InputStream Object
     http_data = self->client->protocol_data;
     body_obj = PyCObject_FromVoidPtr(http_data->body, NULL);
-    printf("%d", wstrlen(http_data->body));
     if ((args2 = Py_BuildValue("(OOi)", self, body_obj, wstrlen(http_data->body))) == NULL)
         return -1;
     self->input = PyObject_CallObject((PyObject *)&InputStream_Type, args2);

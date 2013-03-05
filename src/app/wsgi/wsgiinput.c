@@ -92,7 +92,7 @@ static PyObject *InputStream_read(InputStream *self, PyObject *args)
         return NULL;
 
     if (size == -1)
-        size = self->size;
+        size = 0;
     if (self->pos == self->size || self->size <= 0)
         return PyString_FromString("");
 
@@ -113,7 +113,7 @@ static PyObject *InputStream_readline(InputStream *self, PyObject *args)
     if (self->pos == self->size || self->size <= 0)
         return PyString_FromString("");
     if (size == -1)
-        size = self->size;
+        size = 0;
 
     size = self->size - self->pos > size ? size : self->size - self->pos;
 
