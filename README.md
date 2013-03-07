@@ -4,10 +4,13 @@ wheatserver(Alpha)
 Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
 [uWSGI](http://projects.unbit.it/uwsgi/).
 
+Now supporting WSGI and static file handler.
+
 Feature
 ===========
 
-* Fast: Full C implemented, and discards any module unnecessary.
+* Fast: Full C implemented, and discards any module unnecessary and try to
+avoid to copy data.
 
 * Pluggable: Worker type, protocol implement and application server all can be
 remove and add. You can construct your own worker, application server and
