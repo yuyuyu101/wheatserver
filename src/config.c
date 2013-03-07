@@ -46,6 +46,8 @@ struct configuration configTable[] = {
         NULL,                   INT_FORMAT},
     {"timeout-seconds",   2, unsignedIntValidator, {.val=WHEATSERVER_TIMEOUT},
         (void *)300,            INT_FORMAT},
+    {"mbuf-size",         2, unsignedIntValidator, {.val=WHEAT_MBUF_SIZE},
+        (void *)WHEAT_BUFLIMIT, INT_FORMAT},
 
     {"prealloc-client",   2, unsignedIntValidator, {.val=WHEAT_PREALLOC_CLIENT},
         (void *)WHEAT_PREALLOC_CLIENT_LIMIT, INT_FORMAT},
@@ -102,6 +104,8 @@ void fillServerConfig()
     Server.stat_refresh_seconds = conf->target.val;
     conf++;
     Server.worker_timeout = conf->target.val;
+    conf++;
+    Server.mbuf_size = conf->target.val;
 }
 
 static void extraValidator()

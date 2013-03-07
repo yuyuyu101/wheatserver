@@ -1,15 +1,27 @@
 #include "worker.h"
 
-int syncSendData(struct client *c, wstr data)
+int syncSendData(struct client *c, struct slice *data)
 {
     if (!isClientValid(c)) {
         return -1;
     }
-
-    if (!wstrlen(data))
+    if (!data->len)
         return 0;
+
+    struct slice msg_slice;
+    size_t copyed;
+    size_t need_write = data->len;
+    uint8_t *curr = data->data;
+    do {
+        msgPut(c->res_buf, &msg_slice);
+        copyed = msg_slice.len > need_write ? need_write : msg_slice.len;
+        memcpy(msg_slice.data, curr, copyed);
+        msgSetWritted(c->res_buf, copyed);
+        curr += copyed;
+        need_write -= copyed;
+    } while(need_write > 0);
+
     ssize_t sended = 0;
-    appendToListTail(c->res_buf, data);
     while (isClientNeedSend(c)) {
         sended += clientSendPacketList(c);
         refreshClient(c, Server.cron_time);
@@ -28,13 +40,30 @@ int syncRecvData(struct client *c)
     if (!isClientValid(c)) {
         return -1;
     }
-    ssize_t n = readBulkFrom(c->clifd, &c->buf, 0);
-    if (n >= 0)
-        refreshClient(c, Server.cron_time);
-    else
+    struct slice slice;
+    ssize_t n, total = 0;
+    do {
+        n = msgPut(c->req_buf, &slice);
+        if (n != 0) {
+            c->err = "msg put failed";
+            break;
+        }
+        n = readBulkFrom(c->clifd, &slice);
+        if (n < 0) {
+            c->err = "async RecvData failed";
+            setClientUnvalid(c);
+            break;
+        }
+        total += n;
+        msgSetWritted(c->req_buf, n);
+    } while (n == slice.len);
+    if (msgGetSize(c->req_buf) > Server.max_buffer_size)
         setClientUnvalid(c);
-    return (int)n;
+    refreshClient(c, Server.cron_time);
+
+    return (int)total;
 }
+
 void dispatchRequest(int fd, char *ip, int port)
 {
     struct protocol *ptcol = spotProtocol(ip, port, fd);
@@ -48,12 +77,12 @@ void dispatchRequest(int fd, char *ip, int port)
         if (n == WHEAT_WRONG) {
             goto cleanup;
         }
-        if (wstrlen(c->buf) > stat->stat_buffer_size)
-            stat->stat_buffer_size = wstrlen(c->buf);
+        if (msgGetSize(c->req_buf) > stat->stat_buffer_size)
+            stat->stat_buffer_size = msgGetSize(c->req_buf);
 parser:
         ret = ptcol->parser(c);
         if (ret == WHEAT_WRONG) {
-            wheatLog(WHEAT_NOTICE, "parse http data failed:%s", c->buf);
+            wheatLog(WHEAT_NOTICE, "parse http data failed");
             stat->stat_failed_request++;
             goto cleanup;
         }
@@ -65,8 +94,8 @@ parser:
         goto cleanup;
     }
     stat->stat_total_request++;
-    if (wstrlen(c->buf)) {
-        resetProtocol(c);
+    if (msgCanRead(c->req_buf)) {
+        resetClientCtx(c);
         goto parser;
     }
 

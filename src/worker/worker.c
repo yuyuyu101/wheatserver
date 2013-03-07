@@ -88,9 +88,9 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->protocol = p;
     c->app_private_data = NULL;
     c->app = NULL;
-    c->buf = wstrEmpty();
-    c->res_buf = createList();
-    listSetFree(c->res_buf, (void (*)(void *))wstrFree);
+    c->err = NULL;
+    c->req_buf = msgCreate(Server.mbuf_size);
+    c->res_buf = msgCreate(Server.mbuf_size);
     c->should_close = 0;
     c->valid = 1;
     ASSERT(c->protocol_data);
@@ -101,8 +101,8 @@ void freeClient(struct client *c)
 {
     close(c->clifd);
     wstrFree(c->ip);
-    wstrFree(c->buf);
-    freeList(c->res_buf);
+    msgFree(c->req_buf);
+    msgFree(c->res_buf);
     c->protocol->freeProtocolData(c->protocol_data);
     if (listLength(ClientPool) > 100) {
         appendToListTail(ClientPool, c);
@@ -111,31 +111,33 @@ void freeClient(struct client *c)
     }
 }
 
-void resetProtocol(struct client *c)
+void resetClientCtx(struct client *c)
 {
     if (c->protocol_data)
         c->protocol->freeProtocolData(c->protocol_data);
     c->protocol_data = c->protocol->initProtocolData();
+    msgClean(c->req_buf);
 }
 
 int clientSendPacketList(struct client *c)
 {
-    struct listNode *node = NULL;
-    struct listIterator *iter = listGetIterator(c->res_buf, START_HEAD);
+    struct slice data;
     size_t allsend = 0;
-    while ((node = listNext(iter)) != NULL) {
-        wstr packet = listNodeValue(node);
-        size_t bufpos = 0, totallen = wstrlen(packet);
+    do {
+        msgRead(c->res_buf, &data);
         ssize_t nwritten = 0;
+        allsend = 0;
 
-        while (bufpos < totallen) {
-            nwritten = writeBulkTo(c->clifd, &packet);
+        while (data.len != 0) {
+            nwritten = writeBulkTo(c->clifd, &data);
             if (nwritten <= 0)
                 break;
-            bufpos += nwritten;
+            data.len -= nwritten;
+            data.data += nwritten;
             allsend += nwritten;
         }
 
+        msgSetReaded(c->res_buf, allsend);
         if (nwritten == -1) {
             setClientUnvalid(c);
             break;
@@ -144,10 +146,6 @@ int clientSendPacketList(struct client *c)
         if (nwritten == 0) {
             break;
         }
-        removeListNode(c->res_buf, node);
-    }
-    freeListIterator(iter);
+    } while(allsend == data.len);
     return (int)allsend;
 }
-
-

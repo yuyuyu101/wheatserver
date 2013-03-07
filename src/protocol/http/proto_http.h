@@ -8,10 +8,13 @@
 #define CONTENT_LENGTH    "Content-Length"
 #define CONTENT_TYPE      "Content-Type"
 #define CONNECTION        "Connection"
+#define CHUNKED           "Chunked"
+#define HTTP_CONTINUE     "HTTP/1.1 100 Continue\r\n\r\n"
 
 const wstr httpGetPath(struct client *c);
 const wstr httpGetQueryString(struct client *c);
-const wstr httpGetBody(struct client *c);
+const struct slice *httpGetBodyNext(struct client *c);
+int httpBodyGetSize(struct client *c);
 const char *httpGetUrlScheme(struct client *c);
 const char *httpGetMethod(struct client *c);
 const char *httpGetProtocolVersion(struct client *c);

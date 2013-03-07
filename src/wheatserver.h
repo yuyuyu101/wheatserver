@@ -19,13 +19,14 @@
 #include "dict.h"
 #include "list.h"
 #include "wstr.h"
+#include "slice.h"
 
+#include "debug.h"
 #include "event.h"
 #include "hook.h"
 #include "net.h"
 #include "networking.h"
 #include "sig.h"
-#include "slice.h"
 #include "stats.h"
 #include "util.h"
 #include "version.h"
@@ -45,6 +46,7 @@
 #define WHEAT_PREALLOC_CLIENT_LIMIT   10000
 #define WHEAT_BUFLIMIT                (1024*1024*1024)
 #define WHEAT_ARGS_NO_LIMIT           -1
+#define WHEAT_MBUF_SIZE               (16*1024)
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
@@ -103,6 +105,7 @@ struct globalServer {
     pid_t relaunch_pid;
     int pipe_readfd;
     int pipe_writefd;
+    size_t mbuf_size;
     struct list *workers;
     struct list *master_clients;
     struct list *signal_queue;

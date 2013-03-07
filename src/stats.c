@@ -26,8 +26,10 @@ static int connectWithMaster(struct workerStat *stat)
             strerror(errno), Server.neterr);
         return WHEAT_WRONG;
     }
-    if (stat->master_stat_fd != 0)
+    if (stat->master_stat_fd != 0) {
         close(stat->master_stat_fd);
+        wheatLog(WHEAT_WARNING,"Unable to connect to MASTER: %s %s");
+    }
     stat->master_stat_fd = fd;
 
     return WHEAT_OK;
@@ -36,33 +38,36 @@ static int connectWithMaster(struct workerStat *stat)
 void sendStatPacket()
 {
     struct workerStat *stat = WorkerProcess->stat;
-    if (stat->master_stat_fd <= 0) {
+    if (stat->master_stat_fd == 0) {
         int ret;
         ret = connectWithMaster(WorkerProcess->stat);
         if (ret == WHEAT_WRONG)
             return ;
     }
     char buf[WHEAT_STAT_PACKET_MAX];
-    snprintf(buf, WHEAT_STAT_PACKET_MAX, WHEAT_STAT_SEND_FORMAT,
+    int ret;
+    ret = snprintf(buf, WHEAT_STAT_PACKET_MAX, WHEAT_STAT_SEND_FORMAT,
             WorkerProcess->pid,
             stat->stat_total_connection, stat->stat_total_request,
             stat->stat_timeout_request, stat->stat_failed_request,
             stat->stat_buffer_size, stat->stat_work_time,
             stat->stat_last_send);
-    wstr send = wstrNew(buf);
-    ssize_t nwrite = writeBulkTo(stat->master_stat_fd, &send);
+    if (ret < 0 || ret > WHEAT_STAT_PACKET_MAX)
+        return ;
+    struct slice s;
+    sliceTo(&s, (uint8_t *)buf, ret);
+    ssize_t nwrite = writeBulkTo(stat->master_stat_fd, &s);
     if (nwrite == -1) {
         wheatLog(WHEAT_DEBUG, "Master close connection");
-        stat->master_stat_fd = -1;
-    } else if (wstrlen(send) != 0) {
+        stat->master_stat_fd = 0;
+    } else if (nwrite != s.len) {
         wheatLog(WHEAT_DEBUG,
                 "send statistic info failed, total %d sended %d",
-                wstrlen(send), nwrite);
+                s.len, nwrite);
     } else {
         resetStat(stat);
         stat->stat_last_send = time(NULL);
     }
-    wstrFree(send);
 }
 
 struct workerStat *initWorkerStat(int only_malloc)

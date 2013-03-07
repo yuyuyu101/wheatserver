@@ -3,13 +3,13 @@
 /* Sync worker Area */
 void setupSync();
 void syncWorkerCron();
-int syncSendData(struct client *c, wstr data); // pass `data` ownership to
+int syncSendData(struct client *c, struct slice *data); // pass `data` ownership to
 int syncRecvData(struct client *c);
 
 /* Async worker Area */
 void setupAsync();
 void asyncWorkerCron();
-int asyncSendData(struct client *c, wstr data); // pass `data` ownership to
+int asyncSendData(struct client *c, struct slice *data); // pass `data` ownership to
 int asyncRecvData(struct client *c);
 
 struct worker WorkerTable[] = {

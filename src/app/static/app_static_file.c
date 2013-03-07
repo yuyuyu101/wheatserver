@@ -153,13 +153,13 @@ static struct contenttype ContentTypes[] = {
     {"zip", "application/zip"},
 };
 
-static int fillResHeaders(struct client *c, int rep_len)
+static int fillResHeaders(struct client *c, off_t rep_len)
 {
     int ret;
     struct staticFileData *static_data = c->app_private_data;
     int i;
     char buf[8];
-    ret = snprintf(buf, sizeof(buf), "%d", rep_len);
+    ret = snprintf(buf, sizeof(buf), "%lld", rep_len);
     if (ret < 0 || ret > sizeof(buf))
         return -1;
     appendToResHeaders(c, CONTENT_LENGTH, buf);
@@ -193,15 +193,17 @@ int sendFile(struct client *c, int fd, off_t len)
     }
     size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
         Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
+    char ctx[unit_read];
+    struct slice slice;
+    sliceTo(&slice, (uint8_t *)ctx, unit_read);
     while (send < len) {
         int nread;
         lseek(fd, send, SEEK_SET);
-        wstr ctx = wstrEmpty();
-        nread = readBulkFrom(fd, &ctx, unit_read);
+        nread = readBulkFrom(fd, &slice);
         if (nread <= 0)
             return WHEAT_WRONG;
         send += nread;
-        ret = WorkerProcess->worker->sendData(c, ctx);
+        ret = WorkerProcess->worker->sendData(c, &slice);
         if (ret == -1)
             return WHEAT_WRONG;
     }

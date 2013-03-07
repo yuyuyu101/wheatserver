@@ -1,41 +1,13 @@
 #include "networking.h"
 
 
-/* because readBulkFrom call wstrMakeRoom realloc memory pointer,
- * pass a pointer point pointer is needed.
- * return -1 means `fd` occurs error or closed, it should be closed
+/* return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN */
-int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
+int readBulkFrom(int fd, struct slice *slice)
 {
     ssize_t nread;
-    size_t readlen;
-    wstr buf = *clientbuf;
-    int qblen = wstrlen(buf);
 
-    if (qblen > Server.max_buffer_size) {
-        wheatLog(WHEAT_NOTICE, "buffer size larger than max limit");
-        return WHEAT_WRONG;
-    }
-
-    if (limit == 0) {
-        if (qblen <= WHEAT_IOBUF_LEN)
-            readlen = WHEAT_IOBUF_LEN;
-        else
-            readlen = qblen * 2;
-    } else {
-        readlen = limit;
-    }
-
-    buf = wstrMakeRoom(buf, readlen);
-    if (buf == NULL) {
-        wheatLog(WHEAT_WARNING, "make room failed: %d", readlen);
-        return WHEAT_WARNING;
-    }
-
-    // Important ! buf may changed
-    *clientbuf = buf;
-
-    nread = read(fd, buf+qblen, readlen);
+    nread = read(fd, slice->data, slice->len);
     if (nread == -1) {
         if (errno == EAGAIN) {
             nread = 0;
@@ -47,19 +19,15 @@ int readBulkFrom(int fd, wstr *clientbuf, size_t limit)
         wheatLog(WHEAT_DEBUG, "Peer close file descriptor %d", fd);
         return WHEAT_WRONG;
     }
-    if (nread) {
-        wstrupdatelen(buf, (int)(qblen+nread));
-    }
     return (int)nread;
 }
 
 /* return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN */
-int writeBulkTo(int fd, wstr *clientbuf)
+int writeBulkTo(int fd, struct slice *slice)
 {
-    wstr buf = *clientbuf;
     ssize_t nwritten = 0;
-    nwritten = write(fd, buf, wstrlen(buf));
+    nwritten = write(fd, slice->data, slice->len);
     if (nwritten == -1) {
         if (errno == EAGAIN) {
             nwritten = 0;
@@ -72,11 +40,6 @@ int writeBulkTo(int fd, wstr *clientbuf)
             return WHEAT_WRONG;
         }
     }
-    if (wstrlen(buf) == nwritten) {
-        wstrClear(buf);
-    } else {
-        wstrRange(buf, (int)nwritten, 0);
-    }
     return (int)nwritten;
 }
 
@@ -87,7 +50,10 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
     ssize_t nwritten;
 
     while (bufpos < totallen) {
-        nwritten = writeBulkTo(client->fd, &client->response_buf);
+        struct slice slice;
+        sliceTo(&slice, (uint8_t *)client->response_buf,
+                wstrlen(client->response_buf));
+        nwritten = writeBulkTo(client->fd, &slice);
         if (nwritten <= 0)
             break;
         bufpos += nwritten;

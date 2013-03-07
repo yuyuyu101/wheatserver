@@ -1,7 +1,6 @@
 #include "../application.h"
 #include "app_wsgi.h"
 #include "../static/app_static_file.h"
-#include "../../protocol/http/proto_http.h"
 
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;
@@ -297,8 +296,9 @@ PyObject *createEnviron(struct client *client)
             wstrLower(value);
             if (!strcmp(value, "100-continue")) {
                 // No need to free `h`
-                wstr h = wstrNew("HTTP/1.1 100 Continue\r\n\r\n");
-                WorkerProcess->worker->sendData(client, h);
+                struct slice s;
+                sliceTo(&s, (uint8_t *)HTTP_CONTINUE, sizeof(HTTP_CONTINUE));
+                WorkerProcess->worker->sendData(client, &s);
             }
         } else if (!strcmp(buf, "HTTP_HOST")) {
             if (envPutString(environ, buf, value))
@@ -430,17 +430,14 @@ static PyObject * responseNew(PyTypeObject *type, PyObject *args, PyObject *kwds
 /* Constructor. Accepts the context CObject as its sole argument. */
 static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *context_obj, *args2, *env, *body_obj;
+    PyObject *context_obj, *args2, *env;
 
     if (!PyArg_ParseTuple(args, "O!O!", &PyCObject_Type, &context_obj, &PyDict_Type, &env))
         return -1;
 
     self->client = PyCObject_AsVoidPtr(context_obj);
 
-    // Build InputStream Object
-    wstr body = httpGetBody(self->client);
-    body_obj = PyCObject_FromVoidPtr(body, NULL);
-    if ((args2 = Py_BuildValue("(OOi)", self, body_obj, wstrlen(body))) == NULL)
+    if ((args2 = Py_BuildValue("(O)", self)) == NULL)
         return -1;
     self->input = PyObject_CallObject((PyObject *)&InputStream_Type, args2);
     Py_DECREF(args2);

@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <setjmp.h>
 #include "../wheatserver.h"
+#include "mbuf.h"
 
 #define WORKER_BOOT_ERROR 3
 #define WHEATSERVER_REQ_MAXLEN 8*1024
@@ -46,7 +47,7 @@ struct worker {
      * Caller will lose ownership of `data` in order to avoid big copy,
      * sendData will free `data`
      */
-    int (*sendData)(struct client *, wstr data);
+    int (*sendData)(struct client *, struct slice*);
     int (*recvData)(struct client *);
 };
 
@@ -72,11 +73,13 @@ struct client {
     struct app *app;
     void *app_private_data;
     time_t last_io;
-    int should_close;
-    int valid;       // Intern: used to indicate client fd is unused and
-                     // need closing, only used by worker IO methods.
-    wstr buf;
-    struct list *res_buf;
+    char *err;
+    int should_close; // Used to indicate whether closing client
+    int valid;        // Intern: used to indicate client fd is unused and
+                      // need closing, only used by worker IO methods when
+                      // error happended
+    struct msghdr *req_buf;
+    struct msghdr *res_buf;
 };
 
 #define WHEAT_WORKERS    2
@@ -90,13 +93,13 @@ void freeWorkerProcess(void *worker);
 void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
-void resetProtocol(struct client *c);
+void resetClientCtx(struct client *c);
 int clientSendPacketList(struct client *c);
 
 #define isClientValid(c)     (c)->valid
 #define setClientUnvalid(c)  (c)->valid = 0
-#define isClientNeedSend(c)  (listFirst((c)->res_buf))
-#define isClientNeedParse(c) (listFirst(c)->req_buf))
+#define isClientNeedSend(c)  (msgCanRead((c)->res_buf))
+#define isClientNeedParse(c) (msgCanRead(c)->req_buf))
 #define refreshClient(c, t)  ((c)->last_io = (t))
 
 /* worker's flow:

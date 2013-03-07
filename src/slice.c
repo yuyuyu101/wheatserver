@@ -1,11 +1,10 @@
-#include <stdint.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 
 #include "slice.h"
+#include "debug.h"
 
-struct slice *sliceCreate(const char *data, size_t len)
+struct slice *sliceCreate(uint8_t *data, size_t len)
 {
     struct slice *b = malloc(sizeof(*b));
     if (data == NULL)
@@ -16,7 +15,7 @@ struct slice *sliceCreate(const char *data, size_t len)
     return b;
 }
 
-void sliceTo(struct slice *s, const char *data, size_t len)
+void sliceTo(struct slice *s, uint8_t *data, size_t len)
 {
     if (data == NULL)
         return ;
@@ -37,7 +36,7 @@ void sliceClear(struct slice *b)
 
 void sliceRemvoePrefix(struct slice *b, size_t prefix)
 {
-    assert(prefix < b->len);
+    ASSERT(prefix < b->len);
     b->data += prefix;
     b->len -= prefix;
 }
@@ -50,7 +49,7 @@ int sliceStartWith(struct slice *b, struct slice *s)
 
 int sliceCompare(struct slice *b, struct slice *s)
 {
-    const int min_len = (b->len < s->len) ? b->len : s->len;
+    const size_t min_len = (b->len < s->len) ? b->len : s->len;
     int r = memcmp(b->data, s->data, min_len);
     if (r == 0) {
         if (b->len < s->len)
@@ -68,13 +67,13 @@ int sliceCompare(struct slice *b, struct slice *s)
 int main(int argc, const char *argv[])
 {
     {
-        struct slice *s1 = sliceCreate("abcdefg", 7);
-        struct slice *s2 = sliceCreate("abcd", 4);
-        test_cond("sliceStartWith", sliceStartWith(s1, s2));
+        struct slice *s1 = sliceCreate((uint8_t *)"abcdefg", 7);
+        struct slice *s2 = sliceCreate((uint8_t *)"abcd", 4);
+        test_cond((uint8_t *)"sliceStartWith", sliceStartWith(s1, s2));
         sliceRemvoePrefix(s1, 2);
         test_cond("sliceStartWith not", !sliceStartWith(s1, s2));
         sliceClear(s1);
-        sliceTo(s1, "abcd", 4);
+        sliceTo(s1, (uint8_t *)"abcd", 4);
         test_cond("sliceCompare", !sliceCompare(s1, s2));
     }
     test_report();

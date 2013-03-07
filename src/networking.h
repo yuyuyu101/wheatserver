@@ -6,8 +6,8 @@
 #define WHEAT_IOBUF_LEN 1024 * 4
 
 struct masterClient;
-int readBulkFrom(int fd, wstr *clientbuf, size_t limit);
-int writeBulkTo(int fd, wstr *buf);
+int readBulkFrom(int fd, struct slice *slice);
+int writeBulkTo(int fd, struct slice *clientbuf);
 void replyMasterClient(struct masterClient *c, const char *buf, size_t len);
 ssize_t isClientPreparedWrite(int fd, struct evcenter *center, void *c);
 

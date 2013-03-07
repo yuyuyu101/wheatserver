@@ -7,7 +7,6 @@ static struct list *Clients = NULL;
 
 static void cleanRequest(struct client *c)
 {
-    close(c->clifd);
     deleteEvent(WorkerCenter, c->clifd, EVENT_READABLE);
     deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
     struct listNode *node = searchListKey(Clients, c);
@@ -66,25 +65,28 @@ static void clientsCron()
             cleanRequest(c);
             continue;
         }
-
-        if ((wstrlen(c->buf) > WHEAT_IOBUF_LEN && idletime > 2) ||
-                (wstrlen(c->buf) > Server.max_buffer_size / 2)) {
-            if (wstrfree(c->buf) > 1024) {
-                wstrRemoveFreeSpace(c->buf);
-                continue;
-            }
-        }
     }
 }
 
-int asyncSendData(struct client *c, wstr data)
+int asyncSendData(struct client *c, struct slice *data)
 {
     if (!isClientValid(c))
         return -1;
-    if (!wstrlen(data))
+    if (!data->len)
         return 0;
 
-    appendToListTail(c->res_buf, data);
+    struct slice msg_slice;
+    size_t copyed;
+    size_t need_write = data->len;
+    uint8_t *curr = data->data;
+    do {
+        msgPut(c->res_buf, &msg_slice);
+        copyed = msg_slice.len > need_write ? need_write : msg_slice.len;
+        memcpy(msg_slice.data, curr, copyed);
+        msgSetWritted(c->res_buf, copyed);
+        need_write -= copyed;
+    } while(need_write > 0);
+
     ssize_t sended = clientSendPacketList(c);
     refreshClient(c, Server.cron_time);
     if (!isClientValid(c)) {
@@ -105,16 +107,29 @@ int asyncRecvData(struct client *c)
     if (!isClientValid(c))
         return -1;
     ssize_t n;
+    size_t total = 0;
+    struct slice slice;
     // Because os IO notify only once if you don't read all data within this
     // buffer
     do {
-        n = readBulkFrom(c->clifd, &c->buf, 0);
-    } while (n >= WHEAT_IOBUF_LEN);
-    if (n >= 0)
-        refreshClient(c, Server.cron_time);
-    else
+        n = msgPut(c->req_buf, &slice);
+        if (n != 0) {
+            c->err = "msg put failed";
+            break;
+        }
+        n = readBulkFrom(c->clifd, &slice);
+        if (n < 0) {
+            c->err = "async RecvData failed";
+            setClientUnvalid(c);
+            break;
+        }
+        total += n;
+        msgSetWritted(c->req_buf, n);
+    } while (n == slice.len);
+    if (msgGetSize(c->req_buf) > Server.max_buffer_size)
         setClientUnvalid(c);
-    return n;
+    refreshClient(c, Server.cron_time);
+    return (int)total;
 }
 
 void asyncWorkerCron()
@@ -155,17 +170,17 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         cleanRequest(c);
         return ;
     }
-    if (wstrlen(c->buf) > stat->stat_buffer_size)
-        stat->stat_buffer_size = wstrlen(c->buf);
-    while (ret == 0 && wstrlen(c->buf)) {
+    if (msgGetSize(c->req_buf) > stat->stat_buffer_size)
+        stat->stat_buffer_size = msgGetSize(c->req_buf);
+    while (msgCanRead(c->req_buf)) {
         ret = c->protocol->parser(c);
         if (ret == -1) {
-            wheatLog(WHEAT_NOTICE, "parse http data failed:%s", c->buf);
+            wheatLog(WHEAT_NOTICE, "parse http data failed");
             break;
         } else if (ret == 0) {
             stat->stat_total_request++;
             ret = c->protocol->spotAppAndCall(c);
-            resetProtocol(c);
+            resetClientCtx(c);
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
                 c->should_close = 1;
@@ -173,7 +188,6 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
                 break;
             }
         } else if (ret == 1) {
-            return ;
         }
     }
     tryCleanRequest(c);

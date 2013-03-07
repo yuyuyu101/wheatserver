@@ -2,8 +2,9 @@
 #define WHEATSERVER_UTIL_H
 
 /* Hash Type Dict */
-struct dictType wstrDictType;
+struct dictType;
 struct configuration;
+extern struct dictType wstrDictType;
 
 void nonBlockCloseOnExecPipe(int *fd0, int *fd1);
 
@@ -13,10 +14,6 @@ int unsignedIntValidator(struct configuration *conf, const char *key, const char
 int enumValidator(struct configuration *conf, const char *key, const char *val);
 int boolValidator(struct configuration *conf, const char *key, const char *val);
 
-/* Assert */
-void wheat_stacktrace(int skip_count);
-void wheat_assert(const char *cond, const char *file, int line, int panic);
-
 int daemonize(int coredump);
 void createPidFile();
 void setProctitle(const char *title);
@@ -25,15 +22,6 @@ int isRegFile(const char *path);
 int fromSameParentDir(wstr left, wstr right);
 
 void setTimer(int milliseconds);
-
-#define ASSERT(_x) do {                            \
-    if (!(_x)) {                                   \
-        wheat_assert(#_x, __FILE__, __LINE__, 1);  \
-    }                                              \
-} while (0)
-
-#endif
-
 
 /* Check if we can use setproctitle().
  * BSD systems have support for it, we provide an implementation for
@@ -46,3 +34,5 @@ void setTimer(int milliseconds);
 #define USE_SETPROCTITLE
 void setproctitle(const char *fmt, ...);
 #endif
+#endif
+

@@ -23,6 +23,7 @@ void initGlobalServerConfig()
     Server.stat_addr = NULL;
     Server.stat_port = WHEAT_STATS_PORT;
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
+    Server.mbuf_size = WHEAT_MBUF_SIZE;
     Server.aggregate_workers_stat = initWorkerStat(1);
     Server.master_stat = initMasterStat();
     initHookCenter();
@@ -316,11 +317,16 @@ static ssize_t processCommand(struct masterClient *c)
 static void commandParse(struct evcenter *center, int fd, void *client_data, int mask)
 {
     struct masterClient *client = client_data;
-    ssize_t nread = readBulkFrom(fd, &client->request_buf, 0);
+    struct slice slice;
+    client->request_buf = wstrMakeRoom(client->request_buf, 512);
+    sliceTo(&slice, (uint8_t *)client->request_buf+wstrlen(client->request_buf),
+            wstrfree(client->request_buf));
+    ssize_t nread = readBulkFrom(fd, &slice);
     if (nread == -1) {
         freeMasterClient(client);
         return ;
     }
+    wstrupdatelen(client->request_buf, nread);
     while (wstrlen(client->request_buf)) {
         int start, end;
         int count = 0;

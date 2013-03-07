@@ -6,9 +6,10 @@ APP_SOURCES = app/application.c \
 			  app/static/app_static_file.c 
 PROTO_SOURCES =  protocol/protocol.c \
 				 protocol/http/http_parser.c protocol/http/proto_http.c
-WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c
+WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c \
+				 worker/mbuf.c
 SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c \
-		  util.c register.c stats.c event.c setproctitle.c
+		  util.c register.c stats.c event.c setproctitle.c slice.c debug.c
 SOURCES += $(APP_SOURCES)
 SOURCES += $(PROTO_SOURCES)
 SOURCES += $(WORKER_SOURCES)
@@ -25,7 +26,7 @@ PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.s
 EXTRA ?=  
 CFLAGS = -O0 -Wall -g $(EXTRA)
 
-TESTS = test_wstr test_list test_dict test_slice
+TESTS = test_wstr test_list test_dict test_slice test_mbuf
 
 all: wheatserver wheatworker
 
@@ -66,6 +67,10 @@ test_dict: dict.c dict.h
 test_slice: slice.c slice.h
 	$(CC) -o $@ slice.c -DSLICE_TEST_MAIN
 	./test_slice
+
+test_mbuf: worker/mbuf.c worker/mbuf.h slice.c slice.h
+	$(CC) -o $@ worker/mbuf.c slice.c -DMBUF_TEST_MAIN
+	./test_mbuf
 
 .PHONY: clean
 clean:

@@ -3,11 +3,20 @@
 extern struct app appTable[];
 static FILE *AccessFp = NULL;
 static struct http_parser_settings HttpPaserSettings;
+#define WHEAT_BODY_LEN 10
 
 struct staticHandler {
     wstr abs_path;
     wstr root;
     wstr static_dir;
+};
+
+struct httpBody {
+    struct slice *body;
+    struct slice *curr_body;
+    struct slice *end_body;
+    int body_len;
+    int slice_len;
 };
 
 struct httpData {
@@ -23,7 +32,7 @@ struct httpData {
     // Read only
     wstr query_string;
     wstr path;
-    wstr body;
+    struct httpBody body;
     int keep_live;
     int headers_sent;
     const char *url_scheme;
@@ -92,10 +101,20 @@ const wstr httpGetPath(struct client *c)
     return data->path;
 }
 
-const wstr httpGetBody(struct client *c)
+const struct slice *httpGetBodyNext(struct client *c)
 {
     struct httpData *data = c->protocol_data;
-    return data->body;
+    struct slice *s = data->body.curr_body;
+    if (s == data->body.end_body)
+        return NULL;
+    data->body.curr_body++;
+    return s;
+}
+
+int httpBodyGetSize(struct client *c)
+{
+    struct httpData *data = c->protocol_data;
+    return data->body.body_len;
 }
 
 struct dict *httpGetReqHeaders(struct client *c)
@@ -122,6 +141,21 @@ int isChunked(struct httpData *http_data)
         http_data->response_length == 0 &&
         http_data->protocol_version == PROTOCOL_VERSION[1] &&
         http_data->res_status == 200;
+}
+
+static int enlargeHttpBody(struct httpBody *body)
+{
+    size_t curr = body->curr_body - body->body, end = body->end_body - body->body;
+    if (body->slice_len == 0){
+        body->slice_len = WHEAT_BODY_LEN;
+    } else
+        body->slice_len *= 2;
+    body->body = realloc(body->body, sizeof(struct slice)*body->slice_len);
+    if (body->body == NULL)
+        return -1;
+    body->curr_body = body->body + curr;
+    body->end_body = body->body + end;
+    return 0;
 }
 
 static const char *connectionField(struct client *c)
@@ -285,13 +319,18 @@ int on_header_value(http_parser *parser, const char *at, size_t len)
 int on_body(http_parser *parser, const char *at, size_t len)
 {
     struct httpData *data = parser->data;
-    data->body = wstrCatLen(data->body, at, (int)len);
-    if (data->body == NULL)
-        return 1;
-    else
-        return 0;
+    struct httpBody *body = &data->body;
+    if (body->end_body == body->body + body->slice_len) {
+        int ret = enlargeHttpBody(&data->body);
+        if (ret == -1)
+            return 1;
+        body = &data->body;
+    }
+    sliceTo(body->end_body, (uint8_t *)at, len);
+    body->end_body++;
+    body->body_len += len;
+    return 0;
 }
-
 
 int on_header_complete(http_parser *parser)
 {
@@ -326,20 +365,27 @@ int on_url(http_parser *parser, const char *at, size_t len)
 int parseHttp(struct client *client)
 {
     size_t nparsed;
-    size_t recved = wstrlen(client->buf);
+    struct slice slice;
+    msgRead(client->req_buf, &slice);
     struct httpData *http_data = client->protocol_data;
 
-    nparsed = http_parser_execute(http_data->parser, &HttpPaserSettings, client->buf, recved);
+    nparsed = http_parser_execute(http_data->parser, &HttpPaserSettings, (const char *)slice.data, slice.len);
+
+    if (nparsed != slice.len) {
+        /* Handle error. Usually just close the connection. */
+        wheatLog(WHEAT_WARNING, "parseHttp() nparsed %d != recved %d", nparsed, slice.len);
+        return WHEAT_WRONG;
+    }
+    msgSetReaded(client->req_buf, nparsed);
 
     if (http_data->parser->upgrade) {
         /* handle new protocol */
-        wheatLog(WHEAT_WARNING, "parseHttp() handle new protocol: %s", client->buf);
+        wheatLog(WHEAT_WARNING, "parseHttp() handle new protocol");
         if (http_data->parser->http_minor == 0)
             http_data->upgrade = 1;
         else
             return WHEAT_WRONG;
     }
-    wstrRange(client->buf, (int)nparsed, 0);
 
     if (http_data->complete) {
         http_data->method = http_method_str(http_data->parser->method);
@@ -348,11 +394,6 @@ int parseHttp(struct client *client)
         else
             http_data->protocol_version = PROTOCOL_VERSION[1];
         return WHEAT_OK;
-    }
-    if (nparsed != recved) {
-        /* Handle error. Usually just close the connection. */
-        wheatLog(WHEAT_WARNING, "parseHttp() nparsed %d != recved %d: %s", nparsed, recved, client->buf);
-        return WHEAT_WRONG;
     }
     if (http_data->parser->http_errno) {
         wheatLog(
@@ -369,7 +410,13 @@ int parseHttp(struct client *client)
 void *initHttpData()
 {
     struct httpData *data = malloc(sizeof(struct httpData));
+    if (!data)
+        return NULL;
     data->parser = malloc(sizeof(struct http_parser));
+    if (!data->parser) {
+        free(data);
+        return NULL;
+    }
     data->parser->data = data;
     http_parser_init(data->parser, HTTP_REQUEST);
     data->req_headers = dictCreate(&wstrDictType);
@@ -379,12 +426,18 @@ void *initHttpData()
     data->upgrade = 0;
     data->is_chunked_in_header = 0;
     data->path = NULL;
+    memset(&data->body, 0, sizeof(data->body));
+    int ret = enlargeHttpBody(&data->body);
+    if (ret == -1) {
+        free(data);
+        free(data->parser);
+        return NULL;
+    }
     data->last_was_value = 0;
     data->last_entry = NULL;
     data->complete = 0;
     data->method = NULL;
     data->protocol_version = NULL;
-    data->body = wstrEmpty();
     data->res_status = 0;
     data->res_status_msg = NULL;
     data->response_length = 0;
@@ -392,9 +445,7 @@ void *initHttpData()
     listSetFree(data->res_headers, (void (*)(void *))wstrFree);
     data->headers_sent = 0;
     data->send = 0;
-    if (data && data->parser)
-        return data;
-    return NULL;
+    return data;
 }
 
 void freeHttpData(void *data)
@@ -403,12 +454,12 @@ void freeHttpData(void *data)
     if (d->req_headers) {
         dictRelease(d->req_headers);
     }
-    wstrFree(d->body);
     wstrFree(d->query_string);
     free(d->parser);
     wstrFree(d->res_status_msg);
     wstrFree(d->path);
     freeList(d->res_headers);
+    free(d->body.body);
     free(d);
 }
 
@@ -534,6 +585,7 @@ int httpSendBody(struct client *client, const char *data, size_t len)
     struct httpData *http_data = client->protocol_data;
     size_t tosend = len, restsend;
     ssize_t ret;
+    struct slice slice;
     if (!len)
         return 0;
     if (http_data->response_length != 0) {
@@ -541,11 +593,12 @@ int httpSendBody(struct client *client, const char *data, size_t len)
             return 0;
         restsend = http_data->response_length - http_data->send;
         tosend = restsend > tosend ? tosend: restsend;
-    } else if (isChunked(http_data) && tosend == 0)
+    } else if (isChunked(http_data))
         return 0;
 
     http_data->send += tosend;
-    ret = WorkerProcess->worker->sendData(client, wstrNewLen(data, tosend));
+    sliceTo(&slice, (uint8_t *)data, tosend);
+    ret = WorkerProcess->worker->sendData(client, &slice);
     if (ret == WHEAT_WRONG)
         return -1;
     return 0;
@@ -577,9 +630,10 @@ int httpSendHeaders(struct client *client)
         if (client->res_buf == NULL) {
             goto cleanup;
         }
-        if (strncasecmp(field, TRANSFER_ENCODING,
+        if (!strncasecmp(field, TRANSFER_ENCODING,
                     sizeof(TRANSFER_ENCODING))) {
-            http_data->is_chunked_in_header = 1;
+            if (!strncasecmp(value, CHUNKED, sizeof(CHUNKED)))
+                http_data->is_chunked_in_header = 1;
         } else if (!strncasecmp(field, CONTENT_LENGTH, sizeof(CONTENT_LENGTH))) {
             http_data->response_length = atoi(value);
         } else if (!strncasecmp(field, CONNECTION, sizeof(CONNECTION))) {
@@ -600,8 +654,10 @@ int httpSendHeaders(struct client *client)
     }
 
     headers = wstrCatLen(headers, "\r\n", 2);
+    struct slice slice;
+    sliceTo(&slice, (uint8_t *)headers, wstrlen(headers));
 
-    len = WorkerProcess->worker->sendData(client, headers);
+    len = WorkerProcess->worker->sendData(client, &slice);
     if (len < 0) {
         goto cleanup;
     }
@@ -609,8 +665,7 @@ int httpSendHeaders(struct client *client)
     ok = 1;
 
 cleanup:
-    if (!ok)
-        wstrFree(headers);
+    wstrFree(headers);
     freeListIterator(liter);
     return ok? 0 : -1;
 }

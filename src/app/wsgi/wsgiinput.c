@@ -1,14 +1,13 @@
 #include <Python.h>
+#include "../../slice.h"
 #include "app_wsgi.h"
 
 /* Find occurrence of a character within our buffers */
-static int InputStream_findChar(InputStream *self, int start, int c)
+static int InputStream_findChar(InputStream *self, struct slice *s, int c)
 {
-    const char *data = &self->req_data[start];
-
-    char *found = memchr(data, c, self->size-start);
+    uint8_t *found = memchr(s->data, c, s->len);
     if (found != NULL) {
-        return (int)(found - data);
+        return (int)(found - s->data);
     }
 
     return -1;
@@ -16,25 +15,29 @@ static int InputStream_findChar(InputStream *self, int start, int c)
 
 /* Consume characters between self->pos and newPos, returning it as a
    new Python string. */
-static PyObject *InputStream_consume(InputStream *self, int new_pos)
+static PyObject *InputStream_consume(InputStream *self, int size)
 {
     PyObject *result;
-    int mem_size = new_pos - self->pos;
     char *data;
-    if (!mem_size)
+    size_t total = 0;
+
+    if (size <= 0 || !self->curr)
         return PyString_FromString("");
-
-    result = PyString_FromStringAndSize(NULL, mem_size);
-    if (result == NULL)
-        return NULL;
-
+    result = PyString_FromStringAndSize(NULL, size);
     data = PyString_AS_STRING(result);
-
-    memcpy(data, self->req_data+self->pos, mem_size);
-
-    self->pos += mem_size;
-
-    /* Free fully-consumed chunks */
+    do {
+        if (self->pos >= self->curr->len) {
+            self->curr = httpGetBodyNext(self->response->client);
+            self->pos = 0;
+        }
+        size_t remaining = self->curr->len - self->pos;
+        size_t copyed = size > remaining ? remaining : size;
+        memcpy(data+total, self->curr->data+self->pos, copyed);
+        size -= copyed;
+        total += copyed;
+        self->pos += copyed;
+    } while(size > 0);
+    self->readed += size;
     return result;
 }
 
@@ -57,8 +60,7 @@ static PyObject *InputStream_new(PyTypeObject *type, PyObject *args, PyObject *k
     if (self != NULL) {
         self->response = NULL;
         self->pos = 0;
-        self->size = 0;
-        self->req_data = NULL;
+        self->readed = 0;
     }
 
     return (PyObject *)self;
@@ -69,17 +71,13 @@ static PyObject *InputStream_new(PyTypeObject *type, PyObject *args, PyObject *k
 static int InputStream_init(InputStream *self, PyObject *args, PyObject *kwds)
 {
     struct response *response;
-    PyObject *body_obj;
-    int size;
 
-    if (!PyArg_ParseTuple(args, "O!O!i", &responseType, &response, &PyCObject_Type, &body_obj, &size))
+    if (!PyArg_ParseTuple(args, "O!", &responseType, &response))
         return -1;
-    char *body = PyCObject_AsVoidPtr(body_obj);
 
     Py_INCREF(response);
     self->response = response;
-    self->req_data = body;
-    self->size = size;
+    self->curr = httpGetBodyNext(response->client);
     return 0;
 }
 
@@ -87,47 +85,37 @@ static int InputStream_init(InputStream *self, PyObject *args, PyObject *kwds)
 static PyObject *InputStream_read(InputStream *self, PyObject *args)
 {
     int size = -1;
+    int remaining;
 
     if (!PyArg_ParseTuple(args, "|i:read", &size))
         return NULL;
 
-    if (size == -1)
-        size = 0;
-    if (self->pos == self->size || self->size <= 0)
+    if (size <= 0 || !self->curr)
         return PyString_FromString("");
 
-    size = self->size - self->pos > size ? size : self->size - self->pos;
+    remaining = httpBodyGetSize(self->response->client) - self->readed;
+    size = remaining > size ? size : remaining;
 
-    return InputStream_consume(self, self->pos+size);
+    return InputStream_consume(self, size);
 }
 
 /* readline() implementation. Supports "size" argument not required by
    WSGI spec (but now required by Python 2.5's cgi module) */
 static PyObject *InputStream_readline(InputStream *self, PyObject *args)
 {
-    int size = -1, start, i, new_pos;
+    int size = -1;
+    size_t remaining;
 
     if (!PyArg_ParseTuple(args, "|i:readline", &size))
         return NULL;
 
-    if (self->pos == self->size || self->size <= 0)
+    if (size <= 0)
         return PyString_FromString("");
-    if (size == -1)
-        size = 0;
 
-    size = self->size - self->pos > size ? size : self->size - self->pos;
+    remaining = self->curr->len - self->pos + httpBodyGetSize(self->response->client);
+    size = remaining > size ? size : remaining;
 
-    start = self->pos;
-    /* Find newline */
-    i = InputStream_findChar(self, start, '\n');
-    if (i < 0) {
-        new_pos = self->pos + size;
-    } else {
-        /* Trim line, if necessary */
-        new_pos = size < i+1 ? size : i+1;
-    }
-
-    return InputStream_consume(self, new_pos);
+    return InputStream_consume(self, size);
 }
 
 /* readlines() implementation. Supports "hint" argument. */

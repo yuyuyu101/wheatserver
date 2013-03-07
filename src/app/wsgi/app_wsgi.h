@@ -3,6 +3,8 @@
 /* ========== wsgi callback ========== */
 #include <Python.h>
 #include "../../wstr.h"
+#include "../../slice.h"
+#include "../../protocol/http/proto_http.h"
 
 struct client;
 
@@ -25,8 +27,9 @@ typedef struct {
 typedef struct {
     PyObject_HEAD
     struct response *response;
-    int pos, size;
-    const char *req_data;
+    size_t readed;
+    const struct slice *curr;
+    int pos;
 } InputStream;
 
 struct wsgiData {
