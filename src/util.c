@@ -263,14 +263,6 @@ void createPidFile()
     }
 }
 
-
-void setProctitle(const char *title)
-{
-    setproctitle("wheatserver: %s %s:%d", title,
-            Server.bind_addr ? Server.bind_addr : "*",
-            Server.port);
-}
-
 void setTimer(int milliseconds)
 {
     struct itimerval it;
@@ -283,14 +275,15 @@ void setTimer(int milliseconds)
     setitimer(ITIMER_REAL, &it, NULL);
 }
 
-int getFileSize(int fd, off_t *len)
+int getFileSizeAndMtime(int fd, off_t *len, time_t *m_time)
 {
     ASSERT(fd > 0);
     struct stat stat;
     int ret = fstat(fd, &stat);
     if (ret == -1)
         return WHEAT_WRONG;
-    *len = stat.st_size;
+    if (len) *len = stat.st_size;
+    if (m_time) *m_time = stat.st_mtime;
     return WHEAT_OK;
 }
 
@@ -310,23 +303,3 @@ int fromSameParentDir(wstr parent, wstr child)
         return 0;
     return memcmp(parent, child, wstrlen(parent)) == 0;
 }
-
-#ifdef __APPLE__
-/* OS X */
-#include <sys/socket.h>
-#include <sys/types.h>
-ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
-    if (sendfile(in_fd, out_fd, 0, &len, NULL, 0) == -1)
-        return -1;
-    return len;
-}
-#endif
-#ifdef __linux
-/* Linux */
-#include <sys/sendfile.h>
-
-ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
-    return sendfile(out_fd, in_fd, NULL, len);
-}
-
-#endif

@@ -33,11 +33,9 @@ void workerProcessCron()
 static struct list *createAndFillPool()
 {
     struct list *l = createList();
-    struct configuration *conf = getConfiguration("prealloc-client");
     int i = 0;
-    ASSERT(conf);
     ASSERT(l);
-    for (; i < conf->target.val; ++i) {
+    for (; i < 120; ++i) {
         struct client *c = malloc(sizeof(*c));
         appendToListTail(l, c);
     }
@@ -158,8 +156,7 @@ int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset)
         return WHEAT_WRONG;
     }
     if (len == 0) {
-        if (getFileSize(fd, &len) == WHEAT_WRONG)
-            return WHEAT_WRONG;
+        return WHEAT_WRONG;
     }
     size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
         Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;

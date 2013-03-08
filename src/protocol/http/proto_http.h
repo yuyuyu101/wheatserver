@@ -8,6 +8,8 @@
 #define CONTENT_LENGTH    "Content-Length"
 #define CONTENT_TYPE      "Content-Type"
 #define CONNECTION        "Connection"
+#define LAST_MODIFIED     "Last-Modified"
+#define IF_MODIFIED_SINCE "If-Modified-Since"
 #define CHUNKED           "Chunked"
 #define HTTP_CONTINUE     "HTTP/1.1 100 Continue\r\n\r\n"
 
@@ -22,7 +24,8 @@ struct dict *httpGetReqHeaders(struct client *c);
 int ishttpHeaderSended(struct client *c);
 int httpGetResStatus(struct client *c);
 void parserForward(wstr value, wstr *h, wstr *p);
-char *httpDate();
+int convertHttpDate(time_t date, char *buf, size_t len);
+time_t fromHttpDate(char *buf);
 int httpSendBody(struct client *client, const char *data, size_t len);
 void fillResInfo(struct client *c, int status, const char *msg);
 int httpSendHeaders(struct client *client);

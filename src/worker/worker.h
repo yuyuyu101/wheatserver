@@ -95,7 +95,7 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void resetClientCtx(struct client *c);
 int clientSendPacketList(struct client *c);
-int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset);
+int sendClientFile(struct client *c, int fd, off_t len);
 
 #define isClientValid(c)     (c)->valid
 #define setClientUnvalid(c)  (c)->valid = 0

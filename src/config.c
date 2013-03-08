@@ -49,11 +49,10 @@ struct configuration configTable[] = {
     {"mbuf-size",         2, unsignedIntValidator, {.val=WHEAT_MBUF_SIZE},
         (void *)WHEAT_BUFLIMIT, INT_FORMAT},
 
-    {"prealloc-client",   2, unsignedIntValidator, {.val=WHEAT_PREALLOC_CLIENT},
-        (void *)WHEAT_PREALLOC_CLIENT_LIMIT, INT_FORMAT},
-
     // Http
     {"access-log",        2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"document-root",  2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
 
     // WSGI Configuration
@@ -65,8 +64,6 @@ struct configuration configTable[] = {
         NULL,                   STRING_FORMAT},
 
     // Static File Configuration
-    {"static-file-root",  2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
     {"static-file-dir",   2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
     {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_FILE_LIMIT},

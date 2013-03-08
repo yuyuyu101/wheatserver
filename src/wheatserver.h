@@ -26,6 +26,7 @@
 #include "hook.h"
 #include "net.h"
 #include "networking.h"
+#include "portable.h"
 #include "sig.h"
 #include "stats.h"
 #include "util.h"

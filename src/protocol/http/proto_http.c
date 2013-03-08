@@ -59,14 +59,31 @@ const char *PROTOCOL_VERSION[] = {
     "HTTP/1.1"
 };
 
+int convertHttpDate(time_t date, char *buf, size_t len)
+{
+    struct tm tm = *localtime(&date);
+    long ret = strftime(buf, len, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    if (ret < 0 || ret > len)
+        return -1;
+    return 0;
+}
+
+time_t fromHttpDate(char *buf)
+{
+    struct tm tm;
+    char *ret = strptime(buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    if (ret == NULL)
+        return -1;
+    return mktime(&tm);
+}
+
 char *httpDate()
 {
     static char buf[255];
     static time_t now = 0;
     if (now != Server.cron_time || now == 0) {
         now = Server.cron_time;
-        struct tm tm = *gmtime(&now);
-        strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S %Z", &tm);
+        convertHttpDate(now, buf, sizeof(buf));
     }
     return buf;
 }
@@ -490,7 +507,7 @@ void initHttp()
 
     AccessFp = openAccessLog();
     memset(&StaticPathHandler, 0 , sizeof(struct staticHandler));
-    conf1 = getConfiguration("static-file-root");
+    conf1 = getConfiguration("document-root");
     conf2 = getConfiguration("static-file-dir");
     if (conf1->target.ptr && conf2->target.ptr) {
         StaticPathHandler.abs_path = wstrNew(conf1->target.ptr);

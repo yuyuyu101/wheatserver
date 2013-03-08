@@ -9,6 +9,7 @@
 
 static unsigned int MaxFileSize = WHEAT_MAX_BUFFER_SIZE;
 static struct dict *AllowExtensions = NULL;
+static wstr IfModifiedSince = NULL;
 
 struct contenttype {
     const char *extension;
@@ -153,16 +154,26 @@ static struct contenttype ContentTypes[] = {
     {"zip", "application/zip"},
 };
 
-static int fillResHeaders(struct client *c, off_t rep_len)
+static int fillResHeaders(struct client *c, off_t rep_len, time_t m_time)
 {
     int ret;
     struct staticFileData *static_data = c->app_private_data;
     int i;
-    char buf[8];
-    ret = snprintf(buf, sizeof(buf), "%lld", rep_len);
-    if (ret < 0 || ret > sizeof(buf))
-        return -1;
-    appendToResHeaders(c, CONTENT_LENGTH, buf);
+    char buf[50];
+
+    if (rep_len != 0) {
+        ret = snprintf(buf, sizeof(buf), "%lld", rep_len);
+        if (ret < 0 || ret > sizeof(buf))
+            return -1;
+        appendToResHeaders(c, CONTENT_LENGTH, buf);
+    }
+
+    if (m_time != 0) {
+        ret = convertHttpDate(m_time, buf, sizeof(buf));
+        if (ret < 0)
+            return -1;
+        appendToResHeaders(c, LAST_MODIFIED, buf);
+    }
 
     if (static_data->extension && static_data->filename) {
         int size = sizeof(ContentTypes)/sizeof(struct contenttype);
@@ -187,6 +198,7 @@ int staticFileCall(struct client *c, void *arg)
     int file_d = open(path, O_RDONLY), ret;
     struct staticFileData *static_data = c->app_private_data;
     off_t len;
+    time_t m_time;
     if (file_d == -1) {
         wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
@@ -199,7 +211,7 @@ int staticFileCall(struct client *c, void *arg)
             !dictFetchValue(AllowExtensions, static_data->extension)) {
         goto failed404;
     }
-    ret = getFileSize(file_d, &len);
+    ret = getFileSizeAndMtime(file_d, &len, &m_time);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
@@ -210,10 +222,26 @@ int staticFileCall(struct client *c, void *arg)
         goto failed404;
     }
 
+    wstr modified = dictFetchValue(httpGetReqHeaders(c), IfModifiedSince);
+    if (modified != NULL) {
+        char buf[wstrlen(modified)];
+        memcpy(buf, modified, wstrlen(modified));
+        time_t client_m_time = fromHttpDate(buf);
+        if (m_time <= client_m_time) {
+            fillResInfo(c, 304, "Not Changed");
+            ret = fillResHeaders(c, 0, 0);
+            if (ret == -1)
+                goto failed;
+            ret = httpSendHeaders(c);
+            if (ret == -1)
+                goto failed;
+            return WHEAT_OK;
+        }
+    }
     fillResInfo(c, 200, "OK");
-    ret = fillResHeaders(c, len);
+    ret = fillResHeaders(c, len, m_time);
     if (ret == -1)
-        goto failed404;
+        goto failed;
     ret = httpSendHeaders(c);
     if (ret == -1)
         goto failed;
@@ -261,6 +289,7 @@ void initStaticFile()
         wstrFreeSplit(argvs, args);
     }
     wstrFree(extensions);
+    IfModifiedSince = wstrNew(IF_MODIFIED_SINCE);
 }
 
 void deallocStaticFile()
@@ -268,6 +297,7 @@ void deallocStaticFile()
     if (AllowExtensions)
         dictRelease(AllowExtensions);
     MaxFileSize = 0;
+    wstrFree(IfModifiedSince);
 }
 
 void *initStaticFileData(struct client *c)

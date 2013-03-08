@@ -9,7 +9,8 @@ PROTO_SOURCES =  protocol/protocol.c \
 WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c \
 				 worker/mbuf.c
 SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c \
-		  util.c register.c stats.c event.c setproctitle.c slice.c debug.c
+		  util.c register.c stats.c event.c setproctitle.c slice.c debug.c \
+		  portable.c
 SOURCES += $(APP_SOURCES)
 SOURCES += $(PROTO_SOURCES)
 SOURCES += $(WORKER_SOURCES)
