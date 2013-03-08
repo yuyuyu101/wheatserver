@@ -14,7 +14,7 @@ struct list *createList()
     return l;
 }
 
-void freeList(struct list *l)
+void listClean(struct list *l)
 {
     struct listNode *current, *next;
     unsigned long len = l->len;
@@ -27,6 +27,11 @@ void freeList(struct list *l)
         free(current);
         current = next;
     }
+}
+
+void freeList(struct list *l)
+{
+    listClean(l);
     free(l);
 }
 

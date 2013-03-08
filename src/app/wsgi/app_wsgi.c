@@ -1,6 +1,5 @@
 #include "../application.h"
 #include "app_wsgi.h"
-#include "../static/app_static_file.h"
 
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;
@@ -634,7 +633,7 @@ int wsgiSendFile(struct client *c, int fd)
 {
     int ret = 0;
 
-    ret = sendFile(c, fd, 0);
+    ret = sendClientFile(c, fd, 0);
 
     return ret;
 }

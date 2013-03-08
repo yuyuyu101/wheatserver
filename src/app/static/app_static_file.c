@@ -180,35 +180,6 @@ static int fillResHeaders(struct client *c, off_t rep_len)
     return ret;
 }
 
-int sendFile(struct client *c, int fd, off_t len)
-{
-    off_t send = 0;
-    int ret;
-    if (fd < 0) {
-        return WHEAT_WRONG;
-    }
-    if (len == 0) {
-        if (getFileSize(fd, &len) == WHEAT_WRONG)
-            return WHEAT_WRONG;
-    }
-    size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
-        Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
-    char ctx[unit_read];
-    struct slice slice;
-    sliceTo(&slice, (uint8_t *)ctx, unit_read);
-    while (send < len) {
-        int nread;
-        lseek(fd, send, SEEK_SET);
-        nread = readBulkFrom(fd, &slice);
-        if (nread <= 0)
-            return WHEAT_WRONG;
-        send += nread;
-        ret = WorkerProcess->worker->sendData(c, &slice);
-        if (ret == -1)
-            return WHEAT_WRONG;
-    }
-    return WHEAT_OK;
-}
 
 int staticFileCall(struct client *c, void *arg)
 {
@@ -246,7 +217,7 @@ int staticFileCall(struct client *c, void *arg)
     ret = httpSendHeaders(c);
     if (ret == -1)
         goto failed;
-    ret = sendFile(c, file_d, len);
+    ret = sendClientFile(c, file_d, len);
     if (ret == WHEAT_WRONG)
         goto failed;
     if (file_d > 0) close(file_d);

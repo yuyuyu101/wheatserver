@@ -74,7 +74,7 @@ void dispatchRequest(int fd, char *ip, int port)
     int ret, n;
     do {
         n = syncRecvData(c);
-        if (n == WHEAT_WRONG) {
+        if (!isClientValid(c)) {
             goto cleanup;
         }
         if (msgGetSize(c->req_buf) > stat->stat_buffer_size)

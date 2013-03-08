@@ -5,6 +5,7 @@
 struct dictType;
 struct configuration;
 extern struct dictType wstrDictType;
+extern struct dictType sliceDictType;
 
 void nonBlockCloseOnExecPipe(int *fd0, int *fd1);
 
@@ -36,3 +37,4 @@ void setproctitle(const char *fmt, ...);
 #endif
 #endif
 
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t len);

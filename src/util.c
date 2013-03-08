@@ -33,8 +33,7 @@ unsigned int dictWstrCaseHash(const void *key) {
     return dictGenCaseHashFunction((unsigned char*)key, wstrlen((char*)key));
 }
 
-int dictWstrKeyCompare(const void *key1,
-        const void *key2)
+int dictWstrKeyCompare(const void *key1, const void *key2)
 {
     int l1,l2;
 
@@ -58,6 +57,40 @@ struct dictType wstrDictType = {
     dictWstrDestructor,         /* val destructor */
 };
 
+unsigned int dictSliceHash(const void *key) {
+    const struct slice *s = key;
+    return dictGenHashFunction(s->data, s->len);
+}
+
+unsigned int dictSliceCaseHash(const void *key) {
+    const struct slice *s = key;
+    return dictGenCaseHashFunction(s->data, s->len);
+}
+
+int dictSliceKeyCompare(const void *key1, const void *key2)
+{
+    const struct slice *s1 = key1, *s2 = key2;
+    int l1,l2;
+
+    l1 = s1->len;
+    l2 = s2->len;
+    if (l1 != l2) return 0;
+    return memcmp(s1->data, s2->data, l1) == 0;
+}
+
+void dictSliceDestructor(void *val)
+{
+    sliceFree(val);
+}
+
+struct dictType sliceDictType = {
+    dictSliceHash,               /* hash function */
+    NULL,                       /* key dup */
+    NULL,                       /* val dup */
+    dictSliceKeyCompare,         /* key compare */
+    dictSliceDestructor,         /* key destructor */
+    dictSliceDestructor,         /* val destructor */
+};
 
 /* ========== Configuration Validator/Print Area ========== */
 
@@ -132,16 +165,16 @@ int daemonize(int dump_core)
 
     pid = fork();
     switch (pid) {
-    case -1:
-        wheatLog(WHEAT_WARNING, "fork() failed: %s", strerror(errno));
-        return WHEAT_WRONG;
+        case -1:
+            wheatLog(WHEAT_WARNING, "fork() failed: %s", strerror(errno));
+            return WHEAT_WRONG;
 
-    case 0:
-        break;
+        case 0:
+            break;
 
-    default:
-        /* parent terminates */
-        _exit(0);
+        default:
+            /* parent terminates */
+            _exit(0);
     }
 
     /* 1st child continues and becomes the session leader */
@@ -154,16 +187,16 @@ int daemonize(int dump_core)
 
     pid = fork();
     switch (pid) {
-    case -1:
-        wheatLog(WHEAT_WARNING, "fork() failed: %s", strerror(errno));
-        return WHEAT_WRONG;
+        case -1:
+            wheatLog(WHEAT_WARNING, "fork() failed: %s", strerror(errno));
+            return WHEAT_WRONG;
 
-    case 0:
-        break;
+        case 0:
+            break;
 
-    default:
-        /* 1st child terminates */
-        _exit(0);
+        default:
+            /* 1st child terminates */
+            _exit(0);
     }
 
     /* 2nd child continues */
@@ -277,3 +310,23 @@ int fromSameParentDir(wstr parent, wstr child)
         return 0;
     return memcmp(parent, child, wstrlen(parent)) == 0;
 }
+
+#ifdef __APPLE__
+/* OS X */
+#include <sys/socket.h>
+#include <sys/types.h>
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
+    if (sendfile(in_fd, out_fd, 0, &len, NULL, 0) == -1)
+        return -1;
+    return len;
+}
+#endif
+#ifdef __linux
+/* Linux */
+#include <sys/sendfile.h>
+
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
+    return sendfile(out_fd, in_fd, NULL, len);
+}
+
+#endif

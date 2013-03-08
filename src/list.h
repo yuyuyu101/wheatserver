@@ -38,6 +38,7 @@ struct listIterator {
 
 struct list *createList();
 void freeList(struct list *);
+void listClean(struct list *l);
 struct list *appendToListTail(struct list *, void *ptr);
 struct list *insertToListHead(struct list *, void *ptr);
 void removeListNode(struct list *l, struct listNode *node);

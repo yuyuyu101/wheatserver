@@ -38,7 +38,7 @@ def test_config_command(port):
 def test_stat_accuracy(port):
     global sync_server, async_server
     for i in range(100):
-        conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=10);
+        conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=1);
         conn.request("GET", "/")
         r1 = conn.getresponse()
         assert r1.status == 200
@@ -51,9 +51,9 @@ def test_stat_accuracy(port):
     assert "Total Connection: 100" in s.recv(1000)
 
 def test_static_file(port):
-    global sync_server, async_server
-    for i in range(100):
-        conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=10);
+    time.sleep(0.1)
+    for i in range(10):
+        conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=1);
         conn.request("GET", "/example/static/example.jpg")
         r1 = conn.getresponse()
         assert r1.status == 200

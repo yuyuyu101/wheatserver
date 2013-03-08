@@ -124,9 +124,9 @@ int clientSendPacketList(struct client *c)
     struct slice data;
     size_t allsend = 0;
     do {
+        allsend = 0;
         msgRead(c->res_buf, &data);
         ssize_t nwritten = 0;
-        allsend = 0;
 
         while (data.len != 0) {
             nwritten = writeBulkTo(c->clifd, &data);
@@ -148,4 +148,49 @@ int clientSendPacketList(struct client *c)
         }
     } while(allsend == data.len);
     return (int)allsend;
+}
+
+int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset)
+{
+    off_t send = offset;
+    int ret;
+    if (fd < 0) {
+        return WHEAT_WRONG;
+    }
+    if (len == 0) {
+        if (getFileSize(fd, &len) == WHEAT_WRONG)
+            return WHEAT_WRONG;
+    }
+    size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
+        Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
+    char ctx[unit_read];
+    struct slice slice;
+    sliceTo(&slice, (uint8_t *)ctx, unit_read);
+    while (send < len) {
+        int nread;
+        lseek(fd, send, SEEK_SET);
+        nread = readBulkFrom(fd, &slice);
+        if (nread <= 0)
+            return WHEAT_WRONG;
+        send += nread;
+        ret = WorkerProcess->worker->sendData(c, &slice);
+        if (ret == -1)
+            return WHEAT_WRONG;
+    }
+    return WHEAT_OK;
+}
+
+int sendClientFile(struct client *c, int fd, off_t len)
+{
+    int send = len;
+    int ret = WHEAT_OK;
+    if (!isClientNeedSend(c)) {
+        send = portable_sendfile(c->clifd, fd, len);
+        if (send == -1)
+            return WHEAT_WRONG;
+    }
+    if (send != len) {
+        ret = sendFileByCopy(c, fd, len, send);
+    }
+    return ret;
 }

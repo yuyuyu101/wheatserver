@@ -74,12 +74,12 @@ struct client {
     void *app_private_data;
     time_t last_io;
     char *err;
-    int should_close; // Used to indicate whether closing client
-    int valid;        // Intern: used to indicate client fd is unused and
-                      // need closing, only used by worker IO methods when
-                      // error happended
     struct msghdr *req_buf;
     struct msghdr *res_buf;
+    unsigned should_close:1; // Used to indicate whether closing client
+    unsigned valid:1;        // Intern: used to indicate client fd is unused and
+                             // need closing, only used by worker IO methods when
+                             // error happended
 };
 
 #define WHEAT_WORKERS    2
@@ -95,6 +95,7 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void resetClientCtx(struct client *c);
 int clientSendPacketList(struct client *c);
+int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset);
 
 #define isClientValid(c)     (c)->valid
 #define setClientUnvalid(c)  (c)->valid = 0

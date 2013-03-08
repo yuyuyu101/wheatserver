@@ -10,7 +10,7 @@
 #endif
 #endif
 
-struct evcenter *eventcenter_init(int nevent)
+struct evcenter *eventcenterInit(int nevent)
 {
     struct event *events = NULL;
     struct evcenter *center = NULL;
@@ -55,7 +55,7 @@ cleanup:
     return NULL;
 }
 
-void eventcenter_dealloc(struct evcenter *center)
+void eventcenterDealloc(struct evcenter *center)
 {
     eventDeinit(center->apidata);
     free(center->events);
@@ -73,8 +73,8 @@ int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void
     if (addEvent(center, fd, mask) == -1)
         return WHEAT_WRONG;
     event->mask |= mask;
-    if (mask & EVENT_READABLE) event->readProc = proc;
-    if (mask & EVENT_WRITABLE) event->writeProc = proc;
+    if (mask & EVENT_READABLE) event->read_proc = proc;
+    if (mask & EVENT_WRITABLE) event->write_proc = proc;
     event->client_data = client_data;
     return WHEAT_OK;
 }
@@ -109,11 +109,11 @@ int processEvents(struct evcenter *center, int timeout_seconds)
          * processed, so we check if the event is still valid. */
         if (event->mask & mask & EVENT_READABLE) {
             rfired = 1;
-            event->readProc(center, fd, event->client_data, mask);
+            event->read_proc(center, fd, event->client_data, mask);
         }
         if (event->mask & mask & EVENT_WRITABLE) {
-            if (!rfired || event->readProc != event->writeProc)
-                event->writeProc(center, fd, event->client_data, mask);
+            if (!rfired || event->read_proc != event->write_proc)
+                event->write_proc(center, fd, event->client_data, mask);
         }
         processed++;
     }

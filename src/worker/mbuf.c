@@ -6,7 +6,7 @@
 #include "../slice.h"
 #include "mbuf.h"
 
-#define WHEAT_MBUF_MAGIC       0x12332112
+#define WHEAT_MBUF_MAGIC       0x19920828
 
 /*
  * mbuf header is at the tail end of the mbuf. This enables us to catch

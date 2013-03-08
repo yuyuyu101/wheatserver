@@ -451,7 +451,7 @@ void reload()
 
 void initServer()
 {
-    Server.master_center = eventcenter_init(Server.worker_number*2+32);
+    Server.master_center = eventcenterInit(Server.worker_number*2+32);
     if (!Server.master_center) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
         halt(1);

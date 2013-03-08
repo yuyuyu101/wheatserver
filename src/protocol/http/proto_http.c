@@ -670,6 +670,7 @@ cleanup:
     return ok? 0 : -1;
 }
 
+
 void sendResponse404(struct client *c)
 {
     struct httpData *http_data = c->protocol_data;

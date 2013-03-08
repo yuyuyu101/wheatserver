@@ -166,7 +166,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     long time_use;
     gettimeofday(&start, NULL);
     nread = asyncRecvData(c);
-    if (nread == -1) {
+    if (!isClientValid(c)) {
         cleanRequest(c);
         return ;
     }
@@ -216,7 +216,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
 
 void setupAsync()
 {
-    WorkerCenter = eventcenter_init(WHEAT_ASYNC_CLIENT_MAX);
+    WorkerCenter = eventcenterInit(WHEAT_ASYNC_CLIENT_MAX);
     Clients = createList();
     if (!WorkerCenter) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
