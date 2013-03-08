@@ -23,28 +23,27 @@ struct httpData {
     //Intern use
     http_parser *parser;
     struct dictEntry *last_entry;
-    int last_was_value;
-    int complete;
-    int send;
-    int is_chunked_in_header;
-    int upgrade;
+    unsigned last_was_value:1;
+    unsigned complete:1;
+    unsigned is_chunked_in_header:1;
+    unsigned upgrade:1;
+    unsigned keep_live:1;
+    unsigned headers_sent:1;
+    unsigned can_compress:1;
+    unsigned send;
 
-    // Read only
     wstr query_string;
     wstr path;
     struct httpBody body;
-    int keep_live;
-    int headers_sent;
     const char *url_scheme;
     const char *method;
     const char *protocol_version;
     struct dict *req_headers;
 
-    // App write
     int res_status;
     wstr res_status_msg;
     int response_length;
-    struct list *res_headers;
+    struct dict *res_headers;
 };
 
 static struct staticHandler StaticPathHandler;
@@ -191,12 +190,14 @@ static const char *connectionField(struct client *c)
     return connection;
 }
 
-void appendToResHeaders(struct client *c, const char *field,
+int appendToResHeaders(struct client *c, const char *field,
         const char *value)
 {
     struct httpData *http_data = c->protocol_data;
-    appendToListTail(http_data->res_headers, wstrNew(field));
-    appendToListTail(http_data->res_headers, wstrNew(value));
+    int ret = dictAdd(http_data->res_headers, wstrNew(field), wstrNew(value));
+    if (ret == DICT_WRONG)
+        return -1;
+    return 0;
 }
 
 void fillResInfo(struct client *c, int status, const char *msg)
@@ -434,15 +435,10 @@ void *initHttpData()
         free(data);
         return NULL;
     }
+    memset(data, 0, sizeof(*data));
     data->parser->data = data;
     http_parser_init(data->parser, HTTP_REQUEST);
-    data->req_headers = dictCreate(&wstrDictType);
     data->url_scheme = URL_SCHEME[0];
-    data->query_string = NULL;
-    data->keep_live = 1;
-    data->upgrade = 0;
-    data->is_chunked_in_header = 0;
-    data->path = NULL;
     memset(&data->body, 0, sizeof(data->body));
     int ret = enlargeHttpBody(&data->body);
     if (ret == -1) {
@@ -450,32 +446,20 @@ void *initHttpData()
         free(data->parser);
         return NULL;
     }
-    data->last_was_value = 0;
-    data->last_entry = NULL;
-    data->complete = 0;
-    data->method = NULL;
-    data->protocol_version = NULL;
-    data->res_status = 0;
-    data->res_status_msg = NULL;
-    data->response_length = 0;
-    data->res_headers = createList();
-    listSetFree(data->res_headers, (void (*)(void *))wstrFree);
-    data->headers_sent = 0;
-    data->send = 0;
+    data->req_headers = dictCreate(&wstrDictType);
+    data->res_headers = dictCreate(&wstrDictType);
     return data;
 }
 
 void freeHttpData(void *data)
 {
     struct httpData *d = data;
-    if (d->req_headers) {
-        dictRelease(d->req_headers);
-    }
+    dictRelease(d->req_headers);
+    dictRelease(d->res_headers);
     wstrFree(d->query_string);
     free(d->parser);
     wstrFree(d->res_status_msg);
     wstrFree(d->path);
-    freeList(d->res_headers);
     free(d->body.body);
     free(d);
 }
@@ -603,7 +587,7 @@ int httpSendBody(struct client *client, const char *data, size_t len)
     size_t tosend = len, restsend;
     ssize_t ret;
     struct slice slice;
-    if (!len)
+    if (!len || !strcasecmp(http_data->method, "HEAD"))
         return 0;
     if (http_data->response_length != 0) {
         if (http_data->send > http_data->response_length)
@@ -621,6 +605,11 @@ int httpSendBody(struct client *client, const char *data, size_t len)
     return 0;
 }
 
+static void httpSendHeadersAction(struct client *c)
+{
+    struct httpData *http_data = c->protocol_data;
+}
+
 int httpSendHeaders(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
@@ -629,20 +618,15 @@ int httpSendHeaders(struct client *client)
 
     if (http_data->headers_sent)
         return 0;
-    struct listIterator *liter = listGetIterator(http_data->res_headers, START_HEAD);
-    struct listNode *node = NULL;
+    struct dictIterator *iter = dictGetIterator(http_data->res_headers);
+    struct dictEntry *entry = NULL;
     char buf[256];
     int ret, is_connection = 0;
     wstr field, value;
     wstr headers = defaultResHeader(client);
-    ASSERT(listLength(http_data->res_headers) % 2 == 0);
-    while (1) {
-        node = listNext(liter);
-        if (node == NULL)
-            break;
-        field = listNodeValue(node);
-        node = listNext(liter);
-        value = listNodeValue(node);
+    while((entry = dictNext(iter)) != NULL) {
+        field = dictGetKey(entry);
+        value = dictGetVal(entry);
         ASSERT(field && value);
         if (client->res_buf == NULL) {
             goto cleanup;
@@ -683,7 +667,7 @@ int httpSendHeaders(struct client *client)
 
 cleanup:
     wstrFree(headers);
-    freeListIterator(liter);
+    dictReleaseIterator(iter);
     return ok? 0 : -1;
 }
 

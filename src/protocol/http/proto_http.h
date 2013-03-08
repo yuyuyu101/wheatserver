@@ -31,7 +31,7 @@ void fillResInfo(struct client *c, int status, const char *msg);
 int httpSendHeaders(struct client *client);
 void sendResponse500(struct client *c);
 void sendResponse404(struct client *c);
-void appendToResHeaders(struct client *c, const char *field,
+int appendToResHeaders(struct client *c, const char *field,
         const char *value);
 
 void logAccess(struct client *client);
