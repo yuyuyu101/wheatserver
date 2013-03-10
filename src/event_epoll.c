@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "event.h"
+#include "memalloc.h"
 
 struct apiState {
     int epfd;
@@ -10,18 +11,18 @@ struct apiState {
 };
 
 static struct apiState *eventInit(int nevent) {
-    struct apiState *state = malloc(sizeof(struct apiState));
+    struct apiState *state = wmalloc(sizeof(struct apiState));
 
     if (!state) return NULL;
-    state->events = malloc(sizeof(struct epoll_event)*nevent);
+    state->events = wmalloc(sizeof(struct epoll_event)*nevent);
     if (!state->events) {
-        free(state);
+        wfree(state);
         return NULL;
     }
     state->epfd = epoll_create(1024); /* 1024 is just an hint for the kernel */
     if (state->epfd == -1) {
-        free(state->events);
-        free(state);
+        wfree(state->events);
+        wfree(state);
         return NULL;
     }
     return state;
@@ -29,8 +30,8 @@ static struct apiState *eventInit(int nevent) {
 
 static void eventDeinit(struct apiState *state) {
     close(state->epfd);
-    free(state->events);
-    free(state);
+    wfree(state->events);
+    wfree(state);
 }
 
 static int addEvent(struct evcenter *center, int fd, int mask) {

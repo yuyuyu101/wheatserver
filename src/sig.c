@@ -10,14 +10,14 @@ static int signals[11] = {SIGHUP, SIGQUIT, SIGINT, SIGTERM,
 /* int list */
 void *dupInt(void *ptr)
 {
-    int *new_ptr = malloc(sizeof(int));
+    int *new_ptr = wmalloc(sizeof(int));
     *new_ptr = *(int *)ptr;
     return new_ptr;
 }
 
 void freeInt(void *ptr)
 {
-    free(ptr);
+    wfree(ptr);
 }
 
 int matchInt(void *ptr, void *key)

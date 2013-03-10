@@ -1,10 +1,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "../debug.h"
 #include "../slice.h"
 #include "mbuf.h"
+#include "../memalloc.h"
 
 #define WHEAT_MBUF_MAGIC       0x19920828
 
@@ -51,7 +53,7 @@ static struct mbuf *mbufGet(size_t mbuf_size)
 {
     struct mbuf *mbuf;
     // extra one is left as mbuf->end
-    uint8_t *m = malloc(sizeof(*mbuf)+mbuf_size+1);
+    uint8_t *m = wmalloc(sizeof(*mbuf)+mbuf_size+1);
     if (m == NULL)
         return NULL;
     mbuf = (struct mbuf *)(m + mbuf_size + 1);
@@ -65,7 +67,7 @@ static struct mbuf *mbufGet(size_t mbuf_size)
 static void mbufFree(struct mbuf *mbuf, size_t mbuf_size)
 {
     uint8_t *m = (uint8_t *)mbuf - mbuf_size - 1;
-    free(m);
+    wfree(m);
 }
 
 struct msghdr *msgCreate(size_t mbuf_size)
@@ -73,7 +75,7 @@ struct msghdr *msgCreate(size_t mbuf_size)
     struct mbuf *mbuf = mbufGet(mbuf_size);
     if (mbuf == NULL)
         return NULL;
-    struct msghdr *hdr = malloc(sizeof(*hdr));
+    struct msghdr *hdr = wmalloc(sizeof(*hdr));
     if (hdr == NULL) {
         mbufFree(mbuf, hdr->mbuf_size);
         return NULL;
@@ -98,10 +100,10 @@ void msgClean(struct msghdr *hdr)
 
 void msgRead(struct msghdr *hdr, struct slice *s)
 {
-    ASSERT(hdr && s);
-    ASSERT(hdr->is_set_readed_after_read == 1);
+    assert(hdr && s);
+    assert(hdr->is_set_readed_after_read == 1);
     struct mbuf *mbuf = hdr->last_read;
-    ASSERT(mbuf->magic == WHEAT_MBUF_MAGIC);
+    assert(mbuf->magic == WHEAT_MBUF_MAGIC);
     // If hdr->last_read is read over but next mbuf exists
     if (mbuf->read_pos == mbuf->write_pos && mbuf->write_pos == mbuf->end &&
             mbuf->next != NULL) {
@@ -114,11 +116,11 @@ void msgRead(struct msghdr *hdr, struct slice *s)
 
 int msgPut(struct msghdr *hdr, struct slice *s)
 {
-    ASSERT(hdr && s);
-    ASSERT(hdr->is_set_writted_after_put == 1);
+    assert(hdr && s);
+    assert(hdr->is_set_writted_after_put == 1);
 
     struct mbuf *mbuf = hdr->last_write;
-    ASSERT(mbuf->magic == WHEAT_MBUF_MAGIC);
+    assert(mbuf->magic == WHEAT_MBUF_MAGIC);
     if (mbuf->write_pos == mbuf->end) {
         struct mbuf *old_buf = mbuf;
         mbuf = mbufGet(hdr->mbuf_size);
@@ -141,23 +143,23 @@ void msgFree(struct msghdr *hdr)
         mbufFree(curr, hdr->mbuf_size);
         curr = next;
     }
-    free(hdr);
+    wfree(hdr);
 }
 
 void msgSetReaded(struct msghdr *hdr, size_t len)
 {
-    ASSERT(hdr->last_read->magic == WHEAT_MBUF_MAGIC);
-    ASSERT(len <= hdr->last_read->write_pos - hdr->last_read->read_pos);
-    ASSERT(hdr->is_set_readed_after_read == 0);
+    assert(hdr->last_read->magic == WHEAT_MBUF_MAGIC);
+    assert(len <= hdr->last_read->write_pos - hdr->last_read->read_pos);
+    assert(hdr->is_set_readed_after_read == 0);
     hdr->last_read->read_pos += len;
     hdr->is_set_readed_after_read = 1;
 }
 
 void msgSetWritted(struct msghdr *hdr, size_t len)
 {
-    ASSERT(hdr->last_write->magic == WHEAT_MBUF_MAGIC);
-    ASSERT(len <= hdr->last_write->end - hdr->last_write->write_pos);
-    ASSERT(hdr->is_set_writted_after_put == 0);
+    assert(hdr->last_write->magic == WHEAT_MBUF_MAGIC);
+    assert(len <= hdr->last_write->end - hdr->last_write->write_pos);
+    assert(hdr->is_set_writted_after_put == 0);
     hdr->last_write->write_pos += len;
     hdr->is_set_writted_after_put = 1;
 }
@@ -170,7 +172,7 @@ size_t msgGetSize(struct msghdr *hdr)
 int msgCanRead(struct msghdr *hdr)
 {
     struct mbuf *buf = hdr->last_read;
-    ASSERT(buf->magic == WHEAT_MBUF_MAGIC);
+    assert(buf->magic == WHEAT_MBUF_MAGIC);
     return (buf->read_pos != buf->write_pos) ||
         (buf->next != NULL && buf->next->write_pos != buf->next->start);
 }
@@ -196,17 +198,21 @@ int main(int argc, const char *argv[])
         msgSetWritted(hdr, 255);
         msgRead(hdr, &slice);
         test_cond("msg get", slice.len == 255);
+        msgSetReaded(hdr, 255);
         msgRead(hdr, &slice);
         test_cond("msg get", slice.len == 0);
+        msgSetReaded(hdr, slice.len);
         ret = msgPut(hdr, &slice);
         test_cond("msg put", ret == 0 && slice.len == mbuf_size-255);
         msgSetWritted(hdr, mbuf_size-255);
         msgRead(hdr, &slice);
+        msgSetReaded(hdr, slice.len);
         test_cond("msg get", ret == 0 && slice.len == mbuf_size-255);
         ret = msgPut(hdr, &slice);
         test_cond("msg put", ret == 0 && slice.len == mbuf_size);
         msgSetWritted(hdr, 255);
         msgRead(hdr, &slice);
+        msgSetReaded(hdr, slice.len);
         test_cond("msg get", ret == 0 && slice.len == 255);
         msgClean(hdr);
         test_cond("msg clean", ret == 0 && hdr->mbuf_len == 1);

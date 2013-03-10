@@ -3,21 +3,25 @@
 #include <assert.h>
 #include <ctype.h>
 
+#include "memalloc.h"
 #include "wstr.h"
 
 wstr wstrNewLen(const void *init, int init_len)
 {
     struct wstrhd *sh;
-    sh = malloc(sizeof(struct wstrhd)+init_len+1);
+    sh = wmalloc(sizeof(struct wstrhd)+init_len+1);
     if (sh == NULL) {
         return NULL;
     }
-    sh->len = init_len;
-    sh->free = 0;
-    if (init_len && init) {
+    if (init) {
         memcpy(sh->buf, init, init_len);
+        sh->len = init_len;
+        sh->free = 0;
+    } else {
+        sh->len = 0;
+        sh->free = init_len;
     }
-    sh->buf[init_len] = '\0';
+    sh->buf[sh->len] = '\0';
     return (wstr)(sh->buf);
 }
 
@@ -45,7 +49,7 @@ wstr wstrMakeRoom(wstr s, size_t add_size)
 
     int old_len = wstrlen(s);
     int new_len = (old_len + (int)add_size) * 2;
-    struct wstrhd *new_sh = realloc(sh, sizeof(struct wstrhd)+new_len+1); // +1 for '\0'
+    struct wstrhd *new_sh = wrealloc(sh, sizeof(struct wstrhd)+new_len+1); // +1 for '\0'
     if (new_sh == NULL) {
         return NULL;
     }
@@ -58,7 +62,7 @@ void wstrFree(wstr s)
     if (s == NULL) {
         return ;
     }
-    free(s - sizeof(struct wstrhd));
+    wfree(s - sizeof(struct wstrhd));
 }
 
 wstr wstrDup(const wstr s)
@@ -70,7 +74,7 @@ wstr *wstrNewSplit(wstr s, const char *sep, int sep_len, int *count)
 {
     int slots_count = 5, s_len = wstrlen(s);
     wstr *slots;
-    slots = malloc(sizeof(wstr)*slots_count);
+    slots = wmalloc(sizeof(wstr)*slots_count);
 
     wstr fixed = s;
     int fixed_i = 0, c = 0, i;
@@ -87,7 +91,7 @@ wstr *wstrNewSplit(wstr s, const char *sep, int sep_len, int *count)
         if (c > slots_count - 1) {
             wstr *new_slots;
             slots_count *= 2;
-            new_slots = realloc(slots, sizeof(wstr*)*slots_count);
+            new_slots = wrealloc(slots, sizeof(wstr*)*slots_count);
             if (new_slots == NULL)
                 goto cleanup;
             slots = new_slots;
@@ -105,7 +109,7 @@ cleanup:
         for (j = 0; j < c; j++) {
             wstrFree(slots[j]);
         }
-        free(slots);
+        wfree(slots);
         *count = 0;
         return NULL;
     }
@@ -117,7 +121,7 @@ void wstrFreeSplit(wstr *slots, int count)
     for (i = 0; i < count; i++) {
         wstrFree(slots[i]);
     }
-    free(slots);
+    wfree(slots);
 }
 
 int wstrCmp(const wstr s1, const wstr s2)
@@ -255,7 +259,7 @@ wstr wstrRemoveFreeSpace(wstr s)
 {
     struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));
 
-    sh = realloc(sh, sizeof(struct wstrhd)+sh->len+1); // +1 for '\0'
+    sh = wrealloc(sh, sizeof(struct wstrhd)+sh->len+1); // +1 for '\0'
     sh->free = 0;
     return sh->buf;
 }

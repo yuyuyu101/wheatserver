@@ -302,7 +302,7 @@ void deallocStaticFile()
 
 void *initStaticFileData(struct client *c)
 {
-    struct staticFileData *data = malloc(sizeof(*data));
+    struct staticFileData *data = wmalloc(sizeof(*data));
     if (!data)
         return NULL;
     memset(data, 0, sizeof(*data));
@@ -323,5 +323,5 @@ void freeStaticFileData(void *app_data)
     struct staticFileData *data = app_data;
     wstrFree(data->extension);
     wstrFree(data->filename);
-    free(data);
+    wfree(data);
 }

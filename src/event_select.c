@@ -1,6 +1,8 @@
 #include <string.h>
 #include <sys/select.h>
 #include <stdlib.h>
+
+#include "memalloc.h"
 #include "event.h"
 
 struct apiState {
@@ -13,7 +15,7 @@ struct apiState {
 
 static struct apiState *eventInit(int nevent)
 {
-    struct apiState *state = malloc(sizeof(struct apiState));
+    struct apiState *state = wmalloc(sizeof(struct apiState));
 
     if (!state) return NULL;
     FD_ZERO(&state->rfds);
@@ -24,7 +26,7 @@ static struct apiState *eventInit(int nevent)
 
 static void eventDeinit(struct apiState *data)
 {
-    free(data);
+    wfree(data);
 }
 
 static int addEvent(struct evcenter *center, int fd, int mask)

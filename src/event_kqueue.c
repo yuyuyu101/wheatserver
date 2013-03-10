@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "event.h"
+#include "memalloc.h"
 
 struct apiState {
     int kqfd;
@@ -20,16 +21,16 @@ static struct apiState *eventInit(int nevent)
         return NULL;
     }
 
-    state = malloc(sizeof(struct apiState));
+    state = wmalloc(sizeof(struct apiState));
     if (!state) {
         close(ep);
         return NULL;
     }
 
-    events = malloc(nevent*sizeof(struct kevent));
+    events = wmalloc(nevent*sizeof(struct kevent));
     if (events == NULL) {
         close(ep);
-        free(state);
+        wfree(state);
         return NULL;
     }
 
@@ -41,8 +42,8 @@ static struct apiState *eventInit(int nevent)
 static void eventDeinit(struct apiState *data)
 {
     close(data->kqfd);
-    free(data->events);
-    free(data);
+    wfree(data->events);
+    wfree(data);
 }
 
 static int addEvent(struct evcenter *center, int fd, int mask) {

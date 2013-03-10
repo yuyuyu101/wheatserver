@@ -1,12 +1,14 @@
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
+#include <assert.h>
 
 #include "slice.h"
+#include "memalloc.h"
 #include "debug.h"
 
 struct slice *sliceCreate(uint8_t *data, size_t len)
 {
-    struct slice *b = malloc(sizeof(*b));
+    struct slice *b = wmalloc(sizeof(*b));
     if (data == NULL)
         b->len = 0;
     else
@@ -25,7 +27,7 @@ void sliceTo(struct slice *s, uint8_t *data, size_t len)
 
 void sliceFree(struct slice *b)
 {
-    free(b);
+    wfree(b);
 }
 
 void sliceClear(struct slice *b)
@@ -36,7 +38,7 @@ void sliceClear(struct slice *b)
 
 void sliceRemvoePrefix(struct slice *b, size_t prefix)
 {
-    ASSERT(prefix < b->len);
+    assert(prefix < b->len);
     b->data += prefix;
     b->len -= prefix;
 }

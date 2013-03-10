@@ -3,7 +3,7 @@
 
 void initHookCenter()
 {
-    Server.hook_center = malloc(sizeof(struct hookCenter));
+    Server.hook_center = wmalloc(sizeof(struct hookCenter));
     if (Server.hook_center == NULL) {
         wheatLog(WHEAT_WARNING, "init hookcenter failed");
         halt(1);

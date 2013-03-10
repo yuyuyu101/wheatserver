@@ -40,7 +40,7 @@ struct masterStat {
 
 struct masterClient;
 
-struct workerStat *initWorkerStat(int only_malloc);
+struct workerStat *initWorkerStat(int only_wmalloc);
 struct masterStat *initMasterStat();
 void resetStat(struct workerStat *w);
 void sendStatPacket();

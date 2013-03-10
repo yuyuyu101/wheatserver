@@ -10,7 +10,7 @@ WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c \
 				 worker/mbuf.c
 SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c \
 		  util.c register.c stats.c event.c setproctitle.c slice.c debug.c \
-		  portable.c
+		  portable.c memalloc.c
 SOURCES += $(APP_SOURCES)
 SOURCES += $(PROTO_SOURCES)
 SOURCES += $(WORKER_SOURCES)
@@ -53,23 +53,23 @@ test: $(TESTS)
 	for t in $(TESTS); do echo "***** Running $$t"; ./$$t ; rm $$t || exit 1; done
 
 test_wstr: wstr.c wstr.h
-	$(CC) -o $@ wstr.c -DWSTR_TEST_MAIN
+	$(CC) -o $@ wstr.c memalloc.o -DWSTR_TEST_MAIN
 	./test_wstr
 
 test_list: list.c list.h
-	$(CC) -o $@ list.c -DLIST_TEST_MAIN
+	$(CC) -o $@ list.c memalloc.o -DLIST_TEST_MAIN
 	./test_list
 
 test_dict: dict.c dict.h
-	$(CC) -o $@ dict.c wstr.o -DDICT_TEST_MAIN
+	$(CC) -o $@ dict.c wstr.c memalloc.o -DDICT_TEST_MAIN
 	./test_dict
 
 test_slice: slice.c slice.h
-	$(CC) -o $@ slice.c -DSLICE_TEST_MAIN
+	$(CC) -o $@ slice.c memalloc.c -DSLICE_TEST_MAIN
 	./test_slice
 
 test_mbuf: worker/mbuf.c worker/mbuf.h slice.c slice.h
-	$(CC) -o $@ worker/mbuf.c slice.c -DMBUF_TEST_MAIN
+	$(CC) -o $@ worker/mbuf.c slice.c memalloc.c -DMBUF_TEST_MAIN
 	./test_mbuf
 
 .PHONY: clean

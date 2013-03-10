@@ -166,7 +166,7 @@ static int enlargeHttpBody(struct httpBody *body)
         body->slice_len = WHEAT_BODY_LEN;
     } else
         body->slice_len *= 2;
-    body->body = realloc(body->body, sizeof(struct slice)*body->slice_len);
+    body->body = wrealloc(body->body, sizeof(struct slice)*body->slice_len);
     if (body->body == NULL)
         return -1;
     body->curr_body = body->body + curr;
@@ -211,7 +211,7 @@ static wstr defaultResHeader(struct client *client)
 {
     struct httpData *http_data = client->protocol_data;
     char buf[256];
-    wstr headers = wstrEmpty();
+    wstr headers = wstrNewLen(NULL, 500);
     int ret;
     ASSERT(http_data->res_status && http_data->res_status_msg);
 
@@ -427,23 +427,23 @@ int parseHttp(struct client *client)
 
 void *initHttpData()
 {
-    struct httpData *data = malloc(sizeof(struct httpData));
+    struct httpData *data = wmalloc(sizeof(struct httpData));
     if (!data)
         return NULL;
-    data->parser = malloc(sizeof(struct http_parser));
+    memset(data, 0, sizeof(*data));
+    data->parser = wmalloc(sizeof(struct http_parser));
     if (!data->parser) {
-        free(data);
+        wfree(data);
         return NULL;
     }
-    memset(data, 0, sizeof(*data));
     data->parser->data = data;
     http_parser_init(data->parser, HTTP_REQUEST);
     data->url_scheme = URL_SCHEME[0];
     memset(&data->body, 0, sizeof(data->body));
     int ret = enlargeHttpBody(&data->body);
     if (ret == -1) {
-        free(data);
-        free(data->parser);
+        wfree(data);
+        wfree(data->parser);
         return NULL;
     }
     data->req_headers = dictCreate(&wstrDictType);
@@ -457,11 +457,11 @@ void freeHttpData(void *data)
     dictRelease(d->req_headers);
     dictRelease(d->res_headers);
     wstrFree(d->query_string);
-    free(d->parser);
+    wfree(d->parser);
     wstrFree(d->res_status_msg);
     wstrFree(d->path);
-    free(d->body.body);
-    free(d);
+    wfree(d->body.body);
+    wfree(d);
 }
 
 static FILE *openAccessLog()

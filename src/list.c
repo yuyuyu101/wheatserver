@@ -2,10 +2,11 @@
 #include <stdio.h>
 
 #include "list.h"
+#include "memalloc.h"
 
 struct list *createList()
 {
-    struct list *l = malloc(sizeof(struct list));
+    struct list *l = wmalloc(sizeof(struct list));
     l->first = l->last = NULL;
     l->len = 0;
     l->dup = NULL;
@@ -24,7 +25,7 @@ void listClean(struct list *l)
         next = current->next;
         if (l->free)
             l->free(current->value);
-        free(current);
+        wfree(current);
         current = next;
     }
 }
@@ -32,12 +33,12 @@ void listClean(struct list *l)
 void freeList(struct list *l)
 {
     listClean(l);
-    free(l);
+    wfree(l);
 }
 
 struct list *appendToListTail(struct list *l, void *ptr)
 {
-    struct listNode *newNode = malloc(sizeof(struct listNode));
+    struct listNode *newNode = wmalloc(sizeof(struct listNode));
     if (newNode == NULL)
         return NULL;
     if (l->dup)
@@ -58,7 +59,7 @@ struct list *appendToListTail(struct list *l, void *ptr)
 
 struct list *insertToListHead(struct list *l, void *ptr)
 {
-    struct listNode *newNode = malloc(sizeof(struct listNode));
+    struct listNode *newNode = wmalloc(sizeof(struct listNode));
     if (newNode == NULL)
         return NULL;
     if (l->dup)
@@ -91,7 +92,7 @@ void removeListNode(struct list *l, struct listNode *node)
     else
         l->last = node->prev;
     if (l->free) l->free(node->value);
-    free(node);
+    wfree(node);
     l->len--;
 }
 
@@ -132,7 +133,7 @@ struct listNode *searchListKey(struct list *l, void *key)
 
 struct listIterator *listGetIterator(struct list *list, int direction)
 {
-    struct listIterator *iter = malloc(sizeof(struct listIterator));
+    struct listIterator *iter = wmalloc(sizeof(struct listIterator));
     if (iter == NULL)
         return NULL;
     if (direction == START_HEAD) {
@@ -148,7 +149,7 @@ struct listIterator *listGetIterator(struct list *list, int direction)
 
 void freeListIterator(struct listIterator *iter)
 {
-    free(iter);
+    wfree(iter);
 }
 
 struct listNode *listNext(struct listIterator *iter)
@@ -183,14 +184,14 @@ void listPrint(struct list *list)
 
 void *dupInt(void *ptr)
 {
-    int *new_ptr = malloc(sizeof(int));
+    int *new_ptr = wmalloc(sizeof(int));
     *new_ptr = *(int *)ptr;
     return new_ptr;
 }
 
 void freeInt(void *ptr)
 {
-    free(ptr);
+    wfree(ptr);
 }
 
 int matchInt(void *ptr, void *key)
@@ -210,7 +211,7 @@ int main(void)
         l = createList();
         int i;
         for (i = 0; i < 10; i++) {
-            int *n = malloc(sizeof(int));
+            int *n = wmalloc(sizeof(int));
             *n = i;
             appendToListTail(l, n);
         }
@@ -245,10 +246,10 @@ int main(void)
         listSetMatch(l, matchInt);
         test_cond("list own value", isListOwnValue(l));
         for (i = 0; i < 10; i++) {
-            int *n = malloc(sizeof(int));
+            int *n = wmalloc(sizeof(int));
             *n = i;
             insertToListHead(l, n);
-            free(n);
+            wfree(n);
         }
         test_cond("Append to list tail length", listLength(l) == 10);
         iter = listGetIterator(l, 1);

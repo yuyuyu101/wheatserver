@@ -24,6 +24,7 @@
 #include "debug.h"
 #include "event.h"
 #include "hook.h"
+#include "memalloc.h"
 #include "net.h"
 #include "networking.h"
 #include "portable.h"

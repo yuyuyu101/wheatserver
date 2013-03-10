@@ -72,7 +72,7 @@ void sendStatPacket()
 
 struct workerStat *initWorkerStat(int only_malloc)
 {
-    struct workerStat *stat = malloc(sizeof(struct workerStat));
+    struct workerStat *stat = wmalloc(sizeof(struct workerStat));
     stat->master_stat_fd = 0;
     stat->stat_total_connection = 0;
     stat->stat_total_request = 0;
@@ -146,7 +146,7 @@ void resetStat(struct workerStat *stat)
 
 struct masterStat *initMasterStat()
 {
-    struct masterStat *stat = malloc(sizeof(struct masterStat));
+    struct masterStat *stat = wmalloc(sizeof(struct masterStat));
     stat->total_run_workers = 0;
     stat->timeout_workers = 0;
     return stat;

@@ -19,7 +19,7 @@ void wheat_stacktrace(int skip_count)
         wheatLog(WHEAT_WARNING, "[%d] %s", j, symbols[i]);
     }
 
-    free(symbols);
+    wfree(symbols);
 }
 
 void wheat_assert(const char *cond, const char *file, int line, int panic)

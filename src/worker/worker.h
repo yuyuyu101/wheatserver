@@ -5,6 +5,7 @@
 #include <setjmp.h>
 #include "../wheatserver.h"
 #include "mbuf.h"
+#include "../slab.h"
 
 #define WORKER_BOOT_ERROR 3
 #define WHEATSERVER_REQ_MAXLEN 8*1024
@@ -94,6 +95,7 @@ void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void resetClientCtx(struct client *c);
+void *clientPalloc(struct client *c, size_t size);
 int clientSendPacketList(struct client *c);
 int sendClientFile(struct client *c, int fd, off_t len);
 

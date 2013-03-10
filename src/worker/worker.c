@@ -36,7 +36,7 @@ static struct list *createAndFillPool()
     int i = 0;
     ASSERT(l);
     for (; i < 120; ++i) {
-        struct client *c = malloc(sizeof(*c));
+        struct client *c = wmalloc(sizeof(*c));
         appendToListTail(l, c);
     }
     return l;
@@ -63,8 +63,8 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 void freeWorkerProcess(void *w)
 {
     struct workerProcess *worker = w;
-    free(worker->stat);
-    free(worker);
+    wfree(worker->stat);
+    wfree(worker);
 }
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p)
@@ -72,7 +72,7 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     struct client *c;
     struct listNode *node;
     if ((node = listFirst(ClientPool)) == NULL) {
-        c = malloc(sizeof(*c));
+        c = wmalloc(sizeof(*c));
     } else {
         c = listNodeValue(node);
         removeListNode(ClientPool, node);
@@ -105,7 +105,7 @@ void freeClient(struct client *c)
     if (listLength(ClientPool) > 100) {
         appendToListTail(ClientPool, c);
     } else {
-        free(c);
+        wfree(c);
     }
 }
 
@@ -179,10 +179,10 @@ int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset)
 
 int sendClientFile(struct client *c, int fd, off_t len)
 {
-    int send = len;
+    int send = 0;
     int ret = WHEAT_OK;
-    if (!isClientNeedSend(c)) {
-        send = portable_sendfile(c->clifd, fd, len);
+    while (!isClientNeedSend(c) && send != len) {
+        send += portable_sendfile(c->clifd, fd, send, len);
         if (send == -1)
             return WHEAT_WRONG;
     }
@@ -190,4 +190,9 @@ int sendClientFile(struct client *c, int fd, off_t len)
         ret = sendFileByCopy(c, fd, len, send);
     }
     return ret;
+}
+
+void *clientPalloc(struct client *c, size_t size)
+{
+    return slabAlloc(c->pool, size);
 }

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "dict.h"
+#include "memalloc.h"
 
 /* ========== private functions ==========*/
 
@@ -63,7 +64,7 @@ static int _dictKeyIndex(struct dict *d, const void *key)
 
 struct dict *dictCreate(struct dictType *type)
 {
-    struct dict *d = malloc(sizeof(struct dict));
+    struct dict *d = wmalloc(sizeof(struct dict));
     d->size = 0;
     d->sizemask = 0;
     d->used = 0;
@@ -86,9 +87,9 @@ int dictExpand(struct dict *d, unsigned long size)
     d->size = realsize;
     d->sizemask = realsize-1;
     if (d->table)
-        d->table = realloc(d->table, realsize*sizeof(struct dictEntry*));
+        d->table = wrealloc(d->table, realsize*sizeof(struct dictEntry*));
     else
-        d->table = malloc(realsize*sizeof(struct dictEntry*));
+        d->table = wmalloc(realsize*sizeof(struct dictEntry*));
     memset(d->table, 0, realsize*sizeof(struct dictEntry*));
 
     return DICT_OK;
@@ -105,7 +106,7 @@ struct dictEntry *dictAddRaw(struct dict *d, void *key)
         return NULL;
 
     /* Allocate the memory and store the new entry */
-    entry = malloc(sizeof(struct dictEntry));
+    entry = wmalloc(sizeof(struct dictEntry));
     memset(entry, 0, sizeof(*entry));
     entry->next = d->table[index];
     d->table[index] = entry;
@@ -201,7 +202,7 @@ static int dictGenericDelete(struct dict *d, const void *key, int nofree)
                 dictFreeKey(d, he);
                 dictFreeVal(d, he);
             }
-            free(he);
+            wfree(he);
             d->used--;
             return DICT_OK;
         }
@@ -231,12 +232,12 @@ void dictClear(struct dict *d)
             nextHe = he->next;
             dictFreeKey(d, he);
             dictFreeVal(d, he);
-            free(he);
+            wfree(he);
             d->used--;
             he = nextHe;
         }
     }
-    free(d->table);
+    wfree(d->table);
     d->size = 0;
     d->sizemask = 0;
     d->used = 0;
@@ -246,7 +247,7 @@ void dictClear(struct dict *d)
 void dictRelease(struct dict *d)
 {
     dictClear(d);
-    free(d);
+    wfree(d);
 }
 
 void *dictFetchValue(struct dict *d, const void *key)
@@ -259,7 +260,7 @@ void *dictFetchValue(struct dict *d, const void *key)
 
 struct dictIterator *dictGetIterator(struct dict *d)
 {
-    struct dictIterator *iter = malloc(sizeof(struct dictIterator));
+    struct dictIterator *iter = wmalloc(sizeof(struct dictIterator));
 
     iter->d = d;
     iter->table = 0;
@@ -295,7 +296,7 @@ struct dictEntry *dictNext(struct dictIterator *iter)
 
 void dictReleaseIterator(struct dictIterator *iter)
 {
-    free(iter);
+    wfree(iter);
 }
 
 static uint32_t dict_hash_function_seed = 2128;

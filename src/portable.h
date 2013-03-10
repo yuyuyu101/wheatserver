@@ -1,7 +1,7 @@
 #ifndef WHEATSERVER_PORTABLE_H
 #define WHEATSERVER_PORTABLE_H
 
-ssize_t portable_sendfile(int out_fd, int in_fd, off_t len);
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t, off_t len);
 
 /* Check if we can use setproctitle().
  * BSD systems have support for it, we provide an implementation for

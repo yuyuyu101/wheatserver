@@ -136,7 +136,7 @@ void adjustWorkerNumber()
 void spawnWorker(char *worker_name)
 {
     pid_t pid;
-    struct workerProcess *new_worker = malloc(sizeof(struct workerProcess));
+    struct workerProcess *new_worker = wmalloc(sizeof(struct workerProcess));
     if (new_worker == NULL) {
         wheatLog(WHEAT_WARNING, "spawn new worker failed: %s", strerror(errno));
         halt(1);
@@ -266,7 +266,7 @@ void run()
 
 struct masterClient *createMasterClient(int fd)
 {
-    struct masterClient *c = malloc(sizeof(struct masterClient));
+    struct masterClient *c = wmalloc(sizeof(struct masterClient));
     c->request_buf = wstrEmpty();
     c->response_buf = wstrEmpty();
     c->argc = 0;
@@ -289,7 +289,7 @@ void freeMasterClient(struct masterClient *c)
     ASSERT(node);
     removeListNode(Server.master_clients, node);
     wheatLog(WHEAT_DEBUG, "delete readable fd: %d", c->fd);
-    free(c);
+    wfree(c);
 }
 
 static void resetMasterClient(struct masterClient *c)

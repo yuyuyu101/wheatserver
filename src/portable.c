@@ -4,9 +4,10 @@
 /* OS X */
 #include <sys/socket.h>
 #include <sys/types.h>
-ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
-    if (sendfile(in_fd, out_fd, 0, &len, NULL, 0) == -1)
-        return -1;
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t off, off_t len) {
+    if (sendfile(in_fd, out_fd, off, &len, NULL, 0) == -1)
+        if (errno != EAGAIN)
+            return -1;
     return len;
 }
 #endif
@@ -14,8 +15,8 @@ ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
 /* Linux */
 #include <sys/sendfile.h>
 
-ssize_t portable_sendfile(int out_fd, int in_fd, off_t len) {
-    return sendfile(out_fd, in_fd, NULL, len);
+ssize_t portable_sendfile(int out_fd, int in_fd, off_t off, off_t len) {
+    return sendfile(out_fd, in_fd, &off, len);
 }
 
 #endif

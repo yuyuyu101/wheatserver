@@ -1,6 +1,6 @@
 #include "worker.h"
 
-#define WHEAT_ASYNC_CLIENT_MAX     10000
+#define WHEAT_ASYNC_CLIENT_MAX     1000
 
 static struct evcenter *WorkerCenter = NULL;
 static struct list *Clients = NULL;

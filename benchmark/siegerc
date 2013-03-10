@@ -1,0 +1,6 @@
+verbose = false
+concurrent = 50
+reps = 100
+delay = 0
+internet = true
+benchmark = true

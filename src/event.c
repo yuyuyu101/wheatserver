@@ -17,13 +17,13 @@ struct evcenter *eventcenterInit(int nevent)
     struct fired_event *fired_events = NULL;
     void *api_state = NULL;
 
-    center = malloc(sizeof(struct evcenter));
+    center = wmalloc(sizeof(struct evcenter));
     if (center == NULL) {
         wheatLog(WHEAT_WARNING, "center create failed: %s", strerror(errno));
         return NULL;
     }
-    events = malloc(nevent*sizeof(struct event));
-    fired_events = malloc(nevent*sizeof(struct fired_event));
+    events = wmalloc(nevent*sizeof(struct event));
+    fired_events = wmalloc(nevent*sizeof(struct fired_event));
     if (fired_events == NULL || events == NULL) {
         wheatLog(WHEAT_WARNING, "event and fired_event create failed: %s",
                 strerror(errno));
@@ -47,19 +47,19 @@ struct evcenter *eventcenterInit(int nevent)
 
 cleanup:
     if (center)
-        free(center);
+        wfree(center);
     if (fired_events)
-        free(fired_events);
+        wfree(fired_events);
     if (events)
-        free(events);
+        wfree(events);
     return NULL;
 }
 
 void eventcenterDealloc(struct evcenter *center)
 {
     eventDeinit(center->apidata);
-    free(center->events);
-    free(center);
+    wfree(center->events);
+    wfree(center);
 }
 
 int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void *client_data)

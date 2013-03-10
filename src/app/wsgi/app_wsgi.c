@@ -74,7 +74,7 @@ out:
 
 void *initWsgiAppData(struct client *c)
 {
-    struct wsgiData *data = malloc(sizeof(struct wsgiData));
+    struct wsgiData *data = wmalloc(sizeof(struct wsgiData));
     if (data == NULL)
         return NULL;
     data->environ = NULL;
@@ -87,7 +87,7 @@ void *initWsgiAppData(struct client *c)
 void freeWsgiAppData(void *data)
 {
     struct wsgiData *d = data;
-    free(d);
+    wfree(d);
 }
 
 void initWsgi()
@@ -186,7 +186,7 @@ const char *wsgiUnquote(const char *s)
     size_t len = strlen(s);
     char *result, *t;
 
-    if ((result = malloc(len + 1)) == NULL)
+    if ((result = wmalloc(len + 1)) == NULL)
         return NULL;
 
     t = result;
@@ -345,7 +345,7 @@ PyObject *createEnviron(struct client *client)
 
 cleanup:
     if (req_uri)
-        free((void *)req_uri);
+        wfree((void *)req_uri);
     wstrFree(host);
     wstrFree(port);
 
