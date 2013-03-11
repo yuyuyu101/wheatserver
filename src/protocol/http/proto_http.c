@@ -687,7 +687,6 @@ cleanup:
 
 void sendResponse404(struct client *c)
 {
-    struct httpData *http_data = c->protocol_data;
     static const char body[] =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
         "<html><head>\n"
@@ -704,7 +703,6 @@ void sendResponse404(struct client *c)
 
 void sendResponse500(struct client *c)
 {
-    struct httpData *http_data = c->protocol_data;
     static const char body[] =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
         "<html><head>\n"
