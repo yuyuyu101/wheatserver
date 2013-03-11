@@ -54,7 +54,7 @@ def test_static_file(port):
     time.sleep(0.1)
     for i in range(10):
         conn = httplib.HTTPConnection("127.0.0.1", port-1, timeout=1);
-        conn.request("GET", "/example/static/example.jpg")
+        conn.request("GET", "/static/example.jpg")
         r1 = conn.getresponse()
         assert r1.status == 200
 
@@ -64,10 +64,14 @@ def setup_module(module):
     global sync_server, async_server
     sync_server = WheatServer("", "--port 10826", "--stat-port 10827",
                               "--worker-type %s" % "SyncWorker",
-                              "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"))
+                              "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
+                              "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
+                              "--static-file-dir /static/")
 
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
-                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"))
+                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
+                               "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
+                               "--static-file-dir /static/")
     time.sleep(0.5)
 
 def teardown_module(module):

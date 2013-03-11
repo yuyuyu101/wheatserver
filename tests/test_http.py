@@ -12,7 +12,7 @@ def test_get_two():
                                "--allowed-extension bmp,gif")
     time.sleep(0.1)
     s = server_socket(10828)
-    s.send("GET / HTTP/1.1\r\nHOST: localhost:10828\r\nConnec")
+    s.send("GET / HTTP/1.1\r\nHOST: 127.0.0.1:10828\r\nConnec")
     time.sleep(0.2)
     s.send("tion: close\r\n\r\n")
     a = s.recv(100)
@@ -45,5 +45,5 @@ def test_document_root_and_static_file_dir():
                                "--static-file-dir %s" % "/static",
                                "--allowed-extension bmp,gif,jpg")
     time.sleep(0.1)
-    r = requests.get("http://127.0.0.1:10828/static/example.jpg")
+    r = requests.get("http://127.0.0.1:10828/static/example.jpg",timeout=1)
     assert 200 == r.status_code
