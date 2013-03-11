@@ -27,7 +27,7 @@ static PyObject *InputStream_consume(InputStream *self, int size)
     data = PyString_AS_STRING(result);
     do {
         if (self->pos >= self->curr->len) {
-            self->curr = httpGetBodyNext(self->response->client);
+            self->curr = httpGetBodyNext(self->client);
             self->pos = 0;
         }
         size_t remaining = self->curr->len - self->pos;
@@ -43,12 +43,6 @@ static PyObject *InputStream_consume(InputStream *self, int size)
 
 static void InputStream_dealloc(InputStream *self)
 {
-    PyObject *tmp;
-
-    tmp = (PyObject *)self->response;
-    self->response = NULL;
-    Py_XDECREF(tmp);
-
     self->ob_type->tp_free((PyObject *)self);
 }
 
@@ -58,7 +52,7 @@ static PyObject *InputStream_new(PyTypeObject *type, PyObject *args, PyObject *k
 
     self = (InputStream *)type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->response = NULL;
+        self->client = NULL;
         self->pos = 0;
         self->readed = 0;
     }
@@ -70,14 +64,13 @@ static PyObject *InputStream_new(PyTypeObject *type, PyObject *args, PyObject *k
    the received Content-Length. */
 static int InputStream_init(InputStream *self, PyObject *args, PyObject *kwds)
 {
-    struct response *response;
+    PyObject *client;
 
-    if (!PyArg_ParseTuple(args, "O!", &responseType, &response))
+    if (!PyArg_ParseTuple(args, "O!", &PyCObject_Type, &client))
         return -1;
 
-    Py_INCREF(response);
-    self->response = response;
-    self->curr = httpGetBodyNext(response->client);
+    self->client = PyCObject_AsVoidPtr(client);
+    self->curr = httpGetBodyNext(self->client);
     return 0;
 }
 
@@ -93,7 +86,7 @@ static PyObject *InputStream_read(InputStream *self, PyObject *args)
     if (size <= 0 || !self->curr)
         return PyString_FromString("");
 
-    remaining = httpBodyGetSize(self->response->client) - self->readed;
+    remaining = httpBodyGetSize(self->client) - self->readed;
     size = remaining > size ? size : remaining;
 
     return InputStream_consume(self, size);
@@ -112,7 +105,7 @@ static PyObject *InputStream_readline(InputStream *self, PyObject *args)
     if (size <= 0)
         return PyString_FromString("");
 
-    remaining = self->curr->len - self->pos + httpBodyGetSize(self->response->client);
+    remaining = self->curr->len - self->pos + httpBodyGetSize(self->client);
     size = remaining > size ? size : remaining;
 
     return InputStream_consume(self, size);

@@ -12,10 +12,6 @@ struct response {
     PyObject_HEAD
         /* All fields are private */
     struct client *client;
-    PyObject *headers;
-    PyObject *result;
-    PyObject *env;
-    PyObject *input;
 };
 
 typedef struct {
@@ -26,7 +22,7 @@ typedef struct {
 
 typedef struct {
     PyObject_HEAD
-    struct response *response;
+    struct client *client;
     size_t readed;
     const struct slice *curr;
     int pos;
@@ -48,8 +44,6 @@ PyTypeObject InputStream_Type;
 PyMODINIT_FUNC
 init_wsgisup(void);
 PyObject *createEnviron(struct client *client);
-void responseClear(struct response *);
 void wsgiCallClose(PyObject *result);
-int wsgiSendResponse(struct response *self, PyObject *result);
 
 #endif

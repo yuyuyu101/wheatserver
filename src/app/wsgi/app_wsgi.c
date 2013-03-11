@@ -3,6 +3,10 @@
 
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;
+static PyObject *DefaultEnv = NULL;
+static PyObject *ReqObj = NULL;
+
+static int wsgiSendResponse(struct client *c, PyObject *result);
 
 int wsgiCall(struct client *client, void *arg)
 {
@@ -14,11 +18,7 @@ int wsgiCall(struct client *client, void *arg)
     if (res == NULL)
         goto out;
 
-    env = createEnviron(client);
-    if (env == NULL)
-        goto out;
-
-    args = Py_BuildValue("(OO)", res, env);
+    args = Py_BuildValue("(O)", res);
     Py_DECREF(res);
     if (args == NULL)
         goto out;
@@ -34,6 +34,10 @@ int wsgiCall(struct client *client, void *arg)
     if (start_resp == NULL)
         goto out;
 
+    env = createEnviron(client);
+    if (env == NULL)
+        goto out;
+
     /* Build arguments and call application object */
     args = Py_BuildValue("(OO)", env, start_resp);
     Py_DECREF(start_resp);
@@ -43,11 +47,8 @@ int wsgiCall(struct client *client, void *arg)
     result = PyObject_CallObject(pApp, args);
     Py_DECREF(args);
     if (result != NULL) {
-        /* result now owned by req_obj */
-        req_obj->result = result;
-
         /* Handle the application response */
-        wsgiSendResponse(req_obj, result); /* ignore return */
+        wsgiSendResponse(client, result); /* ignore return */
         wsgiCallClose(result);
     }
 
@@ -63,7 +64,6 @@ out:
 
     if (req_obj != NULL) {
         /* Don't rely on cyclic GC. Clear circular references NOW. */
-        responseClear(req_obj);
         Py_DECREF(req_obj);
     }
 
@@ -88,6 +88,32 @@ void freeWsgiAppData(void *data)
 {
     struct wsgiData *d = data;
     wfree(d);
+}
+
+static PyObject *defaultEnviron()
+{
+    PyObject *val;
+    PyObject *env = PyDict_New();
+    if (!env)
+        return NULL;
+    if (PyDict_SetItemString(env, "wsgi.errors", WsgiStderr) != 0)
+        goto cleanup;
+    if ((val = Py_BuildValue("(ii)", 1, 0)) == NULL)
+        goto cleanup;
+    if (PyDict_SetItemString(env, "wsgi.version", val) != 0)
+        goto cleanup;
+    Py_DECREF(val);
+    if (PyDict_SetItemString(env, "wsgi.multiprocess", Server.worker_number > 1 ? Py_True: Py_False) != 0)
+        goto cleanup;
+    if (PyDict_SetItemString(env, "wsgi.multithread", Py_False) != 0)
+        goto cleanup;
+    if (PyDict_SetItemString(env, "wsgi.run_once", Py_False) != 0)
+        goto cleanup;
+
+    return env;
+cleanup:
+    Py_DECREF(env);
+    return NULL;
 }
 
 int initWsgi()
@@ -140,6 +166,10 @@ int initWsgi()
     Py_DECREF(pName);
     Py_DECREF(pModule);
 
+    DefaultEnv = defaultEnviron();
+    if (!DefaultEnv)
+        goto err;
+
     return WHEAT_OK;
 err:
     PyErr_Print();
@@ -151,6 +181,7 @@ void deallocWsgi()
 {
     Py_DECREF(pApp);
     Py_DECREF(WsgiStderr);
+    Py_DECREF(DefaultEnv);
     Py_Finalize();
 }
 
@@ -207,58 +238,47 @@ const char *wsgiUnquote(const char *s)
     return result;
 }
 
-static PyObject *defaultEnviron(PyObject *env, struct client *c)
-{
-    PyObject *val;
-    if (PyDict_SetItemString(env, "wsgi.errors", WsgiStderr) != 0)
-        return NULL;
-    if ((val = Py_BuildValue("(ii)", 1, 0)) == NULL)
-        return NULL;
-    if (PyDict_SetItemString(env, "wsgi.version", val) != 0)
-        return NULL;
-    Py_DECREF(val);
-    if (PyDict_SetItemString(env, "wsgi.multiprocess", Server.worker_number > 1 ? Py_True: Py_False) != 0)
-        return NULL;
-    if (PyDict_SetItemString(env, "wsgi.multithread", Py_False) != 0)
-        return NULL;
-    if (PyDict_SetItemString(env, "wsgi.run_once", Py_False) != 0)
-        return NULL;
-
-    if (envPutString(env, "wsgi.url_scheme", httpGetUrlScheme(c)))
-        return NULL;
-
-    if (envPutString(env, "REQUEST_METHOD", httpGetMethod(c)))
-        return NULL;
-
-    if (envPutString(env, "SERVER_PROTOCOL", httpGetProtocolVersion(c)))
-        return NULL;
-
-    if (envPutString(env, "QUERY_STRING", httpGetQueryString(c)))
-        return NULL;
-
-    return env;
-}
-
 PyObject *createEnviron(struct client *client)
 {
     const char *req_uri = NULL;
     PyObject *environ;
-    environ = PyDict_New();
     char buf[256];
     int result = 1;
+    wstr host = NULL, port = NULL, server = NULL;
+    PyObject *args, *input;
+    PyObject *c_obj = PyCObject_FromVoidPtr(client, NULL);
 
-    if (!environ)
-        return NULL;
-    environ = defaultEnviron(environ, client);
+    environ = PyDict_Copy(DefaultEnv);
     if (environ == NULL) {
-        Py_DECREF(environ);
         return NULL;
     }
+
+    if (envPutString(environ, "wsgi.url_scheme", httpGetUrlScheme(client)))
+        goto cleanup;
+
+    if (envPutString(environ, "REQUEST_METHOD", httpGetMethod(client)))
+        goto cleanup;
+
+    if (envPutString(environ, "SERVER_PROTOCOL", httpGetProtocolVersion(client)))
+        goto cleanup;
+
+    if (envPutString(environ, "QUERY_STRING", httpGetQueryString(client)))
+        goto cleanup;
+
+    // Add http body stream as wsgi.input
+    if ((args = Py_BuildValue("(O)", c_obj)) == NULL)
+        goto cleanup;
+    input = PyObject_CallObject((PyObject *)&InputStream_Type, args);
+    Py_DECREF(args);
+    Py_DECREF(c_obj);
+    if (input == NULL)
+        goto cleanup;
+    if (PyDict_SetItemString(environ, "wsgi.input", input) != 0)
+        goto cleanup;
 
     /* HTTP headers */
     struct dictIterator *iter = dictGetIterator(httpGetReqHeaders(client));
     struct dictEntry *entry;
-    wstr host = NULL, port = NULL, server = NULL;
     while ((entry = dictNext(iter)) != NULL) {
         int k, j;
         wstr header = dictGetKey(entry);
@@ -358,28 +378,6 @@ cleanup:
     return environ;
 }
 
-
-void responseClear(struct response *self)
-{
-    PyObject *tmp;
-
-    tmp = self->headers;
-    self->headers = NULL;
-    Py_XDECREF(tmp);
-
-    tmp = self->result;
-    self->result = NULL;
-    Py_XDECREF(tmp);
-
-    tmp = self->env;
-    self->env = NULL;
-    Py_XDECREF(tmp);
-
-    tmp = self->input;
-    self->input = NULL;
-    Py_XDECREF(tmp);
-}
-
 void wsgiCallClose(PyObject *result)
 {
     PyObject *type, *value, *traceback;
@@ -407,7 +405,6 @@ void wsgiCallClose(PyObject *result)
 
 static void responseDealloc(struct response *self)
 {
-    responseClear(self);
     self->ob_type->tp_free((PyObject *)self);
 }
 
@@ -417,10 +414,6 @@ static PyObject * responseNew(PyTypeObject *type, PyObject *args, PyObject *kwds
 
     self = (struct response *)type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->headers = NULL;
-        self->result = NULL;
-        self->env = NULL;
-        self->input = NULL;
     }
 
     return (PyObject *)self;
@@ -429,24 +422,13 @@ static PyObject * responseNew(PyTypeObject *type, PyObject *args, PyObject *kwds
 /* Constructor. Accepts the context CObject as its sole argument. */
 static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *context_obj, *args2, *env;
+    PyObject *context_obj;
 
-    if (!PyArg_ParseTuple(args, "O!O!", &PyCObject_Type, &context_obj, &PyDict_Type, &env))
+    if (!PyArg_ParseTuple(args, "O!", &PyCObject_Type, &context_obj))
         return -1;
 
     self->client = PyCObject_AsVoidPtr(context_obj);
 
-    if ((args2 = Py_BuildValue("(O)", self)) == NULL)
-        return -1;
-    self->input = PyObject_CallObject((PyObject *)&InputStream_Type, args2);
-    Py_DECREF(args2);
-    if (self->input == NULL)
-        return -1;
-
-    // Add More WSGI Variable To Env
-    self->env = env;
-    if (PyDict_SetItemString(env, "wsgi.input", self->input) != 0)
-        return -1;
     return 0;
 }
 
@@ -639,11 +621,10 @@ int wsgiSendFile(struct client *c, int fd)
 }
 
 /* Send a wrapped file using wsgiSendFile */
-static int wsgiSendFileWrapper(struct response *self, FileWrapper *wrapper)
+static int wsgiSendFileWrapper(struct client *c, FileWrapper *wrapper)
 {
     PyObject *pFileno, *args, *pFD;
     int fd;
-    struct client *c = self->client;
 
     /* file-like must have fileno */
     if (!PyObject_HasAttrString((PyObject *)wrapper->filelike, "fileno"))
@@ -671,27 +652,26 @@ static int wsgiSendFileWrapper(struct response *self, FileWrapper *wrapper)
 
     /* Send headers if necessary */
     if (!ishttpHeaderSended(c)) {
-        if (httpSendHeaders(self->client))
+        if (httpSendHeaders(c))
             return -1;
     }
 
-    if (wsgiSendFile(self->client, fd))
+    if (wsgiSendFile(c, fd))
         return -1;
 
     return 0;
 }
 
 /* Send the application's response */
-int wsgiSendResponse(struct response *self, PyObject *result)
+int wsgiSendResponse(struct client *c, PyObject *result)
 {
     PyObject *iter;
     PyObject *item;
     int ret = 0;
-    struct client *c = self->client;
 
     /* Check if it's a FileWrapper */
     if (result->ob_type == &FileWrapper_Type) {
-        ret = wsgiSendFileWrapper(self, (FileWrapper *)result);
+        ret = wsgiSendFileWrapper(c, (FileWrapper *)result);
         if (ret < 0)
             return -1;
         if (!ret)
@@ -721,14 +701,14 @@ int wsgiSendResponse(struct response *self, PyObject *result)
 
             /* Send headers if necessary */
             if (!ishttpHeaderSended(c)) {
-                if (httpSendHeaders(self->client)) {
+                if (httpSendHeaders(c)) {
                     ret = -1;
                     Py_DECREF(item);
                     break;
                 }
             }
 
-            if (httpSendBody(self->client, data, dataLen)) {
+            if (httpSendBody(c, data, dataLen)) {
                 ret = -1;
                 Py_DECREF(item);
                 break;

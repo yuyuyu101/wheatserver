@@ -519,11 +519,11 @@ int main(int argc, const char *argv[])
     loadConfigFile(Server.configfile_path, options);
     wstrFree(options);
     if (Server.daemon) daemonize(1);
-    wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
 
     initServer();
     if (Server.daemon) createPidFile();
     setProctitle(argv[0]);
+    wheatLog(WHEAT_NOTICE, "WheatServer v%s is running", WHEATSERVER_VERSION);
 
     run();
     return 0;
