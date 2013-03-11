@@ -37,7 +37,7 @@ static PyObject *InputStream_consume(InputStream *self, int size)
         total += copyed;
         self->pos += copyed;
     } while(size > 0);
-    self->readed += size;
+    self->readed += total;
     return result;
 }
 

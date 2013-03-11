@@ -7,7 +7,7 @@ POST_DATA = b"""POST /asdf HTTP/1.1\r\nHost: 127.0.0.1:10828\r\nContent-Length: 
 def test_get_two():
     async = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
-                               "--static-file-root %s" % os.path.join(PROJECT_PATH, "example/"),
+                               "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
                                "--allowed-extension bmp,gif")
     time.sleep(0.1)
     s = server_socket(10828)
@@ -20,7 +20,7 @@ def test_get_two():
 def test_post_file():
     async = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
-                               "--static-file-root %s" % os.path.join(PROJECT_PATH, "example/"),
+                               "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
                                "--allowed-extension bmp,gif")
     time.sleep(0.1)
     s = server_socket(10828)
