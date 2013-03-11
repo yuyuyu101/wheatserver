@@ -191,8 +191,3 @@ int sendClientFile(struct client *c, int fd, off_t len)
     }
     return ret;
 }
-
-void *clientPalloc(struct client *c, size_t size)
-{
-    return slabAlloc(c->pool, size);
-}

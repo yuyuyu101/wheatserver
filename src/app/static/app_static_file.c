@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/types.h>
+#include <libgen.h>
 
 #include "../application.h"
 #include "../../protocol/http/proto_http.h"
@@ -308,11 +309,11 @@ void *initStaticFileData(struct client *c)
     memset(data, 0, sizeof(*data));
     wstr path = httpGetPath(c);
     if (path) {
-        char *point = strrchr(path, '.');
-        char *slash = strrchr(path, '/');
-        if (point && slash && slash < point) {
+        char *base_name = basename(path);
+        char *point = strrchr(base_name, '.');
+        if (point && base_name && base_name < point) {
             data->extension = wstrNew(point+1);
-            data->filename = wstrNewLen(slash+1, (int)(point-slash-1));
+            data->filename = wstrNewLen(base_name, (int)(point-base_name));
         }
     }
     return data;
