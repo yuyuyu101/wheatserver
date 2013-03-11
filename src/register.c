@@ -21,7 +21,7 @@ int httpSpot(struct client*);
 int parseHttp(struct client *);
 void *initHttpData();
 void freeHttpData(void *data);
-void initHttp();
+int initHttp();
 void deallocHttp();
 
 struct protocol ProtocolTable[] = {
@@ -30,13 +30,13 @@ struct protocol ProtocolTable[] = {
 };
 
 int staticFileCall(struct client *, void *);
-void initStaticFile();
+int initStaticFile();
 void deallocStaticFile();
 void *initStaticFileData(struct client *);
 void freeStaticFileData(void *app_data);
 
 int wsgiCall(struct client *, void *);
-void initWsgi();
+int initWsgi();
 void deallocWsgi();
 void *initWsgiAppData(struct client *);
 void freeWsgiAppData(void *app_data);

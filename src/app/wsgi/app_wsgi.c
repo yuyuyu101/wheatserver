@@ -90,7 +90,7 @@ void freeWsgiAppData(void *data)
     wfree(d);
 }
 
-void initWsgi()
+int initWsgi()
 {
     char *app_t;
     char buf[WHEATSERVER_PATH_LEN];
@@ -140,11 +140,11 @@ void initWsgi()
     Py_DECREF(pName);
     Py_DECREF(pModule);
 
-    return ;
+    return WHEAT_OK;
 err:
     PyErr_Print();
     wheatLog(WHEAT_WARNING, "initWsgi failed");
-    halt(1);
+    return WHEAT_WRONG;
 }
 
 void deallocWsgi()

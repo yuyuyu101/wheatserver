@@ -32,7 +32,7 @@ struct protocol {
     int (*parser)(struct client *);
     void *(*initProtocolData)();
     void (*freeProtocolData)(void *ptcol_data);
-    void (*initProtocol)();
+    int (*initProtocol)();
     void (*deallocProtocol)();
 };
 
@@ -58,7 +58,7 @@ struct app {
     /* Return WHEAT_OK means all is ok and return WEHAT_WRONG means something
      * wrong inside and worker will clean this connection */
     int (*appCall)(struct client *, void *arg);
-    void (*initApp)();
+    int (*initApp)();
     void (*deallocApp)();
     void *(*initAppData)(struct client *);
     void (*freeAppData)(void *app_data);

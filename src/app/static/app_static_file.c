@@ -200,6 +200,7 @@ int staticFileCall(struct client *c, void *arg)
     struct staticFileData *static_data = c->app_private_data;
     off_t len;
     time_t m_time;
+    int ok = 1;
     if (file_d == -1) {
         wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
@@ -253,16 +254,17 @@ int staticFileCall(struct client *c, void *arg)
     return WHEAT_OK;
 
 failed:
-    wheatLog(WHEAT_WARNING, "send file failed");
+    wheatLog(WHEAT_WARNING, "send static file failed");
+    ok = 0;
 
 failed404:
     sendResponse404(c);
     if (file_d > 0) close(file_d);
 
-    return WHEAT_WRONG;
+    return ok == 1 ? WHEAT_OK : WHEAT_WRONG;
 }
 
-void initStaticFile()
+int initStaticFile()
 {
     struct configuration *conf = getConfiguration("file-maxsize");
     MaxFileSize = conf->target.val;
@@ -278,7 +280,7 @@ void initStaticFile()
         wstr *argvs = wstrNewSplit(extensions, ",", 1, &args);
         if (!argvs) {
             wheatLog(WHEAT_WARNING, "init Static File failed");
-            return ;
+            return WHEAT_WRONG;
         }
 
         for (i = 0; i < args; ++i) {
@@ -291,6 +293,7 @@ void initStaticFile()
     }
     wstrFree(extensions);
     IfModifiedSince = wstrNew(IF_MODIFIED_SINCE);
+    return WHEAT_OK;
 }
 
 void deallocStaticFile()

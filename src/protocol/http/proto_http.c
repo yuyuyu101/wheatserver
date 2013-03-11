@@ -239,7 +239,6 @@ cleanup:
     return NULL;
 }
 
-
 /* `value` is the value of http header x-forwarded-for.
  * `h` and `p` as value-argument returned.
  * avoid memory leak, you should free `h` and `p` after used.
@@ -485,7 +484,7 @@ static FILE *openAccessLog()
     return fp;
 }
 
-void initHttp()
+int initHttp()
 {
     struct configuration *conf1, *conf2;
 
@@ -494,11 +493,22 @@ void initHttp()
     conf1 = getConfiguration("document-root");
     conf2 = getConfiguration("static-file-dir");
     if (conf1->target.ptr && conf2->target.ptr) {
-        StaticPathHandler.abs_path = wstrNew(conf1->target.ptr);
+        char path[1024];
+        char *real_path = realpath(conf1->target.ptr, path);
+        if (!real_path) {
+            wheatLog(WHEAT_WARNING, "document-root is unvalid");
+            return WHEAT_WRONG;
+        }
+        StaticPathHandler.abs_path = wstrNew(real_path);
         StaticPathHandler.root = wstrDup(StaticPathHandler.abs_path);
         StaticPathHandler.static_dir = wstrNew(conf2->target.ptr);
         StaticPathHandler.abs_path = wstrCat(StaticPathHandler.abs_path,
                 StaticPathHandler.static_dir);
+        real_path = realpath(StaticPathHandler.abs_path, path);
+        if (!real_path) {
+            wheatLog(WHEAT_WARNING, "static-file-dir is unvalid");
+            return WHEAT_WRONG;
+        }
     }
 
     memset(&HttpPaserSettings, 0 , sizeof(HttpPaserSettings));
@@ -508,6 +518,7 @@ void initHttp()
     HttpPaserSettings.on_body = on_body;
     HttpPaserSettings.on_url = on_url;
     HttpPaserSettings.on_message_complete = on_message_complete;
+    return WHEAT_OK;
 }
 
 void deallocHttp()
@@ -653,6 +664,8 @@ int httpSendHeaders(struct client *client)
         if ((headers = wstrCatLen(headers, buf, ret)) == NULL)
             goto cleanup;
     }
+    if (!http_data->response_length)
+        http_data->keep_live = 0;
 
     headers = wstrCatLen(headers, "\r\n", 2);
     struct slice slice;
@@ -684,7 +697,6 @@ void sendResponse404(struct client *c)
         "<p>The requested URL was not found on this server</p>\n"
         "</body></html>\n";
     fillResInfo(c, 404, "NotFound");
-    http_data->response_length = sizeof(body);
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
@@ -703,7 +715,6 @@ void sendResponse500(struct client *c)
         "prevented it from fulfilling the request.</p>\n"
         "</body></html>\n";
     fillResInfo(c, 500, "Internal Error");
-    http_data->response_length = sizeof(body);
 
     if (!httpSendHeaders(c))
         httpSendBody(c, body, strlen(body));
@@ -720,16 +731,23 @@ int httpSpot(struct client *c)
         i = 1;
     }
     if (!appTable[i].is_init) {
-        appTable[i].initApp();
+        ret = appTable[i].initApp();
+        if (ret == WHEAT_WRONG) {
+            wstrFree(path);
+            return ret;
+        }
         appTable[i].is_init = 1;
     }
     c->app = &appTable[i];
     c->app_private_data = c->app->initAppData(c);
+    if (!c->app_private_data) {
+        wstrFree(path);
+        wheatLog(WHEAT_WARNING, "init app data failed");
+        return WHEAT_WRONG;
+    }
     ret = appTable[i].appCall(c, path);
     c->app->freeAppData(c->app_private_data);
     logAccess(c);
     wstrFree(path);
-    if (http_data->response_length == 0)
-        c->should_close = 1;
     return ret;
 }

@@ -85,7 +85,7 @@ static int InputStream_init(InputStream *self, PyObject *args, PyObject *kwds)
 static PyObject *InputStream_read(InputStream *self, PyObject *args)
 {
     int size = -1;
-    int remaining;
+    long remaining;
 
     if (!PyArg_ParseTuple(args, "|i:read", &size))
         return NULL;

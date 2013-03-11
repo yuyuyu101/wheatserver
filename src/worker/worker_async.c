@@ -209,6 +209,11 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     wheatCloseOnExec(Server.neterr, cfd);
 
     struct protocol *ptcol = spotProtocol(ip, cport, cfd);
+    if (!ptcol) {
+        close(cfd);
+        wheatLog(WHEAT_WARNING, "spot protocol failed");
+        return ;
+    }
     struct client *c = initRequest(cfd, ip, cport, ptcol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
     WorkerProcess->stat->stat_total_connection++;

@@ -67,6 +67,11 @@ int syncRecvData(struct client *c)
 void dispatchRequest(int fd, char *ip, int port)
 {
     struct protocol *ptcol = spotProtocol(ip, port, fd);
+    if (!ptcol) {
+        wheatLog(WHEAT_WARNING, "spot protocol failed");
+        close(fd);
+        return ;
+    }
     struct client *c = createClient(fd, ip, port, ptcol);
     if (c == NULL)
         return ;
