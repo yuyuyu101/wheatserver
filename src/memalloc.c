@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <assert.h>
 
 #if 0
 #include <stdio.h>
@@ -19,7 +20,6 @@ void allocPrint()
 #else
 #define STAT_ALLOC(size)
 #endif
-
 
 void *wmalloc(size_t size)
 {
