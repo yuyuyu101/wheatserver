@@ -46,7 +46,7 @@ struct evcenter {
 
 struct evcenter *eventcenterInit(int nevent);
 void eventcenterDealloc(struct evcenter *center);
-int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void *clientData);
+int createEvent(struct evcenter *center, int fd, int mask, eventProc *proc, void *client_data);
 void deleteEvent(struct evcenter *center, int fd, int mask);
 int processEvents(struct evcenter *center, int timeout_seconds);
 
