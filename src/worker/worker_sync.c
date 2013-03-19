@@ -1,5 +1,8 @@
 #include "worker.h"
 
+static struct array *MaxSelectFd = NULL;
+static int MaxFd = 0;
+
 int syncSendData(struct client *c, struct slice *data)
 {
     if (!isClientValid(c)) {
@@ -8,19 +11,7 @@ int syncSendData(struct client *c, struct slice *data)
     if (!data->len)
         return 0;
 
-    struct slice msg_slice;
-    size_t copyed;
-    size_t need_write = data->len;
-    uint8_t *curr = data->data;
-    do {
-        msgPut(c->res_buf, &msg_slice);
-        copyed = msg_slice.len > need_write ? need_write : msg_slice.len;
-        memcpy(msg_slice.data, curr, copyed);
-        msgSetWritted(c->res_buf, copyed);
-        curr += copyed;
-        need_write -= copyed;
-    } while(need_write > 0);
-
+    insertSliceToSendQueue(c, data);
     ssize_t sended = 0;
     while (isClientNeedSend(c)) {
         sended += clientSendPacketList(c);
@@ -56,12 +47,21 @@ int syncRecvData(struct client *c)
         }
         total += n;
         msgSetWritted(c->req_buf, n);
-    } while (n == slice.len);
+    } while (n == slice.len || n == 0);
     if (msgGetSize(c->req_buf) > Server.max_buffer_size)
         setClientUnvalid(c);
     refreshClient(c, Server.cron_time);
 
     return (int)total;
+}
+
+int syncRegisterRead(struct client *c)
+{
+    if (c->clifd > MaxFd)
+        MaxFd = c->clifd;
+    arrayPush(MaxSelectFd, &c->clifd);
+    c->is_req = 0;
+    return WHEAT_OK;
 }
 
 void dispatchRequest(int fd, char *ip, int port)
@@ -72,40 +72,47 @@ void dispatchRequest(int fd, char *ip, int port)
         close(fd);
         return ;
     }
-    struct client *c = createClient(fd, ip, port, ptcol);
-    if (c == NULL)
+    struct client *client = createClient(fd, ip, port, ptcol);
+    if (client == NULL)
         return ;
     struct workerStat *stat = WorkerProcess->stat;
     int ret, n;
+    struct slice slice;
     do {
-        n = syncRecvData(c);
-        if (!isClientValid(c)) {
+        n = syncRecvData(client);
+        if (!isClientValid(client)) {
             goto cleanup;
         }
-        if (msgGetSize(c->req_buf) > stat->stat_buffer_size)
-            stat->stat_buffer_size = msgGetSize(c->req_buf);
+        if (msgGetSize(client->req_buf) > stat->stat_buffer_size)
+            stat->stat_buffer_size = msgGetSize(client->req_buf);
 parser:
-        ret = ptcol->parser(c);
+        if (!client->pending)
+            client->pending = connCreate(client);
+
+        msgRead(client->req_buf, &slice);
+
+        ret = ptcol->parser(client->pending, &slice);
+        msgSetReaded(client->req_buf, slice.len);
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse http data failed");
             stat->stat_failed_request++;
             goto cleanup;
         }
     } while(ret == 1);
-    ret = c->protocol->spotAppAndCall(c);
+    ret = client->protocol->spotAppAndCall(client->pending);
     if (ret != WHEAT_OK) {
         stat->stat_failed_request++;
         wheatLog(WHEAT_NOTICE, "app failed");
         goto cleanup;
     }
     stat->stat_total_request++;
-    if (msgCanRead(c->req_buf)) {
-        resetClientCtx(c);
+    client->pending = NULL;
+    if (msgCanRead(client->req_buf)) {
         goto parser;
     }
 
 cleanup:
-    freeClient(c);
+    freeClient(client);
 }
 
 void syncWorkerCron()
@@ -150,11 +157,15 @@ accepterror:
             return ;
         }
         struct timeval tvp;
+        int i;
         fd_set rset;
         tvp.tv_sec = WHEATSERVER_CRON;
         tvp.tv_usec = 0;
         FD_ZERO(&rset);
-        FD_SET(Server.ipfd, &rset);
+        for (i = 0; i < narray(MaxSelectFd); i++) {
+            int *fd = arrayIndex(MaxSelectFd, i);
+            FD_SET(*fd, &rset);
+        }
 
         ret = select(Server.ipfd+1, &rset, NULL, NULL, &tvp);
         if (ret >= 0)
@@ -170,4 +181,11 @@ accepterror:
 
 void setupSync()
 {
+    MaxSelectFd = arrayCreate(sizeof(int), 10);
+    if (!MaxSelectFd) {
+        wheatLog(WHEAT_WARNING, "init failed");
+        halt(1);
+    }
+    arrayPush(MaxSelectFd, &Server.ipfd);
+    MaxFd = Server.ipfd;
 }

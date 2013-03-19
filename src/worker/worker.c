@@ -67,6 +67,56 @@ void freeWorkerProcess(void *w)
     wfree(worker);
 }
 
+int initAppData(struct conn *c)
+{
+    if (c->app) {
+        c->app_private_data = c->app->initAppData(c);
+    }
+    return WHEAT_OK;
+}
+
+void freeAppData(struct conn *c)
+{
+    if (c->app_private_data)
+        c->app->freeAppData(c->app_private_data);
+    c->app_private_data = NULL;
+}
+
+struct conn *connCreate(struct client *client)
+{
+    struct conn *c = wmalloc(sizeof(*c));
+    c->client = client;
+    c->protect = NULL;
+    c->protocol_data = client->protocol->initProtocolData();
+    c->app = c->app_private_data = NULL;
+    c->node = appendToListTail(client->conns, c);
+    return c;
+}
+
+static void connDealloc(struct conn *c)
+{
+    if (c->protocol_data)
+        c->client->protocol->freeProtocolData(c->protocol_data);
+    if (c->app_private_data)
+        c->app->freeAppData(c->app_private_data);
+    wfree(c);
+}
+
+void insertSliceToSendQueue(struct client *client, struct slice *s)
+{
+    struct sendPacket *packet = wmalloc(sizeof(*packet));
+    if (!packet)
+        setClientUnvalid(client);
+    packet->type = SLICE;
+    sliceTo(&packet->target.slice, s->data, s->len);
+    appendToListTail(client->send_queue, packet);
+}
+
+void freeSendPacket(struct sendPacket *p)
+{
+    wfree(p);
+}
+
 struct client *createClient(int fd, char *ip, int port, struct protocol *p)
 {
     struct client *c;
@@ -82,16 +132,17 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->clifd = fd;
     c->ip = wstrNew(ip);
     c->port = port;
-    c->protocol_data = p->initProtocolData();
     c->protocol = p;
-    c->app_private_data = NULL;
-    c->app = NULL;
+    c->conns = createList();
+    listSetFree(c->conns, (void(*)(void *))connDealloc);
     c->err = NULL;
     c->req_buf = msgCreate(Server.mbuf_size);
-    c->res_buf = msgCreate(Server.mbuf_size);
+    c->send_queue = createList();
+    listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
+    c->is_req = 1;
     c->should_close = 0;
     c->valid = 1;
-    ASSERT(c->protocol_data);
+    c->pending = NULL;
     return c;
 }
 
@@ -100,8 +151,7 @@ void freeClient(struct client *c)
     close(c->clifd);
     wstrFree(c->ip);
     msgFree(c->req_buf);
-    msgFree(c->res_buf);
-    c->protocol->freeProtocolData(c->protocol_data);
+    freeList(c->conns);
     if (listLength(ClientPool) > 100) {
         appendToListTail(ClientPool, c);
     } else {
@@ -109,33 +159,41 @@ void freeClient(struct client *c)
     }
 }
 
-void resetClientCtx(struct client *c)
+void finishHandle(struct conn *c)
 {
+    struct client *client = c->client;
     if (c->protocol_data)
-        c->protocol->freeProtocolData(c->protocol_data);
-    c->protocol_data = c->protocol->initProtocolData();
-    msgClean(c->req_buf);
+        client->protocol->freeProtocolData(c->protocol_data);
+    if (client->protocol)
+        c->protocol_data = client->protocol->initProtocolData();
+    removeListNode(client->conns, c->node);
+    if (!listLength(client->conns))
+        msgClean(client->req_buf);
 }
 
 int clientSendPacketList(struct client *c)
 {
-    struct slice data;
+    struct sendPacket *packet = NULL;
     size_t allsend = 0;
-    do {
-        allsend = 0;
-        msgRead(c->res_buf, &data);
+    struct listNode *node = NULL;
+    struct slice *data;
+    while (listLength(c->send_queue)) {
         ssize_t nwritten = 0;
+        node = listFirst(c->send_queue);
+        packet = listNodeValue(node);
+        if (packet->type != SLICE)
+            ASSERT(0);
 
-        while (data.len != 0) {
-            nwritten = writeBulkTo(c->clifd, &data);
+        data = &packet->target.slice;
+        while (data->len != 0) {
+            nwritten = writeBulkTo(c->clifd, data);
             if (nwritten <= 0)
                 break;
-            data.len -= nwritten;
-            data.data += nwritten;
+            data->len -= nwritten;
+            data->data += nwritten;
             allsend += nwritten;
         }
 
-        msgSetReaded(c->res_buf, allsend);
         if (nwritten == -1) {
             setClientUnvalid(c);
             break;
@@ -144,11 +202,12 @@ int clientSendPacketList(struct client *c)
         if (nwritten == 0) {
             break;
         }
-    } while(allsend == data.len);
+        removeListNode(c->send_queue, node);
+    }
     return (int)allsend;
 }
 
-int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset)
+int sendFileByCopy(struct conn *c, int fd, off_t len, off_t offset)
 {
     off_t send = offset;
     int ret;
@@ -170,19 +229,19 @@ int sendFileByCopy(struct client *c, int fd, off_t len, off_t offset)
         if (nread <= 0)
             return WHEAT_WRONG;
         send += nread;
-        ret = WorkerProcess->worker->sendData(c, &slice);
+        ret = sendClientData(c->client, &slice);
         if (ret == -1)
             return WHEAT_WRONG;
     }
     return WHEAT_OK;
 }
 
-int sendClientFile(struct client *c, int fd, off_t len)
+int sendClientFile(struct conn *c, int fd, off_t len)
 {
     int send = 0;
     int ret = WHEAT_OK;
-    while (!isClientNeedSend(c) && send != len) {
-        send += portable_sendfile(c->clifd, fd, send, len);
+    while (!isClientNeedSend(c->client) && send != len) {
+        send += portable_sendfile(c->client->clifd, fd, send, len);
         if (send == -1)
             return WHEAT_WRONG;
     }
@@ -190,4 +249,31 @@ int sendClientFile(struct client *c, int fd, off_t len)
         ret = sendFileByCopy(c, fd, len, send);
     }
     return ret;
+}
+
+struct client *buildConn(char *ip, int port, struct protocol *p)
+{
+    struct client *c = NULL;
+    int fd = wheatTcpConnect(Server.neterr, ip, port);
+    if (fd == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Unable to connect to redis %s:%d: %s %s",
+            ip, port, strerror(errno), Server.neterr);
+        return NULL;
+    }
+    if (wheatNonBlock(Server.neterr, fd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", fd, Server.neterr);
+        return NULL;
+    }
+    c = createClient(fd, ip, port, p);
+    return c;
+}
+
+int sendClientData(struct client *c, struct slice *s)
+{
+    return WorkerProcess->worker->sendData(c, s);
+}
+
+int registerClientRead(struct client *c)
+{
+    return WorkerProcess->worker->registerRead(c);
 }

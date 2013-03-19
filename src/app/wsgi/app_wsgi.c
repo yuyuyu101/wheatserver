@@ -4,17 +4,16 @@
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;
 static PyObject *DefaultEnv = NULL;
-static PyObject *ReqObj = NULL;
 
-static int wsgiSendResponse(struct client *c, PyObject *result);
+static int wsgiSendResponse(struct conn *c, PyObject *result);
 
-int wsgiCall(struct client *client, void *arg)
+int wsgiCall(struct conn *c, void *arg)
 {
     /* Create Request object, passing it the context as a CObject */
     int is_ok = 1;
     PyObject *start_resp, *result, *args, *env;
     struct response *req_obj = NULL;
-    PyObject *res = PyCObject_FromVoidPtr(client, NULL);
+    PyObject *res = PyCObject_FromVoidPtr(c, NULL);
     if (res == NULL)
         goto out;
 
@@ -34,7 +33,7 @@ int wsgiCall(struct client *client, void *arg)
     if (start_resp == NULL)
         goto out;
 
-    env = createEnviron(client);
+    env = createEnviron(c);
     if (env == NULL)
         goto out;
 
@@ -48,7 +47,7 @@ int wsgiCall(struct client *client, void *arg)
     Py_DECREF(args);
     if (result != NULL) {
         /* Handle the application response */
-        wsgiSendResponse(client, result); /* ignore return */
+        wsgiSendResponse(c, result); /* ignore return */
         wsgiCallClose(result);
     }
 
@@ -57,8 +56,8 @@ out:
         PyErr_Print();
 
         /* Display HTTP 500 error, if possible */
-        if (req_obj == NULL || !ishttpHeaderSended(client))
-            sendResponse500(client);
+        if (req_obj == NULL || !ishttpHeaderSended(c))
+            sendResponse500(c);
         is_ok = 0;
     }
 
@@ -72,7 +71,7 @@ out:
     return WHEAT_WRONG;
 }
 
-void *initWsgiAppData(struct client *c)
+void *initWsgiAppData(struct conn *c)
 {
     struct wsgiData *data = wmalloc(sizeof(struct wsgiData));
     if (data == NULL)
@@ -116,7 +115,7 @@ cleanup:
     return NULL;
 }
 
-int initWsgi()
+int initWsgi(struct protocol *p)
 {
     char *app_t;
     char buf[WHEATSERVER_PATH_LEN];
@@ -126,7 +125,7 @@ int initWsgi()
     conf = getConfiguration("app-project-path");
     snprintf(buf, WHEATSERVER_PATH_LEN, "import sys, os\n"
             "sys.path.append(os.getcwd())\n"
-            "sys.path.append('%s')" , conf->target.ptr);
+            "sys.path.append('%s')" , (char *)conf->target.ptr);
     PyRun_SimpleString(buf);
 
     init_wsgisup();
@@ -238,7 +237,7 @@ const char *wsgiUnquote(const char *s)
     return result;
 }
 
-PyObject *createEnviron(struct client *client)
+PyObject *createEnviron(struct conn *c)
 {
     const char *req_uri = NULL;
     PyObject *environ;
@@ -246,23 +245,23 @@ PyObject *createEnviron(struct client *client)
     int result = 1;
     wstr host = NULL, port = NULL, server = NULL;
     PyObject *args, *input;
-    PyObject *c_obj = PyCObject_FromVoidPtr(client, NULL);
+    PyObject *c_obj = PyCObject_FromVoidPtr(c, NULL);
 
     environ = PyDict_Copy(DefaultEnv);
     if (environ == NULL) {
         return NULL;
     }
 
-    if (envPutString(environ, "wsgi.url_scheme", httpGetUrlScheme(client)))
+    if (envPutString(environ, "wsgi.url_scheme", httpGetUrlScheme(c)))
         goto cleanup;
 
-    if (envPutString(environ, "REQUEST_METHOD", httpGetMethod(client)))
+    if (envPutString(environ, "REQUEST_METHOD", httpGetMethod(c)))
         goto cleanup;
 
-    if (envPutString(environ, "SERVER_PROTOCOL", httpGetProtocolVersion(client)))
+    if (envPutString(environ, "SERVER_PROTOCOL", httpGetProtocolVersion(c)))
         goto cleanup;
 
-    if (envPutString(environ, "QUERY_STRING", httpGetQueryString(client)))
+    if (envPutString(environ, "QUERY_STRING", httpGetQueryString(c)))
         goto cleanup;
 
     // Add http body stream as wsgi.input
@@ -277,7 +276,7 @@ PyObject *createEnviron(struct client *client)
         goto cleanup;
 
     /* HTTP headers */
-    struct dictIterator *iter = dictGetIterator(httpGetReqHeaders(client));
+    struct dictIterator *iter = dictGetIterator(httpGetReqHeaders(c));
     struct dictEntry *entry;
     while ((entry = dictNext(iter)) != NULL) {
         int k, j;
@@ -317,7 +316,7 @@ PyObject *createEnviron(struct client *client)
                 // No need to free `h`
                 struct slice s;
                 sliceTo(&s, (uint8_t *)HTTP_CONTINUE, sizeof(HTTP_CONTINUE));
-                WorkerProcess->worker->sendData(client, &s);
+                sendClientData(c->client, &s);
             }
         } else if (!strcmp(buf, "HTTP_HOST")) {
             if (envPutString(environ, buf, value))
@@ -333,8 +332,8 @@ PyObject *createEnviron(struct client *client)
     }
     dictReleaseIterator(iter);
     if (!host) {
-        host = wstrNew(client->ip);
-        snprintf(buf, 255, "%d", client->port);
+        host = wstrNew(getConnIP(c));
+        snprintf(buf, 255, "%d", getConnPort(c));
         port = wstrNew(buf);
     }
     if (envPutString(environ, "REMOTE_ADDR", host))
@@ -346,17 +345,17 @@ PyObject *createEnviron(struct client *client)
         if (envPutString(environ, "SERVER_PORT", sep+1))
             goto cleanup;
         server = wstrRange(server, (int)(sep-server+1), 0);
-    } else if (!strcmp(httpGetUrlScheme(client), "HTTP")) {
+    } else if (!strcmp(httpGetUrlScheme(c), "HTTP")) {
         if (envPutString(environ, "SERVER_PORT", "80"))
             goto cleanup;
-    } else if (!strcmp(httpGetUrlScheme(client), "HTTPS")) {
+    } else if (!strcmp(httpGetUrlScheme(c), "HTTPS")) {
         if (envPutString(environ, "SERVER_PORT", "443"))
             goto cleanup;
     }
     if (envPutString(environ, "SERVER_NAME", server))
         goto cleanup;
 
-    if ((req_uri = wsgiUnquote(httpGetPath(client))) == NULL) {
+    if ((req_uri = wsgiUnquote(httpGetPath(c))) == NULL) {
         goto cleanup;
     }
     if (envPutString(environ, "PATH_INFO", req_uri))
@@ -427,7 +426,7 @@ static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
     if (!PyArg_ParseTuple(args, "O!", &PyCObject_Type, &context_obj))
         return -1;
 
-    self->client = PyCObject_AsVoidPtr(context_obj);
+    self->c = PyCObject_AsVoidPtr(context_obj);
 
     return 0;
 }
@@ -436,7 +435,7 @@ static int responseInit(struct response *self, PyObject *args, PyObject *kwds)
 static PyObject * startResponse(struct response *self, PyObject *args)
 {
     PyObject *status, *headers, *exc_info = NULL;
-    struct wsgiData *data = self->client->app_private_data;
+    struct wsgiData *data = self->c->app_private_data;
     const char *status_p;
 
     if (!PyArg_ParseTuple(args, "SO!|O:start_response", &status,
@@ -447,7 +446,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     if (exc_info != NULL && exc_info != Py_None) {
         /* If the headers have already been sent, just propagate the
            exception. */
-        if (ishttpHeaderSended(self->client)) {
+        if (ishttpHeaderSended(self->c)) {
             PyObject *type, *value, *tb;
             if (!PyArg_ParseTuple(exc_info, "OOO", &type, &value, &tb))
                 return NULL;
@@ -457,7 +456,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             PyErr_Restore(type, value, tb);
             return NULL;
         }
-    } else if (ishttpHeaderSended(self->client)) {
+    } else if (ishttpHeaderSended(self->c)) {
         data->err = "headers already set";
         return NULL;
     }
@@ -477,7 +476,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
             Py_DECREF(iterator);
             return NULL;
         }
-        appendToResHeaders(self->client, field, value);
+        appendToResHeaders(self->c, field, value);
         Py_DECREF(item);
     }
 
@@ -492,7 +491,7 @@ static PyObject * startResponse(struct response *self, PyObject *args)
     if ((status_p = PyString_AsString(status)) == NULL)
         return NULL;
 
-    fillResInfo(self->client, (int)strtol(status_p, NULL, 10), &status_p[4]);
+    fillResInfo(self->c, (int)strtol(status_p, NULL, 10), &status_p[4]);
 
     return PyObject_GetAttrString((PyObject *)self, "write");
 }
@@ -500,8 +499,8 @@ static PyObject * startResponse(struct response *self, PyObject *args)
 /* write() callable implementation */
 static PyObject *responseWrite(struct response *self, PyObject *args)
 {
-    struct wsgiData *wsgi_data = self->client->app_private_data;
-    struct client *c = self->client;
+    struct wsgiData *wsgi_data = self->c->app_private_data;
+    struct conn *c = self->c;
     const char *data;
     int dataLen;
 
@@ -611,7 +610,7 @@ init_wsgisup(void)
 }
 
 /* Send a file as the HTTP response body. */
-int wsgiSendFile(struct client *c, int fd)
+int wsgiSendFile(struct conn *c, int fd)
 {
     int ret = 0;
 
@@ -621,7 +620,7 @@ int wsgiSendFile(struct client *c, int fd)
 }
 
 /* Send a wrapped file using wsgiSendFile */
-static int wsgiSendFileWrapper(struct client *c, FileWrapper *wrapper)
+static int wsgiSendFileWrapper(struct conn *c, FileWrapper *wrapper)
 {
     PyObject *pFileno, *args, *pFD;
     int fd;
@@ -663,7 +662,7 @@ static int wsgiSendFileWrapper(struct client *c, FileWrapper *wrapper)
 }
 
 /* Send the application's response */
-int wsgiSendResponse(struct client *c, PyObject *result)
+int wsgiSendResponse(struct conn *c, PyObject *result)
 {
     PyObject *iter;
     PyObject *item;

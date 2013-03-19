@@ -87,37 +87,37 @@ char *httpDate()
     return buf;
 }
 
-const char *httpGetUrlScheme(struct client *c)
+const char *httpGetUrlScheme(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->url_scheme;
 }
 
-const char *httpGetMethod(struct client *c)
+const char *httpGetMethod(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->method;
 }
 
-const char *httpGetProtocolVersion(struct client *c)
+const char *httpGetProtocolVersion(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->protocol_version;
 }
 
-const wstr httpGetQueryString(struct client *c)
+const wstr httpGetQueryString(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->query_string;
 }
 
-const wstr httpGetPath(struct client *c)
+const wstr httpGetPath(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->path;
 }
 
-const struct slice *httpGetBodyNext(struct client *c)
+const struct slice *httpGetBodyNext(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     struct slice *s = data->body.curr_body;
@@ -127,25 +127,25 @@ const struct slice *httpGetBodyNext(struct client *c)
     return s;
 }
 
-int httpBodyGetSize(struct client *c)
+int httpBodyGetSize(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->body.body_len;
 }
 
-struct dict *httpGetReqHeaders(struct client *c)
+struct dict *httpGetReqHeaders(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->req_headers;
 }
 
-int ishttpHeaderSended(struct client *c)
+int ishttpHeaderSended(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->headers_sent;
 }
 
-int httpGetResStatus(struct client *c)
+int httpGetResStatus(struct conn *c)
 {
     struct httpData *data = c->protocol_data;
     return data->res_status;
@@ -174,7 +174,7 @@ static int enlargeHttpBody(struct httpBody *body)
     return 0;
 }
 
-static const char *connectionField(struct client *c)
+static const char *connectionField(struct conn *c)
 {
     char *connection = NULL;
     struct httpData *data = c->protocol_data;
@@ -185,12 +185,12 @@ static const char *connectionField(struct client *c)
         connection = "keep-live";
     } else if (!data->keep_live) {
         connection = "close";
-        c->should_close = 1;
+        setClientClose(c);
     }
     return connection;
 }
 
-int appendToResHeaders(struct client *c, const char *field,
+int appendToResHeaders(struct conn *c, const char *field,
         const char *value)
 {
     struct httpData *http_data = c->protocol_data;
@@ -200,16 +200,16 @@ int appendToResHeaders(struct client *c, const char *field,
     return 0;
 }
 
-void fillResInfo(struct client *c, int status, const char *msg)
+void fillResInfo(struct conn *c, int status, const char *msg)
 {
     struct httpData *data = c->protocol_data;
     data->res_status = status;
     data->res_status_msg = wstrNew(msg);
 }
 
-static wstr defaultResHeader(struct client *client)
+static wstr defaultResHeader(struct conn *c)
 {
-    struct httpData *http_data = client->protocol_data;
+    struct httpData *http_data = c->protocol_data;
     char buf[256];
     wstr headers = wstrNewLen(NULL, 500);
     int ret;
@@ -379,21 +379,20 @@ int on_url(http_parser *parser, const char *at, size_t len)
     return 0;
 }
 
-int parseHttp(struct client *client)
+int parseHttp(struct conn *c, struct slice *slice)
 {
     size_t nparsed;
-    struct slice slice;
-    msgRead(client->req_buf, &slice);
-    struct httpData *http_data = client->protocol_data;
+    struct httpData *http_data = c->protocol_data;
 
-    nparsed = http_parser_execute(http_data->parser, &HttpPaserSettings, (const char *)slice.data, slice.len);
+    nparsed = http_parser_execute(http_data->parser, &HttpPaserSettings, (const char *)slice->data, slice->len);
 
-    if (nparsed != slice.len) {
+    if (nparsed != slice->len) {
         /* Handle error. Usually just close the connection. */
-        wheatLog(WHEAT_WARNING, "parseHttp() nparsed %d != recved %d", nparsed, slice.len);
+        wheatLog(WHEAT_WARNING, "parseHttp() nparsed %d != recved %d", nparsed, slice->len);
         return WHEAT_WRONG;
     }
-    msgSetReaded(client->req_buf, nparsed);
+
+    slice->len = nparsed;
 
     if (http_data->parser->upgrade) {
         /* handle new protocol */
@@ -538,11 +537,11 @@ static const char *apacheDateFormat()
     return buf;
 }
 
-void logAccess(struct client *client)
+void logAccess(struct conn *c)
 {
     if (!AccessFp)
         return ;
-    struct httpData *http_data = client->protocol_data;
+    struct httpData *http_data = c->protocol_data;
     const char *remote_addr, *hyphen, *user, *datetime, *request;
     const char *refer, *user_agent;
     char status_str[100], resp_length[32];
@@ -553,7 +552,7 @@ void logAccess(struct client *client)
     temp = wstrNew("Remote_Addr");
     remote_addr = dictFetchValue(http_data->req_headers, temp);
     if (!remote_addr)
-        remote_addr = client->ip;
+        remote_addr = getConnIP(c);
     wstrFree(temp);
 
     hyphen = user = "-";
@@ -592,9 +591,9 @@ void logAccess(struct client *client)
 }
 
 /* Send a chunk of data */
-int httpSendBody(struct client *client, const char *data, size_t len)
+int httpSendBody(struct conn *c, const char *data, size_t len)
 {
-    struct httpData *http_data = client->protocol_data;
+    struct httpData *http_data = c->protocol_data;
     size_t tosend = len, restsend;
     ssize_t ret;
     struct slice slice;
@@ -610,20 +609,20 @@ int httpSendBody(struct client *client, const char *data, size_t len)
 
     http_data->send += tosend;
     sliceTo(&slice, (uint8_t *)data, tosend);
-    ret = WorkerProcess->worker->sendData(client, &slice);
+    ret = sendClientData(c->client, &slice);
     if (ret == WHEAT_WRONG)
         return -1;
     return 0;
 }
 
-static void httpSendHeadersAction(struct client *c)
+//static void httpSendHeadersAction(struct conn *c)
+//{
+//    struct httpData *http_data = c->protocol_data;
+//}
+
+int httpSendHeaders(struct conn *c)
 {
     struct httpData *http_data = c->protocol_data;
-}
-
-int httpSendHeaders(struct client *client)
-{
-    struct httpData *http_data = client->protocol_data;
     int len;
     int ok = 0;
 
@@ -634,14 +633,11 @@ int httpSendHeaders(struct client *client)
     char buf[256];
     int ret, is_connection = 0;
     wstr field, value;
-    wstr headers = defaultResHeader(client);
+    wstr headers = defaultResHeader(c);
     while((entry = dictNext(iter)) != NULL) {
         field = dictGetKey(entry);
         value = dictGetVal(entry);
         ASSERT(field && value);
-        if (client->res_buf == NULL) {
-            goto cleanup;
-        }
         if (!strncasecmp(field, TRANSFER_ENCODING,
                     sizeof(TRANSFER_ENCODING))) {
             if (!strncasecmp(value, CHUNKED, sizeof(CHUNKED)))
@@ -657,7 +653,7 @@ int httpSendHeaders(struct client *client)
         headers = wstrCatLen(headers, buf, ret);
     }
     if (!is_connection) {
-        const char *connection = connectionField(client);
+        const char *connection = connectionField(c);
         ret = snprintf(buf, sizeof(buf), "Connection: %s\r\n", connection);
         if (ret == -1 || ret > sizeof(buf))
             goto cleanup;
@@ -671,7 +667,7 @@ int httpSendHeaders(struct client *client)
     struct slice slice;
     sliceTo(&slice, (uint8_t *)headers, wstrlen(headers));
 
-    len = WorkerProcess->worker->sendData(client, &slice);
+    len = sendClientData(c->client, &slice);
     if (len < 0) {
         goto cleanup;
     }
@@ -685,7 +681,7 @@ cleanup:
 }
 
 
-void sendResponse404(struct client *c)
+void sendResponse404(struct conn *c)
 {
     static const char body[] =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
@@ -701,7 +697,7 @@ void sendResponse404(struct client *c)
         httpSendBody(c, body, strlen(body));
 }
 
-void sendResponse500(struct client *c)
+void sendResponse500(struct conn *c)
 {
     static const char body[] =
         "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n"
@@ -718,7 +714,7 @@ void sendResponse500(struct client *c)
         httpSendBody(c, body, strlen(body));
 }
 
-int httpSpot(struct client *c)
+int httpSpot(struct conn *c)
 {
     struct httpData *http_data = c->protocol_data;
     int i = 0, ret;
@@ -729,7 +725,7 @@ int httpSpot(struct client *c)
         i = 1;
     }
     if (!appTable[i].is_init) {
-        ret = appTable[i].initApp();
+        ret = appTable[i].initApp(c->client->protocol);
         if (ret == WHEAT_WRONG) {
             wstrFree(path);
             return ret;
@@ -737,15 +733,17 @@ int httpSpot(struct client *c)
         appTable[i].is_init = 1;
     }
     c->app = &appTable[i];
-    c->app_private_data = c->app->initAppData(c);
-    if (!c->app_private_data) {
+    ret = initAppData(c);
+    if (ret == WHEAT_WRONG) {
         wstrFree(path);
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
     ret = appTable[i].appCall(c, path);
-    c->app->freeAppData(c->app_private_data);
+    freeAppData(c);
     logAccess(c);
     wstrFree(path);
+
+    finishHandle(c);
     return ret;
 }

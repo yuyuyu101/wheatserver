@@ -5,6 +5,8 @@
 static struct evcenter *WorkerCenter = NULL;
 static struct list *Clients = NULL;
 
+static void handleRequest(struct evcenter *center, int fd, void *data, int mask);
+
 static void cleanRequest(struct client *c)
 {
     deleteEvent(WorkerCenter, c->clifd, EVENT_READABLE);
@@ -75,19 +77,9 @@ int asyncSendData(struct client *c, struct slice *data)
     if (!data->len)
         return 0;
 
-    struct slice msg_slice;
-    size_t copyed;
-    size_t need_write = data->len;
-    uint8_t *curr = data->data;
-    do {
-        msgPut(c->res_buf, &msg_slice);
-        copyed = msg_slice.len > need_write ? need_write : msg_slice.len;
-        memcpy(msg_slice.data, curr, copyed);
-        msgSetWritted(c->res_buf, copyed);
-        need_write -= copyed;
-    } while(need_write > 0);
-
-    ssize_t sended = clientSendPacketList(c);
+    ssize_t sended;
+    insertSliceToSendQueue(c, data);
+    sended = clientSendPacketList(c);
     refreshClient(c, Server.cron_time);
     if (!isClientValid(c)) {
         // This function is IO interface, we shouldn't clean client in order
@@ -132,6 +124,13 @@ int asyncRecvData(struct client *c)
     return (int)total;
 }
 
+int asyncRegisterRead(struct client *c)
+{
+    int ret = createEvent(WorkerCenter, c->clifd, EVENT_READABLE, handleRequest, c);
+    c->is_req = 0;
+    return ret;
+}
+
 void asyncWorkerCron()
 {
     int refresh_seconds = Server.stat_refresh_seconds;
@@ -159,38 +158,46 @@ void asyncWorkerCron()
 
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
 {
-    struct client *c = data;
+    struct client *client = data;
     ssize_t nread, ret = 0;
     struct workerStat *stat = WorkerProcess->stat;
     struct timeval start, end;
     long time_use;
+    struct slice slice;
     gettimeofday(&start, NULL);
-    nread = asyncRecvData(c);
-    if (!isClientValid(c)) {
-        cleanRequest(c);
+    nread = asyncRecvData(client);
+    if (!isClientValid(client)) {
+        cleanRequest(client);
         return ;
     }
-    if (msgGetSize(c->req_buf) > stat->stat_buffer_size)
-        stat->stat_buffer_size = msgGetSize(c->req_buf);
-    while (msgCanRead(c->req_buf)) {
-        ret = c->protocol->parser(c);
+    if (msgGetSize(client->req_buf) > stat->stat_buffer_size)
+        stat->stat_buffer_size = msgGetSize(client->req_buf);
+    while (msgCanRead(client->req_buf)) {
+        if (!client->pending)
+            client->pending = connCreate(client);
+
+        msgRead(client->req_buf, &slice);
+        ret = client->protocol->parser(client->pending, &slice);
+        msgSetReaded(client->req_buf, slice.len);
+
         if (ret == -1) {
-            wheatLog(WHEAT_NOTICE, "parse http data failed");
+            wheatLog(WHEAT_NOTICE, "parse data failed");
             break;
         } else if (ret == 0) {
             stat->stat_total_request++;
-            ret = c->protocol->spotAppAndCall(c);
-            resetClientCtx(c);
+            ret = client->protocol->spotAppAndCall(client->pending);
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
-                c->should_close = 1;
+                client->should_close = 1;
                 wheatLog(WHEAT_NOTICE, "app failed");
                 break;
             }
+            client->pending = NULL;
         } else if (ret == 1) {
+            continue;
         }
     }
-    tryCleanRequest(c);
+    tryCleanRequest(client);
     gettimeofday(&end, NULL);
     time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
     stat->stat_work_time += time_use;
@@ -234,4 +241,3 @@ void setupAsync()
         halt(1);
     }
 }
-

@@ -13,27 +13,27 @@
 #define CHUNKED           "Chunked"
 #define HTTP_CONTINUE     "HTTP/1.1 100 Continue\r\n\r\n"
 
-const wstr httpGetPath(struct client *c);
-const wstr httpGetQueryString(struct client *c);
-const struct slice *httpGetBodyNext(struct client *c);
-int httpBodyGetSize(struct client *c);
-const char *httpGetUrlScheme(struct client *c);
-const char *httpGetMethod(struct client *c);
-const char *httpGetProtocolVersion(struct client *c);
-struct dict *httpGetReqHeaders(struct client *c);
-int ishttpHeaderSended(struct client *c);
-int httpGetResStatus(struct client *c);
+const wstr httpGetPath(struct conn *c);
+const wstr httpGetQueryString(struct conn *c);
+const struct slice *httpGetBodyNext(struct conn *c);
+int httpBodyGetSize(struct conn *c);
+const char *httpGetUrlScheme(struct conn *c);
+const char *httpGetMethod(struct conn *c);
+const char *httpGetProtocolVersion(struct conn *c);
+struct dict *httpGetReqHeaders(struct conn *c);
+int ishttpHeaderSended(struct conn *c);
+int httpGetResStatus(struct conn *c);
 void parserForward(wstr value, wstr *h, wstr *p);
 int convertHttpDate(time_t date, char *buf, size_t len);
 time_t fromHttpDate(char *buf);
-int httpSendBody(struct client *client, const char *data, size_t len);
-void fillResInfo(struct client *c, int status, const char *msg);
-int httpSendHeaders(struct client *client);
-void sendResponse500(struct client *c);
-void sendResponse404(struct client *c);
-int appendToResHeaders(struct client *c, const char *field,
+int httpSendBody(struct conn *c, const char *data, size_t len);
+void fillResInfo(struct conn *c, int status, const char *msg);
+int httpSendHeaders(struct conn *c);
+void sendResponse500(struct conn *c);
+void sendResponse404(struct conn *c);
+int appendToResHeaders(struct conn *c, const char *field,
         const char *value);
 
-void logAccess(struct client *client);
+void logAccess(struct conn *c);
 
 #endif

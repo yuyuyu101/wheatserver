@@ -22,14 +22,15 @@ struct workerProcess {
 };
 
 struct client;
+struct conn;
+
 struct protocol {
     char *name;
-    /* buildRequest parse `data` and assign protocol data to client
+    int (*spotAppAndCall)(struct conn *);
+    /* `parser` parse `data` and assign protocol data to client
      * if return 0 imply parser success,
-     * return -1 imply parser error,
-     * return 1 imply request incomplete */
-    int (*spotAppAndCall)(struct client *);
-    int (*parser)(struct client *);
+     * return number of bytes parsed */
+    int (*parser)(struct conn *, struct slice *);
     void *(*initProtocolData)();
     void (*freeProtocolData)(void *ptcol_data);
     int (*initProtocol)();
@@ -49,7 +50,7 @@ struct worker {
      * sendData will free `data`
      */
     int (*sendData)(struct client *, struct slice*);
-    int (*recvData)(struct client *);
+    int (*registerRead)(struct client *);
 };
 
 struct app {
@@ -57,26 +58,48 @@ struct app {
     char *name;
     /* Return WHEAT_OK means all is ok and return WEHAT_WRONG means something
      * wrong inside and worker will clean this connection */
-    int (*appCall)(struct client *, void *arg);
-    int (*initApp)();
+    int (*appCall)(struct conn *, void *arg);
+    int (*initApp)(struct protocol *);
     void (*deallocApp)();
-    void *(*initAppData)(struct client *);
+    void *(*initAppData)(struct conn *);
     void (*freeAppData)(void *app_data);
     int is_init;
+};
+
+struct conn {
+    struct client *client;
+    struct listNode *node;
+    struct mbuf *protect;
+    void *protocol_data;
+    struct app *app;
+    void *app_private_data;
+    struct conn *next;
+};
+
+enum packetType {
+    SLICE = 1,
+};
+
+struct sendPacket {
+    enum packetType type;
+    union {
+        struct slice slice;
+    } target;
 };
 
 struct client {
     int clifd;
     wstr ip;
     int port;
-    struct protocol *protocol;
-    void *protocol_data;
-    struct app *app;
-    void *app_private_data;
     time_t last_io;
     char *err;
+    struct protocol *protocol;
+    struct conn *pending;
+    struct list *conns;
     struct msghdr *req_buf;
-    struct msghdr *res_buf;
+    struct list *send_queue;
+
+    unsigned is_req:1;
     unsigned should_close:1; // Used to indicate whether closing client
     unsigned valid:1;        // Intern: used to indicate client fd is unused and
                              // need closing, only used by worker IO methods when
@@ -94,16 +117,26 @@ void freeWorkerProcess(void *worker);
 void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
-void resetClientCtx(struct client *c);
-void *clientPalloc(struct client *c, size_t size);
+void finishHandle(struct conn *c);
 int clientSendPacketList(struct client *c);
-int sendClientFile(struct client *c, int fd, off_t len);
+int sendClientFile(struct conn *c, int fd, off_t len);
+struct client *buildConn(char *ip, int port, struct protocol *p);
+int initAppData(struct conn *);
+void freeAppData(struct conn *);
+int registerClientRead(struct client *c);
+int sendClientData(struct client *c, struct slice *s);
+struct conn *connCreate(struct client *client);
+void insertSliceToSendQueue(struct client *client, struct slice *s);
 
-#define isClientValid(c)     (c)->valid
-#define setClientUnvalid(c)  (c)->valid = 0
-#define isClientNeedSend(c)  (msgCanRead((c)->res_buf))
+#define isClientValid(c)     ((c)->valid)
+#define setClientUnvalid(c)  ((c)->valid = 0)
+#define isClientNeedSend(c)  (listLength((c)->send_queue))
 #define isClientNeedParse(c) (msgCanRead(c)->req_buf))
 #define refreshClient(c, t)  ((c)->last_io = (t))
+#define getConnIP(c)         ((c)->client->ip)
+#define getConnPort(c)       ((c)->client->port)
+#define setClientClose(c)    ((c)->client->should_close = 1)
+#define isReqClient(c)       ((c)->is_req == 1)
 
 /* worker's flow:
  * 0. setup filling workerProcess members

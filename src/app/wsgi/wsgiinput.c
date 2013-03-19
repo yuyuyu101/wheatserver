@@ -27,7 +27,7 @@ static PyObject *InputStream_consume(InputStream *self, int size)
     data = PyString_AS_STRING(result);
     do {
         if (self->pos >= self->curr->len) {
-            self->curr = httpGetBodyNext(self->client);
+            self->curr = httpGetBodyNext(self->c);
             self->pos = 0;
         }
         size_t remaining = self->curr->len - self->pos;
@@ -52,7 +52,7 @@ static PyObject *InputStream_new(PyTypeObject *type, PyObject *args, PyObject *k
 
     self = (InputStream *)type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->client = NULL;
+        self->c = NULL;
         self->pos = 0;
         self->readed = 0;
     }
@@ -64,13 +64,13 @@ static PyObject *InputStream_new(PyTypeObject *type, PyObject *args, PyObject *k
    the received Content-Length. */
 static int InputStream_init(InputStream *self, PyObject *args, PyObject *kwds)
 {
-    PyObject *client;
+    PyObject *c;
 
-    if (!PyArg_ParseTuple(args, "O!", &PyCObject_Type, &client))
+    if (!PyArg_ParseTuple(args, "O!", &PyCObject_Type, &c))
         return -1;
 
-    self->client = PyCObject_AsVoidPtr(client);
-    self->curr = httpGetBodyNext(self->client);
+    self->c = PyCObject_AsVoidPtr(c);
+    self->curr = httpGetBodyNext(self->c);
     return 0;
 }
 
@@ -86,7 +86,7 @@ static PyObject *InputStream_read(InputStream *self, PyObject *args)
     if (size <= 0 || !self->curr)
         return PyString_FromString("");
 
-    remaining = httpBodyGetSize(self->client) - self->readed;
+    remaining = httpBodyGetSize(self->c) - self->readed;
     size = remaining > size ? size : remaining;
 
     return InputStream_consume(self, size);
@@ -105,7 +105,7 @@ static PyObject *InputStream_readline(InputStream *self, PyObject *args)
     if (size <= 0)
         return PyString_FromString("");
 
-    remaining = self->curr->len - self->pos + httpBodyGetSize(self->client);
+    remaining = self->curr->len - self->pos + httpBodyGetSize(self->c);
     size = remaining > size ? size : remaining;
 
     return InputStream_consume(self, size);

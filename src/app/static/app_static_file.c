@@ -155,7 +155,7 @@ static struct contenttype ContentTypes[] = {
     {"zip", "application/zip"},
 };
 
-static int fillResHeaders(struct client *c, off_t rep_len, time_t m_time)
+static int fillResHeaders(struct conn *c, off_t rep_len, time_t m_time)
 {
     int ret;
     struct staticFileData *static_data = c->app_private_data;
@@ -193,7 +193,7 @@ static int fillResHeaders(struct client *c, off_t rep_len, time_t m_time)
 }
 
 
-int staticFileCall(struct client *c, void *arg)
+int staticFileCall(struct conn *c, void *arg)
 {
     wstr path = arg;
     int file_d = open(path, O_RDONLY), ret;
@@ -264,7 +264,7 @@ failed404:
     return ok == 1 ? WHEAT_OK : WHEAT_WRONG;
 }
 
-int initStaticFile()
+int initStaticFile(struct protocol *p)
 {
     struct configuration *conf = getConfiguration("file-maxsize");
     MaxFileSize = conf->target.val;
@@ -304,7 +304,7 @@ void deallocStaticFile()
     wstrFree(IfModifiedSince);
 }
 
-void *initStaticFileData(struct client *c)
+void *initStaticFileData(struct conn *c)
 {
     struct staticFileData *data = wmalloc(sizeof(*data));
     if (!data)

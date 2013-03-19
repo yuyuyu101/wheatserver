@@ -6,12 +6,12 @@
 #include "../../slice.h"
 #include "../../protocol/http/proto_http.h"
 
-struct client;
+struct conn;
 
 struct response {
     PyObject_HEAD
         /* All fields are private */
-    struct client *client;
+    struct conn *c;
 };
 
 typedef struct {
@@ -22,7 +22,7 @@ typedef struct {
 
 typedef struct {
     PyObject_HEAD
-    struct client *client;
+    struct conn *c;
     size_t readed;
     const struct slice *curr;
     int pos;
@@ -43,7 +43,7 @@ PyTypeObject InputStream_Type;
 #endif
 PyMODINIT_FUNC
 init_wsgisup(void);
-PyObject *createEnviron(struct client *client);
+PyObject *createEnviron(struct conn *c);
 void wsgiCallClose(PyObject *result);
 
 #endif
