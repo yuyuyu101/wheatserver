@@ -27,9 +27,10 @@ reset workers.
 
 > Workers: Sync Worker and Async Worker
 
-> Protocol: Http 1.0 and Http 1.1
+> Protocol: Http 1.0 and Http 1.1, Redis protocol
 
-> Application Server: WSGI support and static file support both under Http
+> Application Server: WSGI support and static file support both under Http,
+> Redis-cluster app support under Redis protocol
 
 Build
 ===========
@@ -54,9 +55,11 @@ Run
 Config
 ===========
 
+*Attention*: you must specify needed options under your choosing protocol
+
 See [wheatserver.conf](https://github.com/yuyuyu101/wheatserver/blob/master/wheatserver.conf)
 
-Example(Sample)
+WSGI Example(Sample)
 ===========
 
 <pre>
@@ -73,7 +76,7 @@ def simple_app(environ, start_response):
 
 -./wheatserver --app-project-name sample --app-name simple_app
 
-Example(Django)
+WSGI Example(Django)
 ===========
 
 -My Django Project Directory:
