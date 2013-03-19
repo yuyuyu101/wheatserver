@@ -68,6 +68,26 @@ void *arrayTop(struct array *a)
     return arrayIndex(a, 0);
 }
 
+void arrayEach(struct array *a, void(*func)(void *))
+{
+    int len = a->nelem;
+    uint8_t *pos = a->elements;
+    while (len--) {
+        func(pos);
+        pos += a->elem_size;
+    }
+}
+
+void arrayEach2(struct array *a, void(*func)(void *item, void *data), void *data)
+{
+    int len = a->nelem;
+    uint8_t *pos = a->elements;
+    while (len--) {
+        func(pos, data);
+        pos += a->elem_size;
+    }
+}
+
 size_t narray(struct array *a)
 {
     return a->nelem;

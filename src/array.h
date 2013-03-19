@@ -9,6 +9,8 @@ void arraySet(struct array *a, void *data, size_t p);
 void arrayPush(struct array *a, void *data);
 void *arrayPop(struct array *a);
 void *arrayTop(struct array *a);
+void arrayEach(struct array *a, void(*func)(void *));
+void arrayEach2(struct array *a, void(*func)(void *, void *), void *data);
 
 size_t narray(struct array *a);
 
