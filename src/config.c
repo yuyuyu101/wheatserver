@@ -10,6 +10,13 @@ static struct enumIdName Workers[] = {
     {0, "SyncWorker"}, {1, "AsyncWorker"}
 };
 
+/* Configuration Validator */
+int stringValidator(struct configuration *conf, const char *key, const char *val);
+int unsignedIntValidator(struct configuration *conf, const char *key, const char *val);
+int enumValidator(struct configuration *conf, const char *key, const char *val);
+int boolValidator(struct configuration *conf, const char *key, const char *val);
+int listValidator(struct configuration *conf, const char *key, const char *val);
+
 // configTable is immutable after worker setuped in *Worker Process*
 // Attention: If modify configTable, three places should be attention to.
 // 1. initGlobalServerConfig() in wheatserver.c
@@ -20,6 +27,8 @@ struct configuration configTable[] = {
     //  helper |    flags
 
     // Master Configuration
+    {"protocol",          2, stringValidator,      {.ptr=WHEAT_PROTOCOL_DEFAULT},
+        (void *)WHEAT_NOTFREE,  STRING_FORMAT},
     {"bind-addr",         2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
     {"port",              2, unsignedIntValidator, {.val=WHEAT_SERVERPORT},
@@ -52,8 +61,12 @@ struct configuration configTable[] = {
     // Http
     {"access-log",        2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
-    {"document-root",  2, stringValidator,      {.ptr=NULL},
+    {"document-root",     2, stringValidator,      {.ptr=NULL},
         NULL,                   STRING_FORMAT},
+
+    // Redis
+    {"redis-servers",     WHEAT_ARGS_NO_LIMIT,listValidator, {.ptr=NULL},
+        NULL,                   LIST_FORMAT},
 
     // WSGI Configuration
     {"app-project-path",  2, stringValidator,      {.ptr=NULL},
@@ -76,6 +89,7 @@ void fillServerConfig()
 {
     struct configuration *conf = &configTable[0];
 
+    conf++;
     Server.bind_addr = conf->target.ptr;
     conf++;
     Server.port = conf->target.val;
@@ -105,6 +119,85 @@ void fillServerConfig()
     Server.mbuf_size = conf->target.val;
 }
 
+/* ========== Configuration Validator/Print Area ========== */
+
+int stringValidator(struct configuration *conf, const char *key, const char *val)
+{
+    ASSERT(val);
+
+    if (conf->target.ptr && !conf->helper) {
+        wfree(conf->target.ptr);
+        conf->helper = NULL;
+    }
+    conf->target.ptr = strdup(val);
+    return VALIDATE_OK;
+}
+
+int listValidator(struct configuration *conf, const char *key, const char *val)
+{
+    ASSERT(val);
+    if (conf->target.ptr) {
+        freeList(conf->target.ptr);
+    }
+
+    conf->target.ptr = (struct list *)val;
+    return VALIDATE_OK;
+}
+
+int unsignedIntValidator(struct configuration *conf, const char *key, const char *val)
+{
+    ASSERT(val);
+    int i, digit, value;
+    intptr_t max_limit = 0;
+
+    if (conf->helper)
+        max_limit = (intptr_t)conf->helper;
+
+    for (i = 0; val[i] != '\0'; i++) {
+        digit = val[i] - 48;
+        if (digit < 0 || digit > 9)
+            return VALIDATE_WRONG;
+    }
+
+    value = atoi(val);
+    if (max_limit != 0 && value > max_limit)
+        return VALIDATE_WRONG;
+    conf->target.val = value;
+    return VALIDATE_OK;
+}
+
+int enumValidator(struct configuration *conf, const char *key, const char *val)
+{
+    ASSERT(val);
+    ASSERT(conf->helper);
+
+    struct enumIdName *sentinel = (struct enumIdName *)conf->helper;
+    while (sentinel->name) {
+        if (strncasecmp(val, sentinel->name, strlen(sentinel->name)) == 0) {
+            conf->target.enum_ptr = sentinel;
+            return VALIDATE_OK;
+        }
+        else if (sentinel == NULL)
+            break ;
+        sentinel++;
+    }
+
+    return VALIDATE_WRONG;
+}
+
+int boolValidator(struct configuration *conf, const char *key, const char *val)
+{
+    size_t len = strlen(val) + 1;
+    if (memcmp("on", val, len) == 0) {
+        conf->target.val = 1;
+    } else if (memcmp("off", val, len) == 0) {
+        conf->target.val = 0;
+    } else
+        return VALIDATE_WRONG;
+    return VALIDATE_OK;
+}
+
+
 static void extraValidator()
 {
     ASSERT(Server.stat_refresh_seconds < Server.worker_timeout);
@@ -123,12 +216,53 @@ struct configuration *getConfiguration(const char *name)
     return NULL;
 }
 
+static struct list *handleList(wstr *lines, int *i, int count)
+{
+    int pos = *i + 1;
+    wstr line = NULL;
+    struct list *l = createList();
+    listSetFree(l, (void(*)(void *))wstrFree);
+    while (pos < count) {
+        line = wstrStrip(lines[pos], "\t\n\r ");
+        int len = 0;
+        int line_valid = 0;
+        while (len < wstrlen(line)) {
+            char ch = line[len];
+            switch(ch) {
+                case ' ':
+                    len++;
+                    break;
+                case '-':
+                    if (!line_valid)
+                        line_valid = 1;
+                    else
+                        goto handle_error;
+                    len++;
+                    break;
+                default:
+                    if (!line_valid)
+                        goto handle_error;
+                    appendToListTail(l, wstrNew(&line[len]));
+                    len = wstrlen(line);
+                    break;
+            }
+        }
+        pos++;
+    }
+
+handle_error:
+    pos--;
+    *i = pos;
+    return l;
+}
+
 void applyConfig(wstr config)
 {
     int count, args;
     wstr *lines = wstrNewSplit(config, "\n", 1, &count);
     char *err = NULL;
     struct configuration *conf;
+    void *ptr = NULL;
 
     int i = 0;
     if (lines == NULL) {
@@ -151,7 +285,15 @@ void applyConfig(wstr config)
             goto loaderr;
         }
 
-        if (args != conf->args && args == 2) {
+        ptr = argvs[1];
+        if (args == 1 && conf->format == LIST_FORMAT) {
+            struct list *l = handleList(lines, &i, count);
+            if (!l) {
+                err = "parse list failed";
+                goto loaderr;
+            }
+            ptr = l;
+        } else if (args != conf->args && args == 2) {
             int j;
             for (j = 2; j < args; ++j) {
                 argvs[1] = wstrCatLen(argvs[1], argvs[j], wstrlen(argvs[j]));
@@ -161,11 +303,11 @@ void applyConfig(wstr config)
                 }
             }
         }
-        if (args != conf->args && args != WHEAT_ARGS_NO_LIMIT) {
+        if (args != conf->args && conf->args != WHEAT_ARGS_NO_LIMIT) {
             err = "Incorrect args";
             goto loaderr;
         }
-        if (conf->validator(conf, argvs[0], argvs[1]) != VALIDATE_OK) {
+        if (conf->validator(conf, argvs[0], ptr) != VALIDATE_OK) {
             err = "Validate Failed";
             goto loaderr;
         }
@@ -184,7 +326,7 @@ loaderr:
     halt(1);
 }
 
-void loadConfigFile(const char *filename, char *options)
+void loadConfigFile(const char *filename, char *options, int test)
 {
     wstr config = wstrEmpty();
     char line[WHEATSERVER_CONFIGLINE_MAX+1];
@@ -207,7 +349,7 @@ void loadConfigFile(const char *filename, char *options)
 
     applyConfig(config);
     extraValidator();
-    printServerConfig();
+    printServerConfig(test);
     wstrFree(config);
 }
 
@@ -240,14 +382,36 @@ void statConfigByName(const char *n, char *result, int len)
 static ssize_t constructConfigFormat(struct configuration *conf, char *buf, size_t len)
 {
     ssize_t ret = 0;
-    if (conf->format == STRING_FORMAT)
-        ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.ptr);
-    else if (conf->format == INT_FORMAT)
-        ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
-    else if (conf->format == ENUM_FORMAT) {
-        ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.enum_ptr->name);
-    } else if (conf->format == BOOL_FORMAT) {
-        ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+    struct listIterator *iter = NULL;
+    int pos = 0;
+    wstr line = NULL;
+    struct listNode *node = NULL;
+    switch(conf->format) {
+        case STRING_FORMAT:
+            ret = snprintf(buf, len, "%s: %s", conf->name, (char *)conf->target.ptr);
+            break;
+        case INT_FORMAT:
+            ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+            break;
+        case ENUM_FORMAT:
+            ret = snprintf(buf, len, "%s: %s", conf->name, conf->target.enum_ptr->name);
+            break;
+        case BOOL_FORMAT:
+            ret = snprintf(buf, len, "%s: %d", conf->name, conf->target.val);
+            break;
+        case LIST_FORMAT:
+            ret = snprintf(buf, len, "%s: ", conf->name);
+            pos = ret;
+            if (!conf->target.ptr)
+                break;
+            iter = listGetIterator((struct list*)(conf->target.ptr), START_HEAD);
+            while ((node = listNext(iter)) != NULL) {
+                line = (wstr)listNodeValue(node);
+                ret = snprintf(buf+pos, len, "%s\t", line);
+                if (ret < 0 || ret > len-pos)
+                    return pos;
+                pos += ret;
+            }
     }
     return ret;
 }
@@ -266,17 +430,18 @@ void configCommand(struct masterClient *c)
     replyMasterClient(c, buf, len);
 }
 
-void printServerConfig()
+void printServerConfig(int test)
 {
-    wheatLog(WHEAT_DEBUG, "---- Now Configuration are ----");
+    int level = test ? WHEAT_NOTICE : WHEAT_DEBUG;
+    wheatLog(level, "---- Now Configuration are ----");
     int size = sizeof(configTable) / sizeof(struct configuration);
     int i;
     struct configuration *conf = &configTable[0];
     char buf[255];
     for (i = 0; i < size; i++) {
         constructConfigFormat(conf, buf, 255);
-        wheatLog(WHEAT_DEBUG, "%s", buf);
+        wheatLog(level, "%s", buf);
         conf++;
     }
-    wheatLog(WHEAT_DEBUG, "-------------------------------");
+    wheatLog(level, "-------------------------------");
 }
