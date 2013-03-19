@@ -423,7 +423,7 @@ void reload()
 {
     char *old_addr = Server.bind_addr, *old_stat_addr = Server.stat_addr;
     int old_port = Server.port, old_stat_port = Server.stat_port;
-    loadConfigFile(Server.configfile_path, NULL);
+    loadConfigFile(Server.configfile_path, NULL, 0);
     if (strlen(Server.bind_addr) != strlen(old_addr) ||
             strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
             old_port != Server.port) {
@@ -488,6 +488,7 @@ void usage() {
 
 int main(int argc, const char *argv[])
 {
+    int test_conf = 0;
     initGlobalServerConfig();
 
     wstr options = wstrEmpty();
@@ -498,6 +499,13 @@ int main(int argc, const char *argv[])
             strcmp(argv[1], "--version") == 0) version();
         if (strcmp(argv[1], "--help") == 0 ||
             strcmp(argv[1], "-h") == 0) usage();
+        if ((strcmp(argv[1], "--testconf") == 0 ||
+            strcmp(argv[1], "-t") == 0)) {
+            if (argc != 3)
+                usage();
+            test_conf = 1;
+            j++;
+        }
 
         if (argv[j][0] != '-' && argv[j][1] != '-')
             strncpy(Server.configfile_path, argv[j++], WHEATSERVER_MAX_NAMELEN);
@@ -516,8 +524,10 @@ int main(int argc, const char *argv[])
     } else {
         wheatLog(WHEAT_NOTICE, "No config file specified, use the default settings");
     }
-    loadConfigFile(Server.configfile_path, options);
+    loadConfigFile(Server.configfile_path, options, test_conf);
     wstrFree(options);
+    if (test_conf)
+        exit(0);
     if (Server.daemon) daemonize(1);
 
     initServer();

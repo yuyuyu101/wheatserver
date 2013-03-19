@@ -20,6 +20,7 @@
 #include "list.h"
 #include "wstr.h"
 #include "slice.h"
+#include "array.h"
 
 #include "debug.h"
 #include "event.h"
@@ -49,6 +50,7 @@
 #define WHEAT_BUFLIMIT                (1024*1024*1024)
 #define WHEAT_ARGS_NO_LIMIT           -1
 #define WHEAT_MBUF_SIZE               (16*1024)
+#define WHEAT_PROTOCOL_DEFAULT        "Http"
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
@@ -139,7 +141,8 @@ enum printFormat {
     INT_FORMAT,
     STRING_FORMAT,
     ENUM_FORMAT,
-    BOOL_FORMAT
+    BOOL_FORMAT,
+    LIST_FORMAT
 };
 
 struct configuration {
@@ -148,7 +151,7 @@ struct configuration {
     int (*validator)(struct configuration *conf,  const char *key, const char *value);
     union {
         int val;
-        char *ptr;
+        void *ptr;
         struct enumIdName *enum_ptr;
     } target;
     void *helper;   // using in validator, indicating target attribute
@@ -178,7 +181,7 @@ void stopWorkers(int graceful);
 void halt(int exitcode);
 
 /* configuration */
-void loadConfigFile(const char *filename, char *options);
+void loadConfigFile(const char *filename, char *options, int test);
 void fillServerConfig();
 void printServerConfig();
 struct configuration *getConfiguration(const char *name);
