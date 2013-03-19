@@ -740,10 +740,7 @@ int httpSpot(struct conn *c)
         return WHEAT_WRONG;
     }
     ret = appTable[i].appCall(c, path);
-    freeAppData(c);
     logAccess(c);
     wstrFree(path);
-
-    finishHandle(c);
     return ret;
 }

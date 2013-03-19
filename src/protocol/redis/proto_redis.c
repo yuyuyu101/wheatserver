@@ -484,7 +484,7 @@ int parseRedis(struct conn *c, struct slice *slice)
     ssize_t nparsed;
     struct redisProcData *redis_data = c->protocol_data;
 
-    if (isReqClient(c->client)) {
+    if (isOuterClient(c->client)) {
         nparsed = redisParser(redis_data, slice);
 
         if (nparsed == -1) {
@@ -507,6 +507,15 @@ int parseRedis(struct conn *c, struct slice *slice)
         return WHEAT_OK;
     }
     return 1;
+}
+
+int getRedisKey(struct conn *c, struct slice *out)
+{
+    struct redisProcData *redis_data = c->protocol_data;
+    if (redis_data->args < 2)
+        return WHEAT_WRONG;
+    sliceTo(out, redis_data->argvs[1].data, redis_data->argvs[1].len);
+    return WHEAT_OK;
 }
 
 void *initRedisData()
@@ -564,7 +573,5 @@ int redisSpot(struct conn *c)
         return WHEAT_WRONG;
     }
     ret = appTable[i].appCall(c, NULL);
-    freeAppData(c);
-    finishHandle(c);
-    return WHEAT_OK;
+    return ret;
 }

@@ -2,41 +2,107 @@
 #include "../../protocol/redis/proto_redis.h"
 #include "redis.h"
 
+#define WHEAT_REDIS_CONNS_SIZE   5
+
+struct redisConnUnit {
+    struct client *client;
+    struct client *redis_client;
+    struct slice key;
+    struct redisInstance *instance;
+};
+
 struct redisInstance {
     int id;
+    wstr ip;
+    int port;
 
-    struct client *redis_server;
-    struct client *client;
+    struct array *server_conns;
+    struct list *free_conns;
 };
 
 struct redisServer {
-    struct evcenter *center;
     struct redisInstance *instances;
     size_t instance_size;
 };
 
 static struct redisServer *RedisServer = NULL;
+static struct protocol *RedisProtocol = NULL;
+
+static uint32_t simpleHash(struct slice *key, int max)
+{
+    return dictGenHashFunction(key->data, key->len) % max;
+}
+
+static struct redisConnUnit *_newRedisUnit(struct redisInstance *instance)
+{
+    struct redisConnUnit *unit = wmalloc(sizeof(struct redisConnUnit));
+    if (!unit) {
+        return NULL;
+    }
+    unit->redis_client = buildConn(instance->ip, instance->port, RedisProtocol);
+    if (!unit->redis_client) {
+        wfree(unit);
+        return NULL;
+    }
+    unit->client = NULL;
+    unit->instance = instance;
+    sliceClear(&unit->key);
+    return unit;
+}
+
+static struct redisConnUnit *getRedisUnit(struct redisInstance *instance)
+{
+    struct redisConnUnit *conn = NULL;
+    if (listLength(instance->free_conns) == 0) {
+        conn = _newRedisUnit(instance);
+    } else {
+        struct listNode *node = listFirst(instance->free_conns);
+        conn = listNodeValue(node);
+        removeListNode(instance->free_conns, node);
+    }
+    return conn;
+}
+
+static void redisConnFree(struct redisConnUnit *redis_conn)
+{
+    unregisterClientRead(redis_conn->redis_client);
+    appendToListTail(redis_conn->instance->free_conns, redis_conn);
+}
 
 int redisCall(struct conn *c, void *arg)
 {
-    struct redisInstance *instance = &RedisServer->instances[0];
+    struct redisInstance *instance = NULL;
     struct slice *next = NULL;
+    struct redisConnUnit *redis_unit = NULL;
+    struct slice key;
     int ret;
 
-    if (isReqClient(c->client)) {
-        instance->client = c->client;
+    if (isOuterClient(c->client)) {
+        ret = getRedisKey(c, &key);
+        if (ret == WHEAT_WRONG)
+            return WHEAT_WRONG;
+        uint32_t pos = simpleHash(&key, RedisServer->instance_size);
+        instance = &RedisServer->instances[pos];
+        redis_unit = getRedisUnit(instance);
+        redis_unit->client = c->client;
+        redis_unit->redis_client->client_data = redis_unit;
+        redis_unit->key = key;
         while ((next = redisBodyNext(c)) != NULL) {
-            ret = sendClientData(instance->redis_server, next);
+            ret = sendClientData(redis_unit->redis_client, next);
             if (ret == -1)
                 return WHEAT_WRONG;
         }
-        return registerClientRead(instance->redis_server);
+        return registerClientRead(redis_unit->redis_client);
     } else {
+        struct client *redis_client = c->client;
+        redis_unit = redis_client->client_data;
+        key = redis_unit->key;
         while ((next = redisBodyNext(c)) != NULL) {
-            ret = sendClientData(instance->client, next);
+            ret = sendClientData(redis_unit->client, next);
             if (ret == -1)
                 return WHEAT_WRONG;
         }
+        redisConnFree(redis_unit);
         return WHEAT_OK;
     }
 }
@@ -51,26 +117,37 @@ void redisAppDataDeinit(void *data)
     return ;
 }
 
-static struct client *buildRedisConn(wstr ip, int port, struct protocol *p)
+static int redisInstanceCreateConns(struct redisInstance *instance)
 {
-    struct client *c = buildConn(ip, port, p);
-    return c;
+    int i = 0;
+    struct redisConnUnit *conn;
+    instance->server_conns = arrayCreate(sizeof(void*), WHEAT_REDIS_CONNS_SIZE);
+    instance->free_conns = createList();
+    for (; i < WHEAT_REDIS_CONNS_SIZE; ++i) {
+        conn = _newRedisUnit(instance);
+        if (!conn)
+            return WHEAT_WRONG;
+        arrayPush(instance->server_conns, conn);
+        appendToListTail(instance->free_conns, conn);
+    }
+    return WHEAT_OK;
 }
 
 void redisAppDeinit()
 {
     int pos;
     for (pos = 0; pos < RedisServer->instance_size; pos++) {
-        freeClient(RedisServer->instances[pos].redis_server);
+        arrayEach(RedisServer->instances[pos].server_conns, (void (*)(void *))freeClient);
     }
     wfree(RedisServer);
 }
 
 int redisAppInit(struct protocol *ptocol)
 {
+    ASSERT(ptocol);
+    RedisProtocol = ptocol;
     struct configuration *conf = getConfiguration("redis-servers");
     long pos = 0, len, mem_len;
-    struct client *client = NULL;
     uint8_t *p = NULL;
     struct listIterator *iter = NULL;
     if (!conf->target.ptr)
@@ -92,18 +169,15 @@ int redisAppInit(struct protocol *ptocol)
         if (!frags) goto cleanup;
         if (count != 2) goto cleanup;
         RedisServer->instances[pos].id = pos;
-        client = buildRedisConn(frags[0], atoi(frags[1]), ptocol);
-        if (!client)
+        RedisServer->instances[pos].ip = wstrDup(frags[0]);
+        RedisServer->instances[pos].port = atoi(frags[1]);
+        if (redisInstanceCreateConns(&RedisServer->instances[pos]) == WHEAT_WRONG)
             goto cleanup;
-        RedisServer->instances[pos].redis_server = client;
-        RedisServer->instances[pos].client = NULL;
         wstrFreeSplit(frags, count);
         pos++;
         RedisServer->instance_size++;
     }
     freeListIterator(iter);
-
-    RedisServer->center = eventcenterInit(RedisServer->instance_size);
 
     return WHEAT_OK;
 

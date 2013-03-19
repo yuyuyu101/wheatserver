@@ -2,6 +2,7 @@
 #define WHEATSERVER_PROTOCOL_REDIS_PROTO_REDIS_H
 
 struct slice *redisBodyNext(struct conn *c);
+int getRedisKey(struct conn *c, struct slice *out);
 
 #define str3icmp(m, c0, c1, c2)                                                             \
     ((m[0] == c0 || m[0] == (c0 ^ 0x20)) &&                                                 \
