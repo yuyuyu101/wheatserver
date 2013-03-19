@@ -28,7 +28,7 @@ static int connectWithMaster(struct workerStat *stat)
     }
     if (stat->master_stat_fd != 0) {
         close(stat->master_stat_fd);
-        wheatLog(WHEAT_WARNING,"Unable to connect to MASTER: %s %s");
+        wheatLog(WHEAT_WARNING,"build new connection to MASTER: %s %s");
     }
     stat->master_stat_fd = fd;
 
