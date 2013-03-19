@@ -3,14 +3,15 @@ CXX=c++
 
 APP_SOURCES = app/application.c \
 			  app/wsgi/app_wsgi.c app/wsgi/wsgiwrapper.c app/wsgi/wsgiinput.c \
-			  app/static/app_static_file.c 
+			  app/static/app_static_file.c app/redis-cluster/redis.c
 PROTO_SOURCES =  protocol/protocol.c \
-				 protocol/http/http_parser.c protocol/http/proto_http.c
+				 protocol/http/http_parser.c protocol/http/proto_http.c \
+				 protocol/redis/proto_redis.c
 WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c \
 				 worker/mbuf.c
 SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c \
 		  util.c register.c stats.c event.c setproctitle.c slice.c debug.c \
-		  portable.c memalloc.c
+		  portable.c memalloc.c array.c
 SOURCES += $(APP_SOURCES)
 SOURCES += $(PROTO_SOURCES)
 SOURCES += $(WORKER_SOURCES)
@@ -26,7 +27,7 @@ PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.s
 EXTRA ?=  
 CFLAGS = -O0 -Wall -g $(EXTRA)
 
-TESTS = test_wstr test_list test_dict test_slice test_mbuf
+TESTS = test_wstr test_list test_dict test_slice test_mbuf test_array
 
 all: wheatserver wheatworker
 
@@ -67,6 +68,10 @@ test_dict: dict.c dict.h
 test_slice: slice.c slice.h
 	$(CC) -o $@ slice.c memalloc.c -DSLICE_TEST_MAIN
 	./test_slice
+
+test_array: array.c array.h
+	$(CC) -o $@ array.c memalloc.c -DARRAY_TEST_MAIN
+	./test_array
 
 test_mbuf: worker/mbuf.c worker/mbuf.h slice.c slice.h
 	$(CC) -o $@ worker/mbuf.c slice.c memalloc.c -DMBUF_TEST_MAIN
