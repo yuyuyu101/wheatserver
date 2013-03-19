@@ -90,9 +90,11 @@ struct slabcenter *slabcenterCreate(const int item_max, const double factor)
 
 void slabcenterDealloc(struct slabcenter *c)
 {
-    struct slab *s = c->slabs;
+    struct slab *s = c->slabs, *next;
     while (s != NULL) {
+        next = s;
         free(s);
+        s = next;
     }
     free(c);
 }
@@ -108,9 +110,6 @@ void *slabAlloc(struct slabcenter *center, const size_t size)
     const size_t id = slabSizeToid(center, size);
     struct slabClass *slab_class = &center->slab_classes[id];
     uint8_t *ptr = NULL;
-    uint32_t byte = 0;
-    int i = 0;
-    int ret = 0;
     if (slab_class->free_slab == NULL || slab_class->free_item_size == 0) {
         slab_class->free_slab = slabAllocSlab(center);
         slab_class->free_item_size = slab_class->per_slab_items;
