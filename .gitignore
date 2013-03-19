@@ -22,3 +22,5 @@
 wheatserver
 wheatworker
 tags
+
+*.rdb
