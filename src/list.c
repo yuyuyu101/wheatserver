@@ -36,46 +36,46 @@ void freeList(struct list *l)
     wfree(l);
 }
 
-struct list *appendToListTail(struct list *l, void *ptr)
+struct listNode *appendToListTail(struct list *l, void *ptr)
 {
-    struct listNode *newNode = wmalloc(sizeof(struct listNode));
-    if (newNode == NULL)
+    struct listNode *new_node = wmalloc(sizeof(struct listNode));
+    if (new_node == NULL)
         return NULL;
     if (l->dup)
-        newNode->value = l->dup(ptr);
+        new_node->value = l->dup(ptr);
     else
-        newNode->value = ptr;
-    newNode->prev = l->last;
-    newNode->next = NULL;
+        new_node->value = ptr;
+    new_node->prev = l->last;
+    new_node->next = NULL;
 
     if (l->len == 0)
-        l->first = newNode;
+        l->first = new_node;
     else
-        l->last->next = newNode;
-    l->last = newNode;
+        l->last->next = new_node;
+    l->last = new_node;
     l->len++;
-    return l;
+    return new_node;
 }
 
-struct list *insertToListHead(struct list *l, void *ptr)
+struct listNode *insertToListHead(struct list *l, void *ptr)
 {
-    struct listNode *newNode = wmalloc(sizeof(struct listNode));
-    if (newNode == NULL)
+    struct listNode *new_node = wmalloc(sizeof(struct listNode));
+    if (new_node == NULL)
         return NULL;
     if (l->dup)
-        newNode->value = l->dup(ptr);
+        new_node->value = l->dup(ptr);
     else
-        newNode->value = ptr;
-    newNode->prev = NULL;
-    newNode->next = l->first;
+        new_node->value = ptr;
+    new_node->prev = NULL;
+    new_node->next = l->first;
 
     if (l->len == 0)
-        l->last = newNode;
+        l->last = new_node;
     else
-        l->first->prev = newNode;
-    l->first = newNode;
+        l->first->prev = new_node;
+    l->first = new_node;
     l->len++;
-    return l;
+    return new_node;
 }
 
 void removeListNode(struct list *l, struct listNode *node)
