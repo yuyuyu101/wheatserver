@@ -1,6 +1,8 @@
 #ifndef WHEATSERVER_LIST_H
 #define WHEATSERVER_LIST_H
 
+#include <stdint.h>
+
 /* `value` is pointer, generally, list not own it only store
  * the pointer value. But if dup and free exist, list own it. */
 #define isListOwnValue(list) ((list)->dup && (list)->free)
@@ -8,7 +10,7 @@
 struct listNode {
     struct listNode *next;
     struct listNode *prev;
-    void *value;
+    intptr_t value;
 };
 
 struct list {
@@ -22,7 +24,7 @@ struct list {
 #define listLength(list) ((list)->len)
 #define listFirst(list) ((list)->first)
 #define listLast(list) ((list)->last)
-#define listNodeValue(list) ((list)->value)
+#define listNodeValue(list) ((void*)((list)->value))
 
 #define listSetDup(list, m) ((list)->dup = (m))
 #define listSetFree(list, m) ((list)->free = (m))

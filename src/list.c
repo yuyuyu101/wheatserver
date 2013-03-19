@@ -24,7 +24,7 @@ void listClean(struct list *l)
     while (len--) {
         next = current->next;
         if (l->free)
-            l->free(current->value);
+            l->free((void*)current->value);
         wfree(current);
         current = next;
     }
@@ -42,9 +42,9 @@ struct listNode *appendToListTail(struct list *l, void *ptr)
     if (new_node == NULL)
         return NULL;
     if (l->dup)
-        new_node->value = l->dup(ptr);
+        new_node->value = (intptr_t)l->dup(ptr);
     else
-        new_node->value = ptr;
+        new_node->value = (intptr_t)ptr;
     new_node->prev = l->last;
     new_node->next = NULL;
 
@@ -63,9 +63,9 @@ struct listNode *insertToListHead(struct list *l, void *ptr)
     if (new_node == NULL)
         return NULL;
     if (l->dup)
-        new_node->value = l->dup(ptr);
+        new_node->value = (intptr_t)l->dup(ptr);
     else
-        new_node->value = ptr;
+        new_node->value = (intptr_t)ptr;
     new_node->prev = NULL;
     new_node->next = l->first;
 
@@ -91,7 +91,7 @@ void removeListNode(struct list *l, struct listNode *node)
         node->next->prev = node->prev;
     else
         l->last = node->prev;
-    if (l->free) l->free(node->value);
+    if (l->free) l->free((void*)(node->value));
     wfree(node);
     l->len--;
 }
@@ -116,12 +116,12 @@ struct listNode *searchListKey(struct list *l, void *key)
 
     while ((current = listNext(iter)) != NULL) {
         if (l->match) {
-            if (l->match(current->value, key)) {
+            if (l->match((void*)current->value, key)) {
                 freeListIterator(iter);
                 return current;
             }
         } else {
-            if (current->value == key) {
+            if ((void *)current->value == key) {
                 freeListIterator(iter);
                 return current;
             }
