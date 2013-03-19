@@ -94,7 +94,7 @@ int asyncSendData(struct client *c, struct slice *data)
     return sended;
 }
 
-int asyncRecvData(struct client *c)
+static int asyncRecvData(struct client *c)
 {
     if (!isClientValid(c))
         return -1;
@@ -127,8 +127,12 @@ int asyncRecvData(struct client *c)
 int asyncRegisterRead(struct client *c)
 {
     int ret = createEvent(WorkerCenter, c->clifd, EVENT_READABLE, handleRequest, c);
-    c->is_req = 0;
     return ret;
+}
+
+void asyncUnregisterRead(struct client *c)
+{
+    deleteEvent(WorkerCenter, c->clifd, EVENT_READABLE);
 }
 
 void asyncWorkerCron()
@@ -159,6 +163,7 @@ void asyncWorkerCron()
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
 {
     struct client *client = data;
+    struct conn *conn = NULL;
     ssize_t nread, ret = 0;
     struct workerStat *stat = WorkerProcess->stat;
     struct timeval start, end;
@@ -173,11 +178,10 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     if (msgGetSize(client->req_buf) > stat->stat_buffer_size)
         stat->stat_buffer_size = msgGetSize(client->req_buf);
     while (msgCanRead(client->req_buf)) {
-        if (!client->pending)
-            client->pending = connCreate(client);
+        conn = connGet(client);
 
         msgRead(client->req_buf, &slice);
-        ret = client->protocol->parser(client->pending, &slice);
+        ret = client->protocol->parser(conn, &slice);
         msgSetReaded(client->req_buf, slice.len);
 
         if (ret == -1) {
@@ -185,14 +189,14 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             break;
         } else if (ret == 0) {
             stat->stat_total_request++;
-            ret = client->protocol->spotAppAndCall(client->pending);
+            ret = client->protocol->spotAppAndCall(conn);
             if (ret != WHEAT_OK) {
                 stat->stat_failed_request++;
                 client->should_close = 1;
                 wheatLog(WHEAT_NOTICE, "app failed");
                 break;
             }
-            client->pending = NULL;
+            finishConn(conn);
         } else if (ret == 1) {
             continue;
         }

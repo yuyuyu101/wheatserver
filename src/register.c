@@ -5,16 +5,18 @@ void setupSync();
 void syncWorkerCron();
 int syncSendData(struct client *c, struct slice *data); // pass `data` ownership to
 int syncRegisterRead(struct client *c);
+void syncUnregisterRead(struct client *c);
 
 /* Async worker Area */
 void setupAsync();
 void asyncWorkerCron();
 int asyncSendData(struct client *c, struct slice *data); // pass `data` ownership to
 int asyncRegisterRead(struct client *c);
+void asyncUnregisterRead(struct client *c);
 
 struct worker WorkerTable[] = {
-    {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRegisterRead},
-    {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRegisterRead}
+    {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRegisterRead, syncUnregisterRead},
+    {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRegisterRead, asyncUnregisterRead}
 };
 
 int httpSpot(struct conn*);

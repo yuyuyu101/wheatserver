@@ -1,6 +1,6 @@
 #include "worker.h"
 
-static struct array *MaxSelectFd = NULL;
+static struct list *MaxSelectFd = NULL;
 static int MaxFd = 0;
 
 int syncSendData(struct client *c, struct slice *data)
@@ -26,7 +26,7 @@ int syncSendData(struct client *c, struct slice *data)
     return sended;
 }
 
-int syncRecvData(struct client *c)
+static int syncRecvData(struct client *c)
 {
     if (!isClientValid(c)) {
         return -1;
@@ -57,11 +57,18 @@ int syncRecvData(struct client *c)
 
 int syncRegisterRead(struct client *c)
 {
-    if (c->clifd > MaxFd)
-        MaxFd = c->clifd;
-    arrayPush(MaxSelectFd, &c->clifd);
-    c->is_req = 0;
+    intptr_t fd = c->clifd;
+    if (fd > MaxFd)
+        MaxFd = fd;
+    appendToListTail(MaxSelectFd, (void*)fd);
     return WHEAT_OK;
+}
+
+void syncUnregisterRead(struct client *c)
+{
+    intptr_t fd = c->clifd;
+    struct listNode *node = searchListKey(MaxSelectFd, (void*)fd);
+    removeListNode(MaxSelectFd, node);
 }
 
 void dispatchRequest(int fd, char *ip, int port)
@@ -78,6 +85,7 @@ void dispatchRequest(int fd, char *ip, int port)
     struct workerStat *stat = WorkerProcess->stat;
     int ret, n;
     struct slice slice;
+    struct conn *conn = NULL;
     do {
         n = syncRecvData(client);
         if (!isClientValid(client)) {
@@ -86,12 +94,11 @@ void dispatchRequest(int fd, char *ip, int port)
         if (msgGetSize(client->req_buf) > stat->stat_buffer_size)
             stat->stat_buffer_size = msgGetSize(client->req_buf);
 parser:
-        if (!client->pending)
-            client->pending = connCreate(client);
+        conn = connGet(client);
 
         msgRead(client->req_buf, &slice);
 
-        ret = ptcol->parser(client->pending, &slice);
+        ret = ptcol->parser(conn, &slice);
         msgSetReaded(client->req_buf, slice.len);
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse http data failed");
@@ -99,14 +106,14 @@ parser:
             goto cleanup;
         }
     } while(ret == 1);
-    ret = client->protocol->spotAppAndCall(client->pending);
+    ret = client->protocol->spotAppAndCall(conn);
     if (ret != WHEAT_OK) {
         stat->stat_failed_request++;
         wheatLog(WHEAT_NOTICE, "app failed");
         goto cleanup;
     }
     stat->stat_total_request++;
-    client->pending = NULL;
+    finishConn(conn);
     if (msgCanRead(client->req_buf)) {
         goto parser;
     }
@@ -157,15 +164,17 @@ accepterror:
             return ;
         }
         struct timeval tvp;
-        int i;
         fd_set rset;
         tvp.tv_sec = WHEATSERVER_CRON;
         tvp.tv_usec = 0;
         FD_ZERO(&rset);
-        for (i = 0; i < narray(MaxSelectFd); i++) {
-            int *fd = arrayIndex(MaxSelectFd, i);
-            FD_SET(*fd, &rset);
+        struct listNode *node = NULL;
+        struct listIterator *iter = listGetIterator(MaxSelectFd, START_HEAD);
+        while ((node = listNext(iter)) != NULL) {
+            int fd = (intptr_t)listNodeValue(node);
+            FD_SET(fd, &rset);
         }
+        freeListIterator(iter);
 
         ret = select(Server.ipfd+1, &rset, NULL, NULL, &tvp);
         if (ret >= 0)
@@ -181,11 +190,12 @@ accepterror:
 
 void setupSync()
 {
-    MaxSelectFd = arrayCreate(sizeof(int), 10);
+    MaxSelectFd = createList();
     if (!MaxSelectFd) {
         wheatLog(WHEAT_WARNING, "init failed");
         halt(1);
     }
-    arrayPush(MaxSelectFd, &Server.ipfd);
+    intptr_t fd = Server.ipfd;
+    appendToListTail(MaxSelectFd, (void*)fd);
     MaxFd = Server.ipfd;
 }

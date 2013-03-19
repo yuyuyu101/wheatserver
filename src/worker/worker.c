@@ -69,37 +69,38 @@ void freeWorkerProcess(void *w)
 
 int initAppData(struct conn *c)
 {
-    if (c->app) {
+    if (c->app && c->app->initAppData) {
         c->app_private_data = c->app->initAppData(c);
     }
     return WHEAT_OK;
 }
 
-void freeAppData(struct conn *c)
+struct conn *connGet(struct client *client)
 {
-    if (c->app_private_data)
-        c->app->freeAppData(c->app_private_data);
-    c->app_private_data = NULL;
-}
-
-struct conn *connCreate(struct client *client)
-{
+    if (client->pending)
+        return client->pending;
     struct conn *c = wmalloc(sizeof(*c));
     c->client = client;
     c->protect = NULL;
     c->protocol_data = client->protocol->initProtocolData();
     c->app = c->app_private_data = NULL;
     c->node = appendToListTail(client->conns, c);
+    client->pending = c;
     return c;
 }
 
-static void connDealloc(struct conn *c)
+void finishConn(struct conn *c)
 {
+    struct client *client = c->client;
     if (c->protocol_data)
         c->client->protocol->freeProtocolData(c->protocol_data);
     if (c->app_private_data)
         c->app->freeAppData(c->app_private_data);
+    removeListNode(client->conns, c->node);
     wfree(c);
+    client->pending = NULL;
+    if (!listLength(client->conns))
+        msgClean(client->req_buf);
 }
 
 void insertSliceToSendQueue(struct client *client, struct slice *s)
@@ -134,15 +135,15 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->port = port;
     c->protocol = p;
     c->conns = createList();
-    listSetFree(c->conns, (void(*)(void *))connDealloc);
     c->err = NULL;
     c->req_buf = msgCreate(Server.mbuf_size);
     c->send_queue = createList();
     listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
-    c->is_req = 1;
+    c->is_outer = 1;
     c->should_close = 0;
     c->valid = 1;
     c->pending = NULL;
+    c->client_data = NULL;
     return c;
 }
 
@@ -157,18 +158,6 @@ void freeClient(struct client *c)
     } else {
         wfree(c);
     }
-}
-
-void finishHandle(struct conn *c)
-{
-    struct client *client = c->client;
-    if (c->protocol_data)
-        client->protocol->freeProtocolData(c->protocol_data);
-    if (client->protocol)
-        c->protocol_data = client->protocol->initProtocolData();
-    removeListNode(client->conns, c->node);
-    if (!listLength(client->conns))
-        msgClean(client->req_buf);
 }
 
 int clientSendPacketList(struct client *c)
@@ -265,6 +254,11 @@ struct client *buildConn(char *ip, int port, struct protocol *p)
         return NULL;
     }
     c = createClient(fd, ip, port, p);
+    if (!c) {
+        close(fd);
+        return NULL;
+    }
+    c->is_outer = 0;
     return c;
 }
 
@@ -276,4 +270,9 @@ int sendClientData(struct client *c, struct slice *s)
 int registerClientRead(struct client *c)
 {
     return WorkerProcess->worker->registerRead(c);
+}
+
+void unregisterClientRead(struct client *c)
+{
+    WorkerProcess->worker->unregisterRead(c);
 }

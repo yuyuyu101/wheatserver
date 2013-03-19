@@ -51,6 +51,7 @@ struct worker {
      */
     int (*sendData)(struct client *, struct slice*);
     int (*registerRead)(struct client *);
+    void (*unregisterRead)(struct client *);
 };
 
 struct app {
@@ -98,8 +99,9 @@ struct client {
     struct list *conns;
     struct msghdr *req_buf;
     struct list *send_queue;
+    void *client_data;
 
-    unsigned is_req:1;
+    unsigned is_outer:1;
     unsigned should_close:1; // Used to indicate whether closing client
     unsigned valid:1;        // Intern: used to indicate client fd is unused and
                              // need closing, only used by worker IO methods when
@@ -117,15 +119,15 @@ void freeWorkerProcess(void *worker);
 void workerProcessCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
-void finishHandle(struct conn *c);
+void finishConn(struct conn *c);
 int clientSendPacketList(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);
 struct client *buildConn(char *ip, int port, struct protocol *p);
 int initAppData(struct conn *);
-void freeAppData(struct conn *);
 int registerClientRead(struct client *c);
+void unregisterClientRead(struct client *c);
 int sendClientData(struct client *c, struct slice *s);
-struct conn *connCreate(struct client *client);
+struct conn *connGet(struct client *client);
 void insertSliceToSendQueue(struct client *client, struct slice *s);
 
 #define isClientValid(c)     ((c)->valid)
@@ -136,7 +138,7 @@ void insertSliceToSendQueue(struct client *client, struct slice *s);
 #define getConnIP(c)         ((c)->client->ip)
 #define getConnPort(c)       ((c)->client->port)
 #define setClientClose(c)    ((c)->client->should_close = 1)
-#define isReqClient(c)       ((c)->is_req == 1)
+#define isOuterClient(c)       ((c)->is_outer == 1)
 
 /* worker's flow:
  * 0. setup filling workerProcess members
