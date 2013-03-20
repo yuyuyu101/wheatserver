@@ -63,10 +63,10 @@ static struct redisConnUnit *getRedisUnit(struct redisInstance *instance)
     return conn;
 }
 
-static void redisConnFree(struct redisConnUnit *redis_conn)
+static void redisConnFree(struct redisConnUnit *redis_unit)
 {
-    unregisterClientRead(redis_conn->redis_client);
-    appendToListTail(redis_conn->instance->free_conns, redis_conn);
+    unregisterClientRead(redis_unit->redis_client);
+    appendToListTail(redis_unit->instance->free_conns, redis_unit);
 }
 
 int redisCall(struct conn *c, void *arg)

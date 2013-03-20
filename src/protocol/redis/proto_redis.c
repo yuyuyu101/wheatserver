@@ -94,6 +94,7 @@ enum reqStage {
     REQ_GET_ARG_DOLLAR,
     REQ_GET_ARG_LEN,
     REQ_GET_ARG_VAL_LF,
+    REQ_GET_ARG_COMMAND_OR_KEY,
     REQ_GET_ARG_VAL,
     REQ_FIN,
     REQ_ERR
@@ -103,7 +104,8 @@ struct redisProcData {
     int curr_arg_len;
     int curr_arg;
     int args;
-    struct slice *argvs;
+    wstr key;
+//  struct slice *argvs;
     enum reqStage stage;
     enum redisCommand command_type;
 
@@ -112,9 +114,10 @@ struct redisProcData {
 };
 
 static int redisCommandHandle(struct redisProcData *redis_data,
-        struct slice *command, int args)
+        wstr command)
 {
-    uint8_t *c = command->data;
+    uint8_t *c = (uint8_t *)command;
+    int args = wstrlen(command);
     switch (args) {
         case 3:
             if (str3icmp(c, 'd', 'e', 'l'))
@@ -382,7 +385,6 @@ static int redisCommandHandle(struct redisProcData *redis_data,
 static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
 {
     size_t pos = 0;
-    struct slice value;
     enum redisCommand command_type;
     while (pos < s->len) {
         char ch = s->data[pos];
@@ -396,7 +398,8 @@ static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
             case REQ_GET_ARGS:
                 if (isdigit(ch)) {
                     redis_data->args = redis_data->args * 10 + (ch - '0');
-                    redis_data->argvs = wmalloc(sizeof(value)*redis_data->args);
+                    if (redis_data->args < 2)
+                        goto redis_err;
                     pos++;
                 } else if (ch == CR) {
                     redis_data->stage = REQ_GET_ARG_LEN_LF;
@@ -439,32 +442,56 @@ static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
                 break;
             case REQ_GET_ARG_VAL_LF:
                 if (ch == LF) {
-                    redis_data->stage = REQ_GET_ARG_VAL;
+                    if (redis_data->curr_arg < 2)
+                        redis_data->stage = REQ_GET_ARG_COMMAND_OR_KEY;
+                    else
+                        redis_data->stage = REQ_GET_ARG_VAL;
                     pos++;
                 } else {
                     goto redis_err;
                 }
                 break;
-            case REQ_GET_ARG_VAL:
-                if (redis_data->curr_arg_len > 0 &&
-                        pos + redis_data->curr_arg_len < s->len) {
-                    sliceTo(&value, &s->data[pos], redis_data->curr_arg_len);
-                    if (redis_data->curr_arg == 0) {
-                        command_type = redisCommandHandle(redis_data,
-                                &value, redis_data->curr_arg_len);
-                        if (command_type == REQ_REDIS_UNKNOWN)
-                            goto redis_err;
-                        redis_data->command_type = command_type;
-                    }
-                    redis_data->argvs[redis_data->curr_arg] = value;
-                    pos += redis_data->curr_arg_len;
-                    redis_data->curr_arg_len = 0;
-                    redis_data->curr_arg++;
-                } else if (ch == CR) {
+            case REQ_GET_ARG_COMMAND_OR_KEY:
+                if (ch == CR) {
                     redis_data->stage = REQ_GET_ARG_LEN_LF;
                     pos++;
+                    break;
+                }
+                if (redis_data->curr_arg_len + pos > s->len) {
+                    redis_data->key = wstrCatLen(redis_data->key,
+                            (char *)&s->data[pos], s->len-pos);
+                    redis_data->curr_arg_len -= (s->len-pos);
+                    pos = s->len;
+                    return pos;
+                }
+                redis_data->key = wstrCatLen(redis_data->key,
+                        (char *)&s->data[pos], redis_data->curr_arg_len);
+                pos += redis_data->curr_arg_len;
+                redis_data->curr_arg++;
+                redis_data->curr_arg_len = 0;
+                if (redis_data->curr_arg == 1) {
+                    command_type = redisCommandHandle(redis_data,
+                            redis_data->key);
+                    if (command_type == REQ_REDIS_UNKNOWN)
+                        goto redis_err;
+                    redis_data->command_type = command_type;
+                    wstrClear(redis_data->key);
                 }
                 break;
+            case REQ_GET_ARG_VAL:
+                if (ch == CR) {
+                    redis_data->stage = REQ_GET_ARG_LEN_LF;
+                    pos++;
+                    break;
+                }
+                if (redis_data->curr_arg_len + pos > s->len) {
+                    redis_data->curr_arg_len -= (s->len-pos);
+                    pos = s->len;
+                    return pos;
+                }
+                redis_data->curr_arg++;
+                redis_data->curr_arg_len = 0;
+                pos += redis_data->curr_arg_len;
             case REQ_FIN:
                 pos++;
                 return pos;
@@ -490,10 +517,6 @@ int parseRedis(struct conn *c, struct slice *slice)
         if (nparsed == -1) {
             wheatLog(WHEAT_VERBOSE, "parseRedis() failedd");
             return WHEAT_WRONG;
-        } else if (nparsed != slice->len) {
-            /* Handle error. Usually just close the connection. */
-            wheatLog(WHEAT_WARNING, "parseRedis() nparsed %d != recved %d", nparsed, slice->len);
-            return WHEAT_WRONG;
         }
 
         slice->len = nparsed;
@@ -502,11 +525,11 @@ int parseRedis(struct conn *c, struct slice *slice)
         if (REDIS_FINISHED(redis_data)) {
             return WHEAT_OK;
         }
+        return 1;
     } else {
         arrayPush(redis_data->req_body, slice);
         return WHEAT_OK;
     }
-    return 1;
 }
 
 int getRedisKey(struct conn *c, struct slice *out)
@@ -514,7 +537,7 @@ int getRedisKey(struct conn *c, struct slice *out)
     struct redisProcData *redis_data = c->protocol_data;
     if (redis_data->args < 2)
         return WHEAT_WRONG;
-    sliceTo(out, redis_data->argvs[1].data, redis_data->argvs[1].len);
+    sliceTo(out, redis_data->key, wstrlen(redis_data->key));
     return WHEAT_OK;
 }
 
@@ -528,14 +551,14 @@ void *initRedisData()
     data->command_type = REQ_REDIS_UNKNOWN;
     data->req_body = arrayCreate(sizeof(struct slice), 4);
     data->pos = 0;
+    data->key = wstrEmpty();
     return data;
 }
 
 void freeRedisData(void *d)
 {
     struct redisProcData *data = d;
-    if (data->args > 0)
-        wfree(data->argvs);
+    wstrFree(data->key);
     arrayDealloc(data->req_body);
     wfree(d);
 }

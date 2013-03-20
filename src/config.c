@@ -412,6 +412,7 @@ static ssize_t constructConfigFormat(struct configuration *conf, char *buf, size
                     return pos;
                 pos += ret;
             }
+            freeListIterator(iter);
     }
     return ret;
 }

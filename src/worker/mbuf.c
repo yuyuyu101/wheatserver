@@ -89,13 +89,15 @@ struct msghdr *msgCreate(size_t mbuf_size)
 
 void msgClean(struct msghdr *hdr)
 {
-    struct mbuf *curr = hdr->protected;
+    struct mbuf *next, *curr = hdr->protected;
     size_t mbuf_size = hdr->mbuf_size;
-    while (hdr->protected && hdr->protected != hdr->last_read) {
-        hdr->protected = hdr->protected->next;
+    while (curr && curr != hdr->last_read) {
+        next = curr->next;
         mbufFree(curr, mbuf_size);
+        curr = next;
         hdr->mbuf_len--;
     }
+    hdr->protected = curr;
 }
 
 void msgRead(struct msghdr *hdr, struct slice *s)
@@ -128,9 +130,9 @@ int msgPut(struct msghdr *hdr, struct slice *s)
             return -1;
         old_buf->next = mbuf;
         hdr->mbuf_len++;
+        hdr->last_write = mbuf;
     }
     sliceTo(s, mbuf->write_pos, mbuf->end - mbuf->write_pos);
-    hdr->last_write = mbuf;
     hdr->is_set_writted_after_put = 0;
     return 0;
 }

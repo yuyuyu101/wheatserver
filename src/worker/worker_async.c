@@ -184,10 +184,10 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         ret = client->protocol->parser(conn, &slice);
         msgSetReaded(client->req_buf, slice.len);
 
-        if (ret == -1) {
+        if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse data failed");
             break;
-        } else if (ret == 0) {
+        } else if (ret == WHEAT_OK) {
             stat->stat_total_request++;
             ret = client->protocol->spotAppAndCall(conn);
             if (ret != WHEAT_OK) {
