@@ -9,7 +9,8 @@ def setup_module(module):
     global async_server
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
-                               "--timeout-seconds 3", "--stat-refresh-time 1")
+                               "--timeout-seconds 3", "--stat-refresh-time 1",
+                               "--protocol Http")
     time.sleep(0.5)
 
 

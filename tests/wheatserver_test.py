@@ -66,12 +66,14 @@ def setup_module(module):
                               "--worker-type %s" % "SyncWorker",
                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                               "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
-                              "--static-file-dir /static/")
+                              "--static-file-dir /static/",
+                               "--protocol Http")
 
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
-                               "--static-file-dir /static/")
+                               "--static-file-dir /static/",
+                               "--protocol Http")
     time.sleep(0.5)
 
 def teardown_module(module):

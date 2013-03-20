@@ -9,7 +9,8 @@ def test_get_two():
     async = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
-                               "--allowed-extension bmp,gif")
+                               "--allowed-extension bmp,gif",
+                               "--protocol Http")
     time.sleep(0.1)
     s = server_socket(10828)
     s.send("GET / HTTP/1.1\r\nHOST: 127.0.0.1:10828\r\nConnec")
@@ -22,7 +23,8 @@ def test_post_file():
     async = WheatServer("", "--worker-type %s" % "AsyncWorker",
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--document-root %s" % os.path.join(PROJECT_PATH, "example/"),
-                               "--allowed-extension bmp,gif")
+                               "--allowed-extension bmp,gif",
+                               "--protocol Http")
     time.sleep(0.1)
     s = server_socket(10828)
     s.settimeout(0.5)
@@ -43,7 +45,8 @@ def test_document_root_and_static_file_dir():
                                "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
                                "--document-root %s" % PROJECT_PATH + "/example/",
                                "--static-file-dir %s" % "/static",
-                               "--allowed-extension bmp,gif,jpg")
+                               "--allowed-extension bmp,gif,jpg",
+                               "--protocol Http")
     time.sleep(0.1)
     r = requests.get("http://127.0.0.1:10828/static/example.jpg",timeout=1)
     assert 200 == r.status_code

@@ -7,7 +7,8 @@ async_server = None
 
 def test_reload():
     async_server = WheatServer("", "--worker-type %s" % "AsyncWorker",
-                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"))
+                               "--app-project-path %s" % os.path.join(PROJECT_PATH, "example"),
+                               "--protocol Http")
     time.sleep(0.5)
     os.kill(async_server.exec_pid, signal.SIGHUP)
     s = server_socket(10829)
