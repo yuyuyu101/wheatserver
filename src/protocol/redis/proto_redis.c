@@ -4,7 +4,7 @@
 #define CR                  (uint8_t)13
 #define LF                  (uint8_t)10
 
-#define REDIS_FINISHED(r)   (((r)->stage) == REQ_FIN)
+#define REDIS_FINISHED(r)   (((r)->stage) == MES_END)
 extern struct app appTable[];
 
 enum redisCommand {
@@ -88,7 +88,7 @@ enum redisCommand {
 };
 
 enum reqStage {
-    REQ_START = 1,
+    MES_START = 1,
     REQ_GET_ARGS,
     REQ_GET_ARG_LEN_LF,
     REQ_GET_ARG_DOLLAR,
@@ -96,8 +96,18 @@ enum reqStage {
     REQ_GET_ARG_VAL_LF,
     REQ_GET_ARG_COMMAND_OR_KEY,
     REQ_GET_ARG_VAL,
-    REQ_FIN,
-    REQ_ERR
+    RES_SINGLE,
+    RES_SINGLE_LF,
+    RES_GET_ARGS,
+    RES_GET_ARG_LEN,
+    RES_GET_ARG_LEN_LF,
+    RES_GET_ARG_VAL_LF,
+    RES_GET_ARG_PREFIX,
+    RES_GET_ARG_VAL,
+    RES_NIL_VAL,
+    RES_NIL_VAL_LF,
+    MES_END,
+    MES_ERR
 };
 
 struct redisProcData {
@@ -382,14 +392,149 @@ static int redisCommandHandle(struct redisProcData *redis_data,
     return REQ_REDIS_UNKNOWN;
 }
 
-static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
+static ssize_t redisResParser(struct redisProcData *redis_data, struct slice *s)
+{
+    size_t pos = 0;
+    while (pos < s->len) {
+        char ch = s->data[pos];
+        switch (redis_data->stage) {
+            case MES_START:
+                if (ch == '+' || ch == '-' || ch == ':') {
+                    redis_data->stage = RES_SINGLE;
+                    redis_data->args = 1;
+                } else if (ch == '$') {
+                    redis_data->stage = RES_GET_ARG_LEN;
+                    redis_data->args = 1;
+                } else if (ch == '*') {
+                    redis_data->stage = RES_GET_ARGS;
+                } else
+                    goto redis_err;
+                pos++;
+                break;
+            case RES_SINGLE:
+                if (ch == CR) {
+                    redis_data->stage = RES_SINGLE_LF;
+                    redis_data->curr_arg++;
+                }
+                pos++;
+                break;
+            case RES_SINGLE_LF:
+                if (ch == LF) {
+                    if (redis_data->curr_arg < redis_data->args) {
+                        redis_data->stage = RES_GET_ARG_PREFIX;
+                    } else {
+                        redis_data->stage = MES_END;
+                    }
+                } else {
+                    goto redis_err;
+                }
+                pos++;
+                break;
+            case RES_GET_ARGS:
+                if (isdigit(ch)) {
+                    redis_data->args = redis_data->args * 10 + (ch - '0');
+                    if (redis_data->args < 2)
+                        goto redis_err;
+                } else if (ch == CR) {
+                    redis_data->stage = RES_GET_ARG_LEN_LF;
+                } else {
+                    goto redis_err;
+                }
+                pos++;
+                break;
+            case RES_GET_ARG_LEN_LF:
+                if (ch == LF) {
+                    if (redis_data->curr_arg < redis_data->args) {
+                        redis_data->stage = RES_GET_ARG_PREFIX;
+                    } else {
+                        redis_data->stage = MES_END;
+                    }
+                } else {
+                    goto redis_err;
+                }
+                pos++;
+                break;
+            case RES_GET_ARG_PREFIX:
+                if (ch == '$') {
+                    redis_data->stage = RES_GET_ARG_LEN;
+                } else if (ch == ':') {
+                    redis_data->stage = RES_SINGLE;
+                } else {
+                    goto redis_err;
+                }
+                pos++;
+                break;
+            case RES_NIL_VAL:
+                if (ch == CR)
+                    redis_data->stage = RES_NIL_VAL_LF;
+                else
+                    goto redis_err;
+                pos++;
+                break;
+            case RES_GET_ARG_LEN:
+                if (isdigit(ch)) {
+                    redis_data->curr_arg_len *= 10;
+                    redis_data->curr_arg_len += (ch - '0');
+                } else if (ch == CR) {
+                    redis_data->stage = RES_GET_ARG_VAL_LF;
+                } else if (ch == '-') {
+                    redis_data->stage = RES_NIL_VAL;
+                } else {
+                    goto redis_err;
+                }
+                pos++;
+                break;
+            case RES_NIL_VAL_LF:
+                if (ch == LF)
+                    redis_data->stage = RES_GET_ARG_LEN;
+                else
+                    goto redis_err;
+                pos++;
+                break;
+            case RES_GET_ARG_VAL_LF:
+                if (ch == LF) {
+                    redis_data->stage = RES_GET_ARG_VAL;
+                    pos++;
+                } else {
+                    goto redis_err;
+                }
+                break;
+            case RES_GET_ARG_VAL:
+                if (ch == CR) {
+                    redis_data->stage = RES_GET_ARG_LEN_LF;
+                    pos++;
+                    break;
+                }
+                if (redis_data->curr_arg_len + pos > s->len) {
+                    redis_data->curr_arg_len -= (s->len-pos);
+                    pos = s->len;
+                    return pos;
+                }
+                pos += redis_data->curr_arg_len;
+                redis_data->curr_arg++;
+                redis_data->curr_arg_len = 0;
+                break;
+            case MES_END:
+                return pos;
+            default:
+                goto redis_err;
+        }
+    }
+    return pos;
+
+redis_err:
+    redis_data->stage = MES_ERR;
+    return -1;
+}
+
+static ssize_t redisReqParser(struct redisProcData *redis_data, struct slice *s)
 {
     size_t pos = 0;
     enum redisCommand command_type;
     while (pos < s->len) {
         char ch = s->data[pos];
         switch (redis_data->stage) {
-            case REQ_START:
+            case MES_START:
                 if (ch != '*')
                     goto redis_err;
                 redis_data->stage = REQ_GET_ARGS;
@@ -412,13 +557,13 @@ static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
                 if (ch == LF) {
                     if (redis_data->curr_arg < redis_data->args) {
                         redis_data->stage = REQ_GET_ARG_DOLLAR;
-                        pos++;
                     } else {
-                        redis_data->stage = REQ_FIN;
+                        redis_data->stage = MES_END;
                     }
                 } else {
                     goto redis_err;
                 }
+                pos++;
                 break;
             case REQ_GET_ARG_DOLLAR:
                 if (ch == '$') {
@@ -489,11 +634,11 @@ static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
                     pos = s->len;
                     return pos;
                 }
+                pos += redis_data->curr_arg_len;
                 redis_data->curr_arg++;
                 redis_data->curr_arg_len = 0;
-                pos += redis_data->curr_arg_len;
-            case REQ_FIN:
-                pos++;
+                break;
+            case MES_END:
                 return pos;
             default:
                 goto redis_err;
@@ -502,34 +647,36 @@ static ssize_t redisParser(struct redisProcData *redis_data, struct slice *s)
     return pos;
 
 redis_err:
-    redis_data->stage = REQ_ERR;
+    redis_data->stage = MES_ERR;
     return -1;
 }
 
-int parseRedis(struct conn *c, struct slice *slice)
+int parseRedis(struct conn *c, struct slice *slice, size_t *out)
 {
     ssize_t nparsed;
     struct redisProcData *redis_data = c->protocol_data;
 
     if (isOuterClient(c->client)) {
-        nparsed = redisParser(redis_data, slice);
-
-        if (nparsed == -1) {
-            wheatLog(WHEAT_VERBOSE, "parseRedis() failedd");
-            return WHEAT_WRONG;
-        }
-
-        slice->len = nparsed;
-        arrayPush(redis_data->req_body, slice);
-
-        if (REDIS_FINISHED(redis_data)) {
-            return WHEAT_OK;
-        }
-        return 1;
+        nparsed = redisReqParser(redis_data, slice);
     } else {
-        arrayPush(redis_data->req_body, slice);
+        wheatLog(WHEAT_DEBUG, "%s", slice->data);
+        nparsed = redisResParser(redis_data, slice);
+    }
+
+    if (nparsed == -1) {
+        wstr info = wstrNewLen(slice->data, slice->len);
+        wheatLog(WHEAT_VERBOSE, "%d parseRedis() failedd: %s", isOuterClient(c->client),
+                info);
+        wstrFree(info);
+        return WHEAT_WRONG;
+    }
+    if (out) *out = nparsed;
+    slice->len = nparsed;
+    arrayPush(redis_data->req_body, slice);
+    if (REDIS_FINISHED(redis_data)) {
         return WHEAT_OK;
     }
+    return 1;
 }
 
 int getRedisKey(struct conn *c, struct slice *out)
@@ -537,7 +684,7 @@ int getRedisKey(struct conn *c, struct slice *out)
     struct redisProcData *redis_data = c->protocol_data;
     if (redis_data->args < 2)
         return WHEAT_WRONG;
-    sliceTo(out, redis_data->key, wstrlen(redis_data->key));
+    sliceTo(out, (uint8_t *)redis_data->key, wstrlen(redis_data->key));
     return WHEAT_OK;
 }
 
@@ -547,7 +694,7 @@ void *initRedisData()
     if (!data)
         return NULL;
     memset(data, 0, sizeof(*data));
-    data->stage = REQ_START;
+    data->stage = MES_START;
     data->command_type = REQ_REDIS_UNKNOWN;
     data->req_body = arrayCreate(sizeof(struct slice), 4);
     data->pos = 0;
