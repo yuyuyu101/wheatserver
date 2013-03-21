@@ -12,6 +12,8 @@ def test_redis():
     time.sleep(0.1)
     r = redis.StrictRedis(port=10828)
     for i in range(100):
+        time.sleep(0.001)
         assert r.set(str(i), i)
     for i in range(100):
+        time.sleep(0.001)
         assert r.get(str(i)) == str(i)
