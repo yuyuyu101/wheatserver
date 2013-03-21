@@ -3,11 +3,11 @@
 #include "redis.h"
 
 #define WHEAT_REDIS_CONNS_SIZE   5
+#define WHEAT_MAX_REDIS_CONNS_SIZE   50
 
 struct redisConnUnit {
     struct client *client;
     struct client *redis_client;
-    struct slice key;
     struct redisInstance *instance;
 };
 
@@ -46,21 +46,24 @@ static struct redisConnUnit *_newRedisUnit(struct redisInstance *instance)
     }
     unit->client = NULL;
     unit->instance = instance;
-    sliceClear(&unit->key);
     return unit;
 }
 
-static struct redisConnUnit *getRedisUnit(struct redisInstance *instance)
+static struct redisConnUnit *getRedisUnit(struct redisInstance *instance, struct client *client)
 {
-    struct redisConnUnit *conn = NULL;
+    if (client->client_data != NULL)
+        return client->client_data;
+    struct redisConnUnit *unit = NULL;
     if (listLength(instance->free_conns) == 0) {
-        conn = _newRedisUnit(instance);
+        unit = _newRedisUnit(instance);
     } else {
         struct listNode *node = listFirst(instance->free_conns);
-        conn = listNodeValue(node);
+        unit = listNodeValue(node);
         removeListNode(instance->free_conns, node);
     }
-    return conn;
+    unit->client = client;
+    client->client_data = unit->redis_client->client_data = unit;
+    return unit;
 }
 
 static void redisConnFree(struct redisConnUnit *redis_unit)
@@ -83,10 +86,7 @@ int redisCall(struct conn *c, void *arg)
             return WHEAT_WRONG;
         uint32_t pos = simpleHash(&key, RedisServer->instance_size);
         instance = &RedisServer->instances[pos];
-        redis_unit = getRedisUnit(instance);
-        redis_unit->client = c->client;
-        redis_unit->redis_client->client_data = redis_unit;
-        redis_unit->key = key;
+        redis_unit = getRedisUnit(instance, c->client);
         while ((next = redisBodyNext(c)) != NULL) {
             ret = sendClientData(redis_unit->redis_client, next);
             if (ret == -1)
@@ -96,7 +96,6 @@ int redisCall(struct conn *c, void *arg)
     } else {
         struct client *redis_client = c->client;
         redis_unit = redis_client->client_data;
-        key = redis_unit->key;
         while ((next = redisBodyNext(c)) != NULL) {
             ret = sendClientData(redis_unit->client, next);
             if (ret == -1)
