@@ -379,7 +379,7 @@ int on_url(http_parser *parser, const char *at, size_t len)
     return 0;
 }
 
-int parseHttp(struct conn *c, struct slice *slice)
+int parseHttp(struct conn *c, struct slice *slice, size_t *out)
 {
     size_t nparsed;
     struct httpData *http_data = c->protocol_data;
@@ -403,6 +403,7 @@ int parseHttp(struct conn *c, struct slice *slice)
             return WHEAT_WRONG;
     }
 
+    if (out) *out = nparsed;
     if (http_data->complete) {
         http_data->method = http_method_str(http_data->parser->method);
         if (http_data->parser->http_minor == 0)

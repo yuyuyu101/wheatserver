@@ -29,8 +29,9 @@ struct protocol {
     int (*spotAppAndCall)(struct conn *);
     /* `parser` parse `data` and assign protocol data to client
      * if return 0 imply parser success,
-     * return number of bytes parsed */
-    int (*parser)(struct conn *, struct slice *);
+     * return 1 means data continued and return -1 means parse
+     * error. `nparsed` is value-argument and indicate parsed bytes*/
+    int (*parser)(struct conn *, struct slice *, size_t *nparsed);
     void *(*initProtocolData)();
     void (*freeProtocolData)(void *ptcol_data);
     int (*initProtocol)();
@@ -99,7 +100,7 @@ struct client {
     struct list *conns;
     struct msghdr *req_buf;
     struct list *send_queue;
-    void *client_data;
+    void *client_data;       // Only used by app
 
     unsigned is_outer:1;
     unsigned should_close:1; // Used to indicate whether closing client

@@ -20,21 +20,14 @@ struct worker WorkerTable[] = {
 };
 
 int httpSpot(struct conn*);
-int parseHttp(struct conn *, struct slice *);
+int parseHttp(struct conn *, struct slice *, size_t *);
 void *initHttpData();
 void freeHttpData(void *data);
 int initHttp();
 void deallocHttp();
 
-int spotRedis(struct conn *);
-int parseRedis(struct conn *, struct slice *);
-void *initRedisData();
-void freeRedisData(void *data);
-int initRedis();
-void deallocRedis();
-
 int redisSpot(struct conn *c);
-int parseRedis(struct conn *c, struct slice *slice);
+int parseRedis(struct conn *c, struct slice *slice, size_t *);
 void *initRedisData();
 void freeRedisData(void *d);
 int initRedis();

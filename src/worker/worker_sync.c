@@ -84,6 +84,7 @@ void dispatchRequest(int fd, char *ip, int port)
         return ;
     struct workerStat *stat = WorkerProcess->stat;
     int ret, n;
+    size_t nparsed;
     struct slice slice;
     struct conn *conn = NULL;
     do {
@@ -98,8 +99,8 @@ parser:
 
         msgRead(client->req_buf, &slice);
 
-        ret = ptcol->parser(conn, &slice);
-        msgSetReaded(client->req_buf, slice.len);
+        ret = ptcol->parser(conn, &slice, &nparsed);
+        msgSetReaded(client->req_buf, nparsed);
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse http data failed");
             stat->stat_failed_request++;

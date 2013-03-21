@@ -169,6 +169,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     struct timeval start, end;
     long time_use;
     struct slice slice;
+    size_t parsed = 0;
     gettimeofday(&start, NULL);
     nread = asyncRecvData(client);
     if (!isClientValid(client)) {
@@ -181,8 +182,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         conn = connGet(client);
 
         msgRead(client->req_buf, &slice);
-        ret = client->protocol->parser(conn, &slice);
-        msgSetReaded(client->req_buf, slice.len);
+        ret = client->protocol->parser(conn, &slice, &parsed);
+        msgSetReaded(client->req_buf, parsed);
 
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse data failed");
