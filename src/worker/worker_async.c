@@ -146,6 +146,7 @@ void asyncWorkerCron()
             break;
         }
         clientsCron();
+        appCron();
         elapse = Server.cron_time;
         if (elapse - now > refresh_seconds) {
             sendStatPacket();

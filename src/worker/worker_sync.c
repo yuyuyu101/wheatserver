@@ -176,6 +176,7 @@ accepterror:
             FD_SET(fd, &rset);
         }
         freeListIterator(iter);
+        appCron();
 
         ret = select(Server.ipfd+1, &rset, NULL, NULL, &tvp);
         if (ret >= 0)

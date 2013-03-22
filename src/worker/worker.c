@@ -71,6 +71,8 @@ int initAppData(struct conn *c)
 {
     if (c->app && c->app->initAppData) {
         c->app_private_data = c->app->initAppData(c);
+        if (!c->app_private_data)
+            return WHEAT_WRONG;
     }
     return WHEAT_OK;
 }
@@ -275,4 +277,13 @@ int registerClientRead(struct client *c)
 void unregisterClientRead(struct client *c)
 {
     WorkerProcess->worker->unregisterRead(c);
+}
+
+void appCron()
+{
+    struct app *app = &AppTable[0];
+    while (app && app->is_init && app->appCron) {
+        app->appCron();
+        app++;
+    }
 }

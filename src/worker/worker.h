@@ -58,6 +58,7 @@ struct worker {
 struct app {
     char *proto_belong;
     char *name;
+    void (*appCron)();
     /* Return WHEAT_OK means all is ok and return WEHAT_WRONG means something
      * wrong inside and worker will clean this connection */
     int (*appCall)(struct conn *, void *arg);
@@ -113,6 +114,7 @@ struct client {
 extern struct workerProcess *WorkerProcess;
 extern struct worker WorkerTable[];
 extern struct protocol ProtocolTable[];
+extern struct app AppTable[];
 
 /* modify attention. Worker, Protocol, Applicantion interface */
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
@@ -130,6 +132,7 @@ void unregisterClientRead(struct client *c);
 int sendClientData(struct client *c, struct slice *s);
 struct conn *connGet(struct client *client);
 void insertSliceToSendQueue(struct client *client, struct slice *s);
+void appCron();
 
 #define isClientValid(c)     ((c)->valid)
 #define setClientUnvalid(c)  ((c)->valid = 0)
