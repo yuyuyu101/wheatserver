@@ -658,7 +658,6 @@ int parseRedis(struct conn *c, struct slice *slice, size_t *out)
     if (isOuterClient(c->client)) {
         nparsed = redisReqParser(redis_data, slice);
     } else {
-        wheatLog(WHEAT_DEBUG, "%s", slice->data);
         nparsed = redisResParser(redis_data, slice);
     }
 
@@ -731,7 +730,7 @@ int redisSpot(struct conn *c)
     int i = 2, ret;
     if (!AppTable[i].is_init) {
         ret = AppTable[i].initApp(c->client->protocol);
-        if (ret)
+        if (ret == WHEAT_WRONG)
             return WHEAT_WRONG;
         AppTable[i].is_init = 1;
     }
