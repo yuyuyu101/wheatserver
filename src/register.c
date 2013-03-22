@@ -16,7 +16,8 @@ void asyncUnregisterRead(struct client *c);
 
 struct worker WorkerTable[] = {
     {"SyncWorker", setupSync, syncWorkerCron, syncSendData, syncRegisterRead, syncUnregisterRead},
-    {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRegisterRead, asyncUnregisterRead}
+    {"AsyncWorker", setupAsync, asyncWorkerCron, asyncSendData, asyncRegisterRead, asyncUnregisterRead},
+    {NULL}
 };
 
 int httpSpot(struct conn*);
@@ -37,6 +38,7 @@ struct protocol ProtocolTable[] = {
         initHttp, deallocHttp},
     {"Redis", redisSpot, parseRedis, initRedisData, freeRedisData,
         initRedis, deallocRedis},
+    {NULL}
 };
 
 int staticFileCall(struct conn *, void *);
@@ -53,14 +55,13 @@ void freeWsgiAppData(void *app_data);
 
 int redisCall(struct conn *c, void *arg);
 int redisAppInit(struct protocol *);
-void redisAppDeinit();
-void *redisAppDataInit(struct conn *c);
 void redisAppDataDeinit(void *data);
-struct app appTable[] = {
-    {"Http", "wsgi", wsgiCall, initWsgi, deallocWsgi,
+struct app AppTable[] = {
+    {"Http", "wsgi", NULL, wsgiCall, initWsgi, deallocWsgi,
         initWsgiAppData, freeWsgiAppData, 0},
-    {"Http", "static-file", staticFileCall, initStaticFile, deallocStaticFile,
+    {"Http", "static-file", NULL, staticFileCall, initStaticFile, deallocStaticFile,
         initStaticFileData, freeStaticFileData, 0},
-    {"Redis", "redis", redisCall, redisAppInit, redisAppDataDeinit,
-        redisAppDataInit, redisAppDataDeinit, 0},
+    {"Redis", "redis", NULL, redisCall, redisAppInit, redisAppDataDeinit,
+        NULL, NULL, 0},
+    {NULL}
 };

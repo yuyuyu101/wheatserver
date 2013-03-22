@@ -5,7 +5,6 @@
 #define LF                  (uint8_t)10
 
 #define REDIS_FINISHED(r)   (((r)->stage) == MES_END)
-extern struct app appTable[];
 
 enum redisCommand {
     REQ_REDIS_DEL,                    /* redis commands - keys */
@@ -730,18 +729,18 @@ struct slice *redisBodyNext(struct conn *c)
 int redisSpot(struct conn *c)
 {
     int i = 2, ret;
-    if (!appTable[i].is_init) {
-        ret = appTable[i].initApp(c->client->protocol);
+    if (!AppTable[i].is_init) {
+        ret = AppTable[i].initApp(c->client->protocol);
         if (ret)
             return WHEAT_WRONG;
-        appTable[i].is_init = 1;
+        AppTable[i].is_init = 1;
     }
-    c->app = &appTable[i];
+    c->app = &AppTable[i];
     ret = initAppData(c);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
-    ret = appTable[i].appCall(c, NULL);
+    ret = AppTable[i].appCall(c, NULL);
     return ret;
 }

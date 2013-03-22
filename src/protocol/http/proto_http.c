@@ -1,6 +1,5 @@
 #include "proto_http.h"
 
-extern struct app appTable[];
 static FILE *AccessFp = NULL;
 static struct http_parser_settings HttpPaserSettings;
 #define WHEAT_BODY_LEN 10
@@ -725,22 +724,22 @@ int httpSpot(struct conn *c)
         path = wstrCat(path, http_data->path);
         i = 1;
     }
-    if (!appTable[i].is_init) {
-        ret = appTable[i].initApp(c->client->protocol);
+    if (!AppTable[i].is_init) {
+        ret = AppTable[i].initApp(c->client->protocol);
         if (ret == WHEAT_WRONG) {
             wstrFree(path);
             return ret;
         }
-        appTable[i].is_init = 1;
+        AppTable[i].is_init = 1;
     }
-    c->app = &appTable[i];
+    c->app = &AppTable[i];
     ret = initAppData(c);
     if (ret == WHEAT_WRONG) {
         wstrFree(path);
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
-    ret = appTable[i].appCall(c, path);
+    ret = AppTable[i].appCall(c, path);
     logAccess(c);
     wstrFree(path);
     return ret;
