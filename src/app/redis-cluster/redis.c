@@ -6,6 +6,7 @@
 #define WHEAT_MAX_REDIS_CONNS_SIZE   50
 
 struct redisConnUnit {
+    size_t ack;
     struct client *client;
     struct client *redis_client;
     struct redisInstance *instance;
@@ -46,6 +47,7 @@ static struct redisConnUnit *_newRedisUnit(struct redisInstance *instance)
     }
     unit->client = NULL;
     unit->instance = instance;
+    unit->ack = 0;
     return unit;
 }
 
@@ -62,14 +64,17 @@ static struct redisConnUnit *getRedisUnit(struct redisInstance *instance, struct
         removeListNode(instance->free_conns, node);
     }
     unit->client = client;
+    unit->ack++;
     client->client_data = unit->redis_client->client_data = unit;
     return unit;
 }
 
 static void redisConnFree(struct redisConnUnit *redis_unit)
 {
-    unregisterClientRead(redis_unit->redis_client);
-    appendToListTail(redis_unit->instance->free_conns, redis_unit);
+    if (!--redis_unit->ack)  {
+        unregisterClientRead(redis_unit->redis_client);
+        appendToListTail(redis_unit->instance->free_conns, redis_unit);
+    }
 }
 
 int redisCall(struct conn *c, void *arg)
