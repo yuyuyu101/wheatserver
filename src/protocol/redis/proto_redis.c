@@ -7,83 +7,84 @@
 #define REDIS_FINISHED(r)   (((r)->stage) == MES_END)
 
 enum redisCommand {
-    REQ_REDIS_DEL,                    /* redis commands - keys */
-    REQ_REDIS_EXISTS,
-    REQ_REDIS_EXPIRE,
-    REQ_REDIS_EXPIREAT,
-    REQ_REDIS_PEXPIRE,
-    REQ_REDIS_PEXPIREAT,
-    REQ_REDIS_PERSIST,
-    REQ_REDIS_PTTL,
-    REQ_REDIS_TTL,
-    REQ_REDIS_TYPE,
-    REQ_REDIS_APPEND,                 /* redis requests - string */
-    REQ_REDIS_BITCOUNT,
-    REQ_REDIS_DECR,
-    REQ_REDIS_DECRBY,
-    REQ_REDIS_GET,
-    REQ_REDIS_GETBIT,
-    REQ_REDIS_GETRANGE,
-    REQ_REDIS_GETSET,
-    REQ_REDIS_INCR,
-    REQ_REDIS_INCRBY,
-    REQ_REDIS_INCRBYFLOAT,
-    REQ_REDIS_MGET,
-    REQ_REDIS_PSETEX,
-    REQ_REDIS_SET,
-    REQ_REDIS_SETBIT,
-    REQ_REDIS_SETEX,
-    REQ_REDIS_SETNX,
-    REQ_REDIS_SETRANGE,
-    REQ_REDIS_STRLEN,
-    REQ_REDIS_HDEL,                   /* redis requests - hashes */
-    REQ_REDIS_HEXISTS,
-    REQ_REDIS_HGET,
-    REQ_REDIS_HGETALL,
-    REQ_REDIS_HINCRBY,
-    REQ_REDIS_HINCRBYFLOAT,
-    REQ_REDIS_HKEYS,
-    REQ_REDIS_HLEN,
-    REQ_REDIS_HMGET,
-    REQ_REDIS_HMSET,
-    REQ_REDIS_HSET,
-    REQ_REDIS_HSETNX,
-    REQ_REDIS_HVALS,
-    REQ_REDIS_LINDEX,                 /* redis requests - lists */
-    REQ_REDIS_LINSERT,
-    REQ_REDIS_LLEN,
-    REQ_REDIS_LPOP,
-    REQ_REDIS_LPUSH,
-    REQ_REDIS_LPUSHX,
-    REQ_REDIS_LRANGE,
-    REQ_REDIS_LREM,
-    REQ_REDIS_LSET,
-    REQ_REDIS_LTRIM,
-    REQ_REDIS_RPOP,
-    REQ_REDIS_RPUSH,
-    REQ_REDIS_RPUSHX,
-    REQ_REDIS_SADD,                   /* redis requests - sets */
-    REQ_REDIS_SCARD,
-    REQ_REDIS_SISMEMBER,
-    REQ_REDIS_SMEMBERS,
-    REQ_REDIS_SPOP,
-    REQ_REDIS_SRANDMEMBER,
-    REQ_REDIS_SREM,
-    REQ_REDIS_ZADD,                   /* redis requests - sorted sets */
-    REQ_REDIS_ZCARD,
-    REQ_REDIS_ZCOUNT,
-    REQ_REDIS_ZINCRBY,
-    REQ_REDIS_ZRANGE,
-    REQ_REDIS_ZRANGEBYSCORE,
-    REQ_REDIS_ZRANK,
-    REQ_REDIS_ZREM,
-    REQ_REDIS_ZREMRANGEBYRANK,
-    REQ_REDIS_ZREMRANGEBYSCORE,
-    REQ_REDIS_ZREVRANGE,
-    REQ_REDIS_ZREVRANGEBYSCORE,
-    REQ_REDIS_ZREVRANK,
-    REQ_REDIS_ZSCORE,
-    REQ_REDIS_UNKNOWN
+    REDIS_EXISTS,
+    REDIS_PTTL,
+    REDIS_TTL,
+    REDIS_TYPE,
+    REDIS_BITCOUNT,
+    REDIS_GET,
+    REDIS_GETBIT,
+    REDIS_GETRANGE,
+    REDIS_GETSET,
+    REDIS_MGET,
+    REDIS_STRLEN,
+    REDIS_HEXISTS,
+    REDIS_HGET,
+    REDIS_HGETALL,
+    REDIS_HKEYS,
+    REDIS_HLEN,
+    REDIS_HMGET,
+    REDIS_HVALS,
+    REDIS_LINDEX,                 /* redis requests - lists */
+    REDIS_LLEN,
+    REDIS_LRANGE,
+    REDIS_SCARD,
+    REDIS_SISMEMBER,
+    REDIS_SMEMBERS,
+    REDIS_SRANDMEMBER,
+    REDIS_ZCARD,
+    REDIS_ZCOUNT,
+    REDIS_ZRANGE,
+    REDIS_ZRANGEBYSCORE,
+    REDIS_ZREVRANGE,
+    REDIS_ZREVRANGEBYSCORE,
+    REDIS_ZREVRANK,
+    REDIS_ZSCORE,
+
+    REDIS_DEL,                    /* redis commands - keys */
+    REDIS_EXPIRE,
+    REDIS_EXPIREAT,
+    REDIS_PEXPIRE,
+    REDIS_PEXPIREAT,
+    REDIS_PERSIST,
+    REDIS_APPEND,                 /* redis requests - string */
+    REDIS_DECR,
+    REDIS_DECRBY,
+    REDIS_INCR,
+    REDIS_INCRBY,
+    REDIS_INCRBYFLOAT,
+    REDIS_PSETEX,
+    REDIS_SET,
+    REDIS_SETBIT,
+    REDIS_SETEX,
+    REDIS_SETNX,
+    REDIS_SETRANGE,
+    REDIS_HDEL,                   /* redis requests - hashes */
+    REDIS_HINCRBY,
+    REDIS_HINCRBYFLOAT,
+    REDIS_HMSET,
+    REDIS_HSET,
+    REDIS_HSETNX,
+    REDIS_LINSERT,
+    REDIS_LPOP,
+    REDIS_LPUSH,
+    REDIS_LPUSHX,
+    REDIS_LREM,
+    REDIS_LSET,
+    REDIS_LTRIM,
+    REDIS_RPOP,
+    REDIS_RPUSH,
+    REDIS_RPUSHX,
+    REDIS_SADD,                   /* redis requests - sets */
+    REDIS_SPOP,
+    REDIS_SREM,
+    REDIS_ZADD,                   /* redis requests - sorted sets */
+    REDIS_ZINCRBY,
+    REDIS_ZRANK,
+    REDIS_ZREM,
+    REDIS_ZREMRANGEBYRANK,
+    REDIS_ZREMRANGEBYSCORE,
+    REDIS_UNKNOWN
 };
 
 enum reqStage {
@@ -116,7 +117,8 @@ struct redisProcData {
     wstr key;
 //  struct slice *argvs;
     enum reqStage stage;
-    enum redisCommand command_type;
+    enum redisCommand command;
+    int is_read;
 
     struct array *req_body;
     size_t pos;
@@ -130,265 +132,265 @@ static int redisCommandHandle(struct redisProcData *redis_data,
     switch (args) {
         case 3:
             if (str3icmp(c, 'd', 'e', 'l'))
-                return REQ_REDIS_DEL;
+                return REDIS_DEL;
             if (str3icmp(c, 'g', 'e', 't'))
-                return REQ_REDIS_GET;
+                return REDIS_GET;
             if (str3icmp(c, 's', 'e', 't'))
-                return REQ_REDIS_SET;
+                return REDIS_SET;
             if (str3icmp(c, 't', 't', 'l'))
-                return REQ_REDIS_TTL;
+                return REDIS_TTL;
 
             break;
         case 4:
             if (str4icmp(c, 'p', 't', 't', 'l'))
-                return REQ_REDIS_PTTL;
+                return REDIS_PTTL;
 
             if (str4icmp(c, 'd', 'e', 'c', 'r'))
-                return REQ_REDIS_DECR;
+                return REDIS_DECR;
 
             if (str4icmp(c, 'h', 'd', 'e', 'l'))
-                return REQ_REDIS_HDEL;
+                return REDIS_HDEL;
 
             if (str4icmp(c, 'h', 'g', 'e', 't'))
-                return REQ_REDIS_HGET;
+                return REDIS_HGET;
 
             if (str4icmp(c, 'h', 'l', 'e', 'n'))
-                return REQ_REDIS_HLEN;
+                return REDIS_HLEN;
 
             if (str4icmp(c, 'h', 's', 'e', 't'))
-                return REQ_REDIS_HSET;
+                return REDIS_HSET;
 
             if (str4icmp(c, 'i', 'n', 'c', 'r'))
-                return REQ_REDIS_INCR;
+                return REDIS_INCR;
 
             if (str4icmp(c, 'l', 'l', 'e', 'n'))
-                return REQ_REDIS_LLEN;
+                return REDIS_LLEN;
 
             if (str4icmp(c, 'l', 'p', 'o', 'p'))
-                return REQ_REDIS_LPOP;
+                return REDIS_LPOP;
 
             if (str4icmp(c, 'l', 'r', 'e', 'm'))
-                return REQ_REDIS_LREM;
+                return REDIS_LREM;
 
             if (str4icmp(c, 'l', 's', 'e', 't'))
-                return REQ_REDIS_LSET;
+                return REDIS_LSET;
 
             if (str4icmp(c, 'r', 'p', 'o', 'p'))
-                return REQ_REDIS_RPOP;
+                return REDIS_RPOP;
 
             if (str4icmp(c, 's', 'a', 'd', 'd'))
-                return REQ_REDIS_SADD;
+                return REDIS_SADD;
 
             if (str4icmp(c, 's', 'p', 'o', 'p'))
-                return REQ_REDIS_SPOP;
+                return REDIS_SPOP;
 
             if (str4icmp(c, 's', 'r', 'e', 'm'))
-                return REQ_REDIS_SREM;
+                return REDIS_SREM;
 
             if (str4icmp(c, 't', 'y', 'p', 'e'))
-                return REQ_REDIS_TYPE;
+                return REDIS_TYPE;
 
             if (str4icmp(c, 'm', 'g', 'e', 't'))
-                return REQ_REDIS_MGET;
+                return REDIS_MGET;
 
             if (str4icmp(c, 'z', 'a', 'd', 'd'))
-                return REQ_REDIS_ZADD;
+                return REDIS_ZADD;
 
             if (str4icmp(c, 'z', 'r', 'e', 'm'))
-                return REQ_REDIS_ZREM;
+                return REDIS_ZREM;
 
             break;
 
         case 5:
             if (str5icmp(c, 'h', 'k', 'e', 'y', 's'))
-                return REQ_REDIS_HKEYS;
+                return REDIS_HKEYS;
 
             if (str5icmp(c, 'h', 'm', 'g', 'e', 't'))
-                return REQ_REDIS_HMGET;
+                return REDIS_HMGET;
 
             if (str5icmp(c, 'h', 'm', 's', 'e', 't'))
-                return REQ_REDIS_HMSET;
+                return REDIS_HMSET;
 
             if (str5icmp(c, 'h', 'v', 'a', 'l', 's'))
-                return REQ_REDIS_HVALS;
+                return REDIS_HVALS;
 
             if (str5icmp(c, 'l', 'p', 'u', 's', 'h'))
-                return REQ_REDIS_LPUSH;
+                return REDIS_LPUSH;
 
             if (str5icmp(c, 'l', 't', 'r', 'i', 'm'))
-                return REQ_REDIS_LTRIM;
+                return REDIS_LTRIM;
 
             if (str5icmp(c, 'r', 'p', 'u', 's', 'h'))
-                return REQ_REDIS_RPUSH;
+                return REDIS_RPUSH;
 
             if (str5icmp(c, 's', 'c', 'a', 'r', 'd'))
-                return REQ_REDIS_SCARD;
+                return REDIS_SCARD;
 
             if (str5icmp(c, 's', 'e', 't', 'e', 'x'))
-                return REQ_REDIS_SETEX;
+                return REDIS_SETEX;
 
             if (str5icmp(c, 's', 'e', 't', 'n', 'x'))
-                return REQ_REDIS_SETNX;
+                return REDIS_SETNX;
 
             if (str5icmp(c, 'z', 'c', 'a', 'r', 'd'))
-                return REQ_REDIS_ZCARD;
+                return REDIS_ZCARD;
 
             if (str5icmp(c, 'z', 'r', 'a', 'n', 'k'))
-                return REQ_REDIS_ZRANK;
+                return REDIS_ZRANK;
 
             break;
 
         case 6:
             if (str6icmp(c, 'a', 'p', 'p', 'e', 'n', 'd'))
-                return REQ_REDIS_APPEND;
+                return REDIS_APPEND;
 
             if (str6icmp(c, 'd', 'e', 'c', 'r', 'b', 'y'))
-                return REQ_REDIS_DECRBY;
+                return REDIS_DECRBY;
 
             if (str6icmp(c, 'e', 'x', 'i', 's', 't', 's'))
-                return REQ_REDIS_EXISTS;
+                return REDIS_EXISTS;
 
             if (str6icmp(c, 'e', 'x', 'p', 'i', 'r', 'e'))
-                return REQ_REDIS_EXPIRE;
+                return REDIS_EXPIRE;
 
             if (str6icmp(c, 'g', 'e', 't', 'b', 'i', 't'))
-                return REQ_REDIS_GETBIT;
+                return REDIS_GETBIT;
 
             if (str6icmp(c, 'g', 'e', 't', 's', 'e', 't'))
-                return REQ_REDIS_GETSET;
+                return REDIS_GETSET;
 
             if (str6icmp(c, 'p', 's', 'e', 't', 'e', 'x'))
-                return REQ_REDIS_PSETEX;
+                return REDIS_PSETEX;
 
             if (str6icmp(c, 'h', 's', 'e', 't', 'n', 'x'))
-                return REQ_REDIS_HSETNX;
+                return REDIS_HSETNX;
 
             if (str6icmp(c, 'i', 'n', 'c', 'r', 'b', 'y'))
-                return REQ_REDIS_INCRBY;
+                return REDIS_INCRBY;
 
             if (str6icmp(c, 'l', 'i', 'n', 'd', 'e', 'x'))
-                return REQ_REDIS_LINDEX;
+                return REDIS_LINDEX;
 
             if (str6icmp(c, 'l', 'p', 'u', 's', 'h', 'x'))
-                return REQ_REDIS_LPUSHX;
+                return REDIS_LPUSHX;
 
             if (str6icmp(c, 'l', 'r', 'a', 'n', 'g', 'e'))
-                return REQ_REDIS_LRANGE;
+                return REDIS_LRANGE;
 
             if (str6icmp(c, 'r', 'p', 'u', 's', 'h', 'x'))
-                return REQ_REDIS_RPUSHX;
+                return REDIS_RPUSHX;
 
             if (str6icmp(c, 's', 'e', 't', 'b', 'i', 't'))
-                return REQ_REDIS_SETBIT;
+                return REDIS_SETBIT;
 
             if (str6icmp(c, 's', 't', 'r', 'l', 'e', 'n'))
-                return REQ_REDIS_STRLEN;
+                return REDIS_STRLEN;
 
             if (str6icmp(c, 'z', 'c', 'o', 'u', 'n', 't'))
-                return REQ_REDIS_ZCOUNT;
+                return REDIS_ZCOUNT;
 
             if (str6icmp(c, 'z', 'r', 'a', 'n', 'g', 'e'))
-                return REQ_REDIS_ZRANGE;
+                return REDIS_ZRANGE;
 
             if (str6icmp(c, 'z', 's', 'c', 'o', 'r', 'e'))
-                return REQ_REDIS_ZSCORE;
+                return REDIS_ZSCORE;
 
             break;
 
         case 7:
             if (str7icmp(c, 'p', 'e', 'r', 's', 'i', 's', 't'))
-                return REQ_REDIS_PERSIST;
+                return REDIS_PERSIST;
 
             if (str7icmp(c, 'p', 'e', 'x', 'p', 'i', 'r', 'e'))
-                return REQ_REDIS_PEXPIRE;
+                return REDIS_PEXPIRE;
 
             if (str7icmp(c, 'h', 'e', 'x', 'i', 's', 't', 's'))
-                return REQ_REDIS_HEXISTS;
+                return REDIS_HEXISTS;
 
             if (str7icmp(c, 'h', 'g', 'e', 't', 'a', 'l', 'l'))
-                return REQ_REDIS_HGETALL;
+                return REDIS_HGETALL;
 
             if (str7icmp(c, 'h', 'i', 'n', 'c', 'r', 'b', 'y'))
-                return REQ_REDIS_HINCRBY;
+                return REDIS_HINCRBY;
 
             if (str7icmp(c, 'l', 'i', 'n', 's', 'e', 'r', 't'))
-                return REQ_REDIS_LINSERT;
+                return REDIS_LINSERT;
 
             if (str7icmp(c, 'z', 'i', 'n', 'c', 'r', 'b', 'y'))
-                return REQ_REDIS_ZINCRBY;
+                return REDIS_ZINCRBY;
 
             break;
 
         case 8:
             if (str8icmp(c, 'e', 'x', 'p', 'i', 'r', 'e', 'a', 't'))
-                return REQ_REDIS_EXPIREAT;
+                return REDIS_EXPIREAT;
 
             if (str8icmp(c, 'b', 'i', 't', 'c', 'o', 'u', 'n', 't'))
-                return REQ_REDIS_BITCOUNT;
+                return REDIS_BITCOUNT;
 
             if (str8icmp(c, 'g', 'e', 't', 'r', 'a', 'n', 'g', 'e'))
-                return REQ_REDIS_GETRANGE;
+                return REDIS_GETRANGE;
 
             if (str8icmp(c, 's', 'e', 't', 'r', 'a', 'n', 'g', 'e'))
-                return REQ_REDIS_SETRANGE;
+                return REDIS_SETRANGE;
 
             if (str8icmp(c, 's', 'm', 'e', 'm', 'b', 'e', 'r', 's'))
-                return REQ_REDIS_SMEMBERS;
+                return REDIS_SMEMBERS;
 
             if (str8icmp(c, 'z', 'r', 'e', 'v', 'r', 'a', 'n', 'k'))
-                return REQ_REDIS_ZREVRANK;
+                return REDIS_ZREVRANK;
 
             break;
 
         case 9:
             if (str9icmp(c, 'p', 'e', 'x', 'p', 'i', 'r', 'e', 'a', 't'))
-                return REQ_REDIS_PEXPIREAT;
+                return REDIS_PEXPIREAT;
 
             if (str9icmp(c, 's', 'i', 's', 'm', 'e', 'm', 'b', 'e', 'r'))
-                return REQ_REDIS_SISMEMBER;
+                return REDIS_SISMEMBER;
 
             if (str9icmp(c, 'z', 'r', 'e', 'v', 'r', 'a', 'n', 'g', 'e'))
-                return REQ_REDIS_ZREVRANGE;
+                return REDIS_ZREVRANGE;
 
             break;
 
         case 11:
             if (str11icmp(c, 'i', 'n', 'c', 'r', 'b', 'y', 'f', 'l', 'o', 'a', 't'))
-                return REQ_REDIS_INCRBYFLOAT;
+                return REDIS_INCRBYFLOAT;
 
             if (str11icmp(c, 's', 'r', 'a', 'n', 'd', 'm', 'e', 'm', 'b', 'e', 'r'))
-                return REQ_REDIS_SRANDMEMBER;
+                return REDIS_SRANDMEMBER;
 
             break;
 
         case 12:
             if (str12icmp(c, 'h', 'i', 'n', 'c', 'r', 'b', 'y', 'f', 'l', 'o', 'a', 't'))
-                return REQ_REDIS_HINCRBYFLOAT;
+                return REDIS_HINCRBYFLOAT;
 
             break;
 
         case 13:
             if (str13icmp(c, 'z', 'r', 'a', 'n', 'g', 'e', 'b', 'y', 's', 'c', 'o', 'r', 'e'))
-                return REQ_REDIS_ZRANGEBYSCORE;
+                return REDIS_ZRANGEBYSCORE;
 
             break;
 
         case 15:
             if (str15icmp(c, 'z', 'r', 'e', 'm', 'r', 'a', 'n', 'g', 'e', 'b', 'y', 'r', 'a', 'n', 'k'))
-                return REQ_REDIS_ZREMRANGEBYRANK;
+                return REDIS_ZREMRANGEBYRANK;
 
             break;
 
         case 16:
             if (str16icmp(c, 'z', 'r', 'e', 'm', 'r', 'a', 'n', 'g', 'e', 'b', 'y', 's', 'c', 'o', 'r', 'e'))
-                return REQ_REDIS_ZREMRANGEBYSCORE;
+                return REDIS_ZREMRANGEBYSCORE;
 
             if (str16icmp(c, 'z', 'r', 'e', 'v', 'r', 'a', 'n', 'g', 'e', 'b', 'y', 's', 'c', 'o', 'r', 'e'))
-                return REQ_REDIS_ZREVRANGEBYSCORE;
+                return REDIS_ZREVRANGEBYSCORE;
 
             break;
     }
-    return REQ_REDIS_UNKNOWN;
+    return REDIS_UNKNOWN;
 }
 
 static ssize_t redisResParser(struct redisProcData *redis_data, struct slice *s)
@@ -609,9 +611,14 @@ static ssize_t redisReqParser(struct redisProcData *redis_data, struct slice *s)
                 if (redis_data->curr_arg == 1) {
                     command_type = redisCommandHandle(redis_data,
                             redis_data->key);
-                    if (command_type == REQ_REDIS_UNKNOWN)
+                    if (command_type == REDIS_UNKNOWN)
                         goto redis_err;
-                    redis_data->command_type = command_type;
+                    redis_data->command = command_type;
+                    if (command_type > REDIS_ZSCORE)
+                        redis_data->is_read = 0;
+                    else
+                        redis_data->is_read = 1;
+
                     wstrClear(redis_data->key);
                 }
                 break;
@@ -686,10 +693,10 @@ void *initRedisData()
         return NULL;
     memset(data, 0, sizeof(*data));
     data->stage = MES_START;
-    data->command_type = REQ_REDIS_UNKNOWN;
+    data->command = REDIS_UNKNOWN;
     data->req_body = arrayCreate(sizeof(struct slice), 4);
-    data->pos = 0;
     data->key = wstrEmpty();
+    data->pos = 0;
     return data;
 }
 
@@ -722,6 +729,12 @@ struct slice *redisBodyNext(struct conn *c)
     if (data->pos < narray(data->req_body))
         return arrayIndex(data->req_body, data->pos++);
     return NULL;
+}
+
+int isReadCommand(struct conn *c)
+{
+    struct redisProcData *data = c->protocol_data;
+    return data->is_read;
 }
 
 int redisSpot(struct conn *c)

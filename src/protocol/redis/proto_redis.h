@@ -4,6 +4,8 @@
 struct slice *redisBodyNext(struct conn *c);
 void redisBodyStart(struct conn*c);
 int getRedisKey(struct conn *c, struct slice *out);
+int isReadCommand(struct conn*);
+
 
 #define str3icmp(m, c0, c1, c2)                                                             \
     ((m[0] == c0 || m[0] == (c0 ^ 0x20)) &&                                                 \
