@@ -31,6 +31,7 @@ typedef struct {
 struct wsgiData {
     PyObject *environ;
     void *response;
+    struct array *body_items;
     char *err;
 };
 

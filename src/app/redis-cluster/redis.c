@@ -9,14 +9,13 @@
 #define TOTAL  1
 
 struct redisConnUnit {
-    size_t ack;
-    struct client *outer_client;
+    struct conn *outer_conn;
     struct client *redis_client;
     struct redisInstance *instance;
 };
 
 struct redisAppData {
-    int count;
+    size_t count;
 };
 
 static struct redisServer *RedisServer = NULL;
@@ -33,18 +32,16 @@ static struct redisConnUnit *_newRedisUnit(struct redisInstance *instance)
         wfree(unit);
         return NULL;
     }
-    unit->outer_client = NULL;
+    unit->outer_conn = NULL;
     unit->instance = instance;
-    unit->ack = 0;
     unit->redis_client->client_data = unit;
     return unit;
 }
 
-static struct redisConnUnit *getRedisUnit(struct redisInstance *instance, struct client *outer_client)
+static struct redisConnUnit *getRedisUnit(struct redisInstance *instance, struct conn *outer_conn)
 {
-    struct redisConnUnit *unit = outer_client->client_data;
-    if (unit != NULL)
-        return unit;
+    struct redisConnUnit *unit = NULL;
+
     if (listLength(instance->free_conns) == 0) {
         unit = _newRedisUnit(instance);
     } else {
@@ -52,20 +49,16 @@ static struct redisConnUnit *getRedisUnit(struct redisInstance *instance, struct
         unit = listNodeValue(node);
         removeListNode(instance->free_conns, node);
     }
-    ASSERT(isOuterClient(outer_client));
-    unit->outer_client = outer_client;
-    unit->ack++;
-    outer_client->client_data = unit;
+    ASSERT(isOuterClient(outer_conn->client));
+    unit->outer_conn = outer_conn;
     return unit;
 }
 
 static void redisConnFree(struct redisConnUnit *redis_unit)
 {
-    if (!--redis_unit->ack)  {
-        redis_unit->outer_client = NULL;
-        unregisterClientRead(redis_unit->redis_client);
-        appendToListTail(redis_unit->instance->free_conns, redis_unit);
-    }
+    redis_unit->outer_conn = NULL;
+    unregisterClientRead(redis_unit->redis_client);
+    appendToListTail(redis_unit->instance->free_conns, redis_unit);
 }
 
 static struct redisInstance *getInstance(struct redisServer *server, int idx)
@@ -81,9 +74,9 @@ int redisCall(struct conn *c, void *arg)
     struct slice key;
     struct token *token = NULL;
     struct redisAppData *app_data = c->app_private_data;
+    struct conn *send_conn;
     int ret;
 
-    wheatLog(WHEAT_DEBUG, "get client %p conn %p", c->client, c);
     if (isOuterClient(c->client)) {
         int nwritted = 0;
         ret = getRedisKey(c, &key);
@@ -92,39 +85,36 @@ int redisCall(struct conn *c, void *arg)
         token = hashDispatch(RedisServer, &key);
         while (nwritted < RedisServer->nwriter) {
             instance = getInstance(RedisServer, token->server_idx);
-            redis_unit = getRedisUnit(instance, c->client);
-            RedisServer->reserved[nwritted++] = redis_unit;
-            registerClientRead(redis_unit->redis_client);
+            redis_unit = getRedisUnit(instance, c);
             token = token->next_server;
-            wheatLog(WHEAT_DEBUG, "get conn %p", c);
+            nwritted++;
         }
-        while ((next = redisBodyNext(c)) != NULL) {
-            while (nwritted--) {
-                redis_unit = RedisServer->reserved[nwritted];
-                ret = sendClientData(redis_unit->redis_client, next);
+        while (nwritted--) {
+            redisBodyStart(c);
+            send_conn = connGet(redis_unit->redis_client);
+            while ((next = redisBodyNext(c)) != NULL) {
+                ret = sendClientData(send_conn, next);
                 if (ret == -1)
                     return WHEAT_WRONG;
-                wheatLog(WHEAT_DEBUG, "send data");
             }
+            finishConn(send_conn);
+            registerClientRead(redis_unit->redis_client);
         }
         return WHEAT_OK;
     } else {
-        struct client *redis_client = c->client, *client;
+        struct client *redis_client = c->client;
         redis_unit = redis_client->client_data;
-        app_data = redis_unit->outer_client->app_private_data;
-        wheatLog(WHEAT_DEBUG, "recv data %d", app_data->count);
+        app_data = redis_unit->outer_conn->app_private_data;
         if (--app_data->count)
             return WHEAT_OK;
-        client = redis_unit->outer_conn->client;
-        wheatLog(WHEAT_DEBUG, "get conn %p", redis_unit->outer_conn);
-        wheatLog(WHEAT_DEBUG, "get outer client %p redis_client %p", client, redis_client);
-        ASSERT(!isOuterClient(client));
         while ((next = redisBodyNext(c)) != NULL) {
-            wheatLog(WHEAT_DEBUG, "send data %s", next->data);
-            ret = sendClientData(client, next);
+            ret = sendClientData(redis_unit->outer_conn, next);
             if (ret == -1)
                 return WHEAT_WRONG;
         }
+        registerConnFree(redis_unit->outer_conn, (void (*)(void*))finishConn, c);
+        finishConn(redis_unit->outer_conn);
+
         redisConnFree(redis_unit);
         return WHEAT_OK;
     }
@@ -175,7 +165,7 @@ int redisAppInit(struct protocol *ptocol)
     ASSERT(ptocol);
     RedisProtocol = ptocol;
     struct configuration *conf = getConfiguration("redis-servers");
-    long pos = 0, len, mem_len;
+    int pos = 0, len, mem_len;
     uint8_t *p = NULL;
     struct listIterator *iter = NULL;
     if (!conf->target.ptr)
@@ -212,7 +202,6 @@ int redisAppInit(struct protocol *ptocol)
         goto cleanup;
 
     RedisServer->nreader = RedisServer->nwriter = RedisServer->nbackup = 1;
-    RedisServer->reserved = wmalloc(sizeof(void*)*RedisServer->nbackup);
     return hashUpdate(RedisServer);
 
 cleanup:

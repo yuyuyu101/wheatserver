@@ -77,7 +77,7 @@ static int InputStream_init(InputStream *self, PyObject *args, PyObject *kwds)
 /* read() implementation */
 static PyObject *InputStream_read(InputStream *self, PyObject *args)
 {
-    int size = -1;
+    long size = -1;
     long remaining;
 
     if (!PyArg_ParseTuple(args, "|i:read", &size))
@@ -96,7 +96,7 @@ static PyObject *InputStream_read(InputStream *self, PyObject *args)
    WSGI spec (but now required by Python 2.5's cgi module) */
 static PyObject *InputStream_readline(InputStream *self, PyObject *args)
 {
-    int size = -1;
+    long size = -1;
     size_t remaining;
 
     if (!PyArg_ParseTuple(args, "|i:readline", &size))

@@ -77,47 +77,62 @@ int initAppData(struct conn *c)
     return WHEAT_OK;
 }
 
+void freeSendPacket(struct sendPacket *p)
+{
+    wfree(p);
+}
+
 struct conn *connGet(struct client *client)
 {
     if (client->pending)
         return client->pending;
     struct conn *c = wmalloc(sizeof(*c));
     c->client = client;
-    c->protect = NULL;
     c->protocol_data = client->protocol->initProtocolData();
     c->app = c->app_private_data = NULL;
-    c->node = appendToListTail(client->conns, c);
-    client->pending = c;
+    appendToListTail(client->conns, c);
+    c->ready_send = 0;
+    c->send_queue = createList();
+    listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
+    c->cleanup = NULL;
+    c->clean_data = NULL;
     return c;
 }
 
-void finishConn(struct conn *c)
+static void connDealloc(struct conn *c)
 {
     struct client *client = c->client;
     if (c->protocol_data)
         c->client->protocol->freeProtocolData(c->protocol_data);
     if (c->app_private_data)
         c->app->freeAppData(c->app_private_data);
-    removeListNode(client->conns, c->node);
+    if (c->cleanup)
+        c->cleanup(c->clean_data);
     wfree(c);
-    client->pending = NULL;
     if (!listLength(client->conns))
         msgClean(client->req_buf);
 }
 
-void insertSliceToSendQueue(struct client *client, struct slice *s)
+void finishConn(struct conn *c)
+{
+    c->ready_send = 1;
+    clientSendPacketList(c->client);
+}
+
+void registerConnFree(struct conn *conn, void (*clean)(void*), void *data)
+{
+    conn->cleanup = clean;
+    conn->clean_data = data;
+}
+
+void appendSliceToSendQueue(struct conn *conn, struct slice *s)
 {
     struct sendPacket *packet = wmalloc(sizeof(*packet));
     if (!packet)
-        setClientUnvalid(client);
+        setClientUnvalid(conn->client);
     packet->type = SLICE;
     sliceTo(&packet->target.slice, s->data, s->len);
-    appendToListTail(client->send_queue, packet);
-}
-
-void freeSendPacket(struct sendPacket *p)
-{
-    wfree(p);
+    appendToListTail(conn->send_queue, packet);
 }
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p)
@@ -137,10 +152,9 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->port = port;
     c->protocol = p;
     c->conns = createList();
+    listSetFree(c->conns, (void (*)(void*))connDealloc);
     c->err = NULL;
     c->req_buf = msgCreate(Server.mbuf_size);
-    c->send_queue = createList();
-    listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
     c->is_outer = 1;
     c->should_close = 0;
     c->valid = 1;
@@ -162,38 +176,60 @@ void freeClient(struct client *c)
     }
 }
 
+int isClientNeedSend(struct client *c)
+{
+    struct listNode *node;
+    struct conn *send_conn;
+    if (listLength(c->conns) && isClientValid(c)) {
+        node = listFirst(c->conns);
+        send_conn = listNodeValue(node);
+        if (listLength(send_conn->send_queue) || send_conn->ready_send) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int clientSendPacketList(struct client *c)
 {
     struct sendPacket *packet = NULL;
+    struct conn *send_conn = NULL;
     size_t allsend = 0;
-    struct listNode *node = NULL;
+    struct listNode *node = NULL, *node2 = NULL;
     struct slice *data;
-    while (listLength(c->send_queue)) {
+    while (isClientNeedSend(c)) {
         ssize_t nwritten = 0;
-        node = listFirst(c->send_queue);
-        packet = listNodeValue(node);
-        if (packet->type != SLICE)
-            ASSERT(0);
+        node = listFirst(c->conns);
+        send_conn = listNodeValue(node);
 
-        data = &packet->target.slice;
-        while (data->len != 0) {
-            nwritten = writeBulkTo(c->clifd, data);
-            if (nwritten <= 0)
+        while (listLength(send_conn->send_queue)) {
+            node2 = listFirst(send_conn->send_queue);
+            packet = listNodeValue(node2);
+            if (packet->type != SLICE)
+                ASSERT(0);
+
+            data = &packet->target.slice;
+            while (data->len != 0) {
+                nwritten = writeBulkTo(c->clifd, data);
+                if (nwritten <= 0)
+                    break;
+                data->len -= nwritten;
+                data->data += nwritten;
+                allsend += nwritten;
+            }
+
+            if (nwritten == -1) {
+                setClientUnvalid(c);
                 break;
-            data->len -= nwritten;
-            data->data += nwritten;
-            allsend += nwritten;
-        }
+            }
 
-        if (nwritten == -1) {
-            setClientUnvalid(c);
-            break;
+            if (nwritten == 0) {
+                break;
+            }
+            removeListNode(send_conn->send_queue, node2);
         }
-
-        if (nwritten == 0) {
-            break;
-        }
-        removeListNode(c->send_queue, node);
+        if (send_conn->ready_send)
+            removeListNode(c->conns, node);
     }
     return (int)allsend;
 }
@@ -202,12 +238,10 @@ int sendFileByCopy(struct conn *c, int fd, off_t len, off_t offset)
 {
     off_t send = offset;
     int ret;
-    if (fd < 0) {
+    if (fd < 0 || len == 0) {
         return WHEAT_WRONG;
     }
-    if (len == 0) {
-        return WHEAT_WRONG;
-    }
+
     size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
         Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
     char ctx[unit_read];
@@ -220,7 +254,7 @@ int sendFileByCopy(struct conn *c, int fd, off_t len, off_t offset)
         if (nread <= 0)
             return WHEAT_WRONG;
         send += nread;
-        ret = sendClientData(c->client, &slice);
+        ret = sendClientData(c, &slice);
         if (ret == -1)
             return WHEAT_WRONG;
     }
@@ -264,7 +298,7 @@ struct client *buildConn(char *ip, int port, struct protocol *p)
     return c;
 }
 
-int sendClientData(struct client *c, struct slice *s)
+int sendClientData(struct conn *c, struct slice *s)
 {
     return WorkerProcess->worker->sendData(c, s);
 }

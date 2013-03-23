@@ -15,7 +15,6 @@ struct redisServer {
     size_t nreader;
     size_t nwriter;
     size_t nbackup;
-    struct redisConnUnit **reserved;
     struct token *tokens;
     size_t ntoken;
     struct dict *message_center;

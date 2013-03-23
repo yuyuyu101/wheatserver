@@ -464,10 +464,10 @@ static ssize_t redisResParser(struct redisProcData *redis_data, struct slice *s)
                 pos++;
                 break;
             case RES_NIL_VAL:
-                if (ch == CR)
-                    redis_data->stage = RES_NIL_VAL_LF;
-                else
-                    goto redis_err;
+                if (ch == CR) {
+                    redis_data->curr_arg++;
+                    redis_data->stage = RES_GET_ARG_LEN_LF;
+                }
                 pos++;
                 break;
             case RES_GET_ARG_LEN:
@@ -481,13 +481,6 @@ static ssize_t redisResParser(struct redisProcData *redis_data, struct slice *s)
                 } else {
                     goto redis_err;
                 }
-                pos++;
-                break;
-            case RES_NIL_VAL_LF:
-                if (ch == LF)
-                    redis_data->stage = RES_GET_ARG_LEN;
-                else
-                    goto redis_err;
                 pos++;
                 break;
             case RES_GET_ARG_VAL_LF:
@@ -662,7 +655,7 @@ int parseRedis(struct conn *c, struct slice *slice, size_t *out)
     }
 
     if (nparsed == -1) {
-        wstr info = wstrNewLen(slice->data, slice->len);
+        wstr info = wstrNewLen(slice->data, (int)slice->len);
         wheatLog(WHEAT_VERBOSE, "%d parseRedis() failedd: %s", isOuterClient(c->client),
                 info);
         wstrFree(info);
@@ -715,6 +708,12 @@ int initRedis()
 
 void deallocRedis()
 {
+}
+
+void redisBodyStart(struct conn *c)
+{
+    struct redisProcData *data = c->protocol_data;
+    data->pos = 0;
 }
 
 struct slice *redisBodyNext(struct conn *c)

@@ -70,25 +70,26 @@ static void clientsCron()
     }
 }
 
-int asyncSendData(struct client *c, struct slice *data)
+int asyncSendData(struct conn *c, struct slice *data)
 {
-    if (!isClientValid(c))
+    if (!isClientValid(c->client))
         return -1;
     if (!data->len)
         return 0;
 
     ssize_t sended;
-    insertSliceToSendQueue(c, data);
-    sended = clientSendPacketList(c);
-    refreshClient(c, Server.cron_time);
-    if (!isClientValid(c)) {
+    struct client *client = c->client;
+    appendSliceToSendQueue(c, data);
+    sended = clientSendPacketList(client);
+    refreshClient(client, Server.cron_time);
+    if (!isClientValid(client)) {
         // This function is IO interface, we shouldn't clean client in order
         // to caller to deal with error.
         return -1;
     }
-    if (isClientNeedSend(c)) {
+    if (isClientNeedSend(client)) {
         wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d ", sended);
-        createEvent(WorkerCenter, c->clifd, EVENT_WRITABLE, sendReplyToClient, c);
+        createEvent(WorkerCenter, client->clifd, EVENT_WRITABLE, sendReplyToClient, client);
     }
 
     return sended;
@@ -198,8 +199,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
                 wheatLog(WHEAT_NOTICE, "app failed");
                 break;
             }
-            finishConn(conn);
         } else if (ret == 1) {
+            client->pending = conn;
             continue;
         }
     }

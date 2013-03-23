@@ -79,6 +79,7 @@ void *initWsgiAppData(struct conn *c)
     data->environ = NULL;
     data->response = NULL;
     data->err = NULL;
+    data->body_items = arrayCreate(sizeof(void*), 4);
 
     return data;
 }
@@ -86,6 +87,11 @@ void *initWsgiAppData(struct conn *c)
 void freeWsgiAppData(void *data)
 {
     struct wsgiData *d = data;
+    int i = 0;
+
+    for (; i < narray(d->body_items); ++i) {
+        Py_DECREF(arrayIndex(d->body_items, i));
+    }
     wfree(d);
 }
 
@@ -316,7 +322,7 @@ PyObject *createEnviron(struct conn *c)
                 // No need to free `h`
                 struct slice s;
                 sliceTo(&s, (uint8_t *)HTTP_CONTINUE, sizeof(HTTP_CONTINUE));
-                sendClientData(c->client, &s);
+                sendClientData(c, &s);
             }
         } else if (!strcmp(buf, "HTTP_HOST")) {
             if (envPutString(environ, buf, value))
@@ -667,6 +673,7 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
     PyObject *iter;
     PyObject *item;
     int ret = 0;
+    struct wsgiData *wsgi_data = c->app_private_data;
 
     /* Check if it's a FileWrapper */
     if (result->ob_type == &FileWrapper_Type) {
@@ -713,7 +720,7 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
                 break;
             }
         }
-        Py_DECREF(item);
+        arrayPush(wsgi_data->body_items, item);
     }
     Py_DECREF(iter);
 

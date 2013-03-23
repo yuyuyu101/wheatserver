@@ -28,7 +28,7 @@ int hashUpdate(struct redisServer *server)
     size_t ntoken = server->ntoken;
     size_t need_ntoken = server->instance_size*WHEAT_TOKEN_PER_SERVER;
     int i, j, swap, prev_idx;
-    uint32_t range_per_token;
+    size_t range_per_token;
     if (ntoken < need_ntoken) {
         tokens = wrealloc(tokens, sizeof(struct token)*need_ntoken);
         if (!tokens)
@@ -39,12 +39,10 @@ int hashUpdate(struct redisServer *server)
 
     range_per_token = WHEAT_KEY_RANGE / ntoken;
 
-    for (i = 0; i < ntoken/server->instance_size; ++i) {
+    for (i = 0, j = 0; i < ntoken; ++i, ++j) {
         tokens[i].next_server = NULL;
-        tokens[i].value = i * range_per_token;
-        for (j = 0; j < server->instance_size; j++) {
-            tokens[i].server_idx = j;
-        }
+        tokens[i].value = (uint32_t)(i * range_per_token);
+        tokens[i].server_idx = server->instances[i%server->instance_size].id;
     }
 
     if (server->ntoken == 0) {
@@ -70,7 +68,6 @@ int hashUpdate(struct redisServer *server)
         }
         ++i;
     }
-
     server->ntoken = ntoken;
     return WHEAT_OK;
 }
@@ -81,7 +78,7 @@ struct token *hashDispatch(struct redisServer *server, struct slice *key)
     struct token *begin, *left, *end, *right, *middle;
 
     begin = left = server->tokens;
-    end = right = server->tokens + server->ntoken;
+    end = right = server->tokens + server->ntoken - 1;
 
     while (left < right) {
         middle = left + (right - left) / 2;

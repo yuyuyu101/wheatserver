@@ -43,6 +43,7 @@ struct httpData {
     wstr res_status_msg;
     int response_length;
     struct dict *res_headers;
+    wstr send_header;
 };
 
 static struct staticHandler StaticPathHandler;
@@ -206,11 +207,10 @@ void fillResInfo(struct conn *c, int status, const char *msg)
     data->res_status_msg = wstrNew(msg);
 }
 
-static wstr defaultResHeader(struct conn *c)
+static wstr defaultResHeader(struct conn *c, wstr headers)
 {
     struct httpData *http_data = c->protocol_data;
     char buf[256];
-    wstr headers = wstrNewLen(NULL, 500);
     int ret;
     ASSERT(http_data->res_status && http_data->res_status_msg);
 
@@ -446,6 +446,7 @@ void *initHttpData()
     }
     data->req_headers = dictCreate(&wstrDictType);
     data->res_headers = dictCreate(&wstrDictType);
+    data->send_header = wstrNewLen(NULL, 500);
     return data;
 }
 
@@ -458,6 +459,7 @@ void freeHttpData(void *data)
     wfree(d->parser);
     wstrFree(d->res_status_msg);
     wstrFree(d->path);
+    wstrFree(d->send_header);
     wfree(d->body.body);
     wfree(d);
 }
@@ -609,7 +611,7 @@ int httpSendBody(struct conn *c, const char *data, size_t len)
 
     http_data->send += tosend;
     sliceTo(&slice, (uint8_t *)data, tosend);
-    ret = sendClientData(c->client, &slice);
+    ret = sendClientData(c, &slice);
     if (ret == WHEAT_WRONG)
         return -1;
     return 0;
@@ -633,7 +635,7 @@ int httpSendHeaders(struct conn *c)
     char buf[256];
     int ret, is_connection = 0;
     wstr field, value;
-    wstr headers = defaultResHeader(c);
+    wstr headers = defaultResHeader(c, http_data->send_header);
     while((entry = dictNext(iter)) != NULL) {
         field = dictGetKey(entry);
         value = dictGetVal(entry);
@@ -667,7 +669,7 @@ int httpSendHeaders(struct conn *c)
     struct slice slice;
     sliceTo(&slice, (uint8_t *)headers, wstrlen(headers));
 
-    len = sendClientData(c->client, &slice);
+    len = sendClientData(c, &slice);
     if (len < 0) {
         goto cleanup;
     }
@@ -675,7 +677,6 @@ int httpSendHeaders(struct conn *c)
     ok = 1;
 
 cleanup:
-    wstrFree(headers);
     dictReleaseIterator(iter);
     return ok? 0 : -1;
 }
@@ -742,5 +743,6 @@ int httpSpot(struct conn *c)
     ret = AppTable[i].appCall(c, path);
     logAccess(c);
     wstrFree(path);
+    finishConn(c);
     return ret;
 }

@@ -50,7 +50,7 @@ struct worker {
      * Caller will lose ownership of `data` in order to avoid big copy,
      * sendData will free `data`
      */
-    int (*sendData)(struct client *, struct slice*);
+    int (*sendData)(struct conn *, struct slice*);
     int (*registerRead)(struct client *);
     void (*unregisterRead)(struct client *);
 };
@@ -71,11 +71,13 @@ struct app {
 
 struct conn {
     struct client *client;
-    struct listNode *node;
-    struct mbuf *protect;
     void *protocol_data;
     struct app *app;
     void *app_private_data;
+    struct list *send_queue;
+    int ready_send;
+    void (*cleanup)(void *data);
+    void *clean_data;
     struct conn *next;
 };
 
@@ -100,7 +102,6 @@ struct client {
     struct conn *pending;
     struct list *conns;
     struct msghdr *req_buf;
-    struct list *send_queue;
     void *client_data;       // Only used by app
 
     unsigned is_outer:1;
@@ -120,6 +121,8 @@ extern struct app AppTable[];
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);
 void workerProcessCron();
+void appCron();
+
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void finishConn(struct conn *c);
@@ -129,20 +132,20 @@ struct client *buildConn(char *ip, int port, struct protocol *p);
 int initAppData(struct conn *);
 int registerClientRead(struct client *c);
 void unregisterClientRead(struct client *c);
-int sendClientData(struct client *c, struct slice *s);
+int sendClientData(struct conn *c, struct slice *s);
 struct conn *connGet(struct client *client);
-void insertSliceToSendQueue(struct client *client, struct slice *s);
-void appCron();
+void appendSliceToSendQueue(struct conn *conn, struct slice *s);
+int isClientNeedSend(struct client *);
+void registerConnFree(struct conn*, void (*)(void*), void *data);
 
 #define isClientValid(c)     ((c)->valid)
 #define setClientUnvalid(c)  ((c)->valid = 0)
-#define isClientNeedSend(c)  (listLength((c)->send_queue))
 #define isClientNeedParse(c) (msgCanRead(c)->req_buf))
 #define refreshClient(c, t)  ((c)->last_io = (t))
 #define getConnIP(c)         ((c)->client->ip)
 #define getConnPort(c)       ((c)->client->port)
 #define setClientClose(c)    ((c)->client->should_close = 1)
-#define isOuterClient(c)       ((c)->is_outer == 1)
+#define isOuterClient(c)     ((c)->is_outer == 1)
 
 /* worker's flow:
  * 0. setup filling workerProcess members

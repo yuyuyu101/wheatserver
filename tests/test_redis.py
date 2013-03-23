@@ -17,3 +17,5 @@ def test_redis():
     for i in range(100):
         time.sleep(0.001)
         assert r.get(str(i)) == str(i)
+
+    assert r.get('z') == None

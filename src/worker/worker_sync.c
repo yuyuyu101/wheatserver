@@ -3,20 +3,21 @@
 static struct list *MaxSelectFd = NULL;
 static int MaxFd = 0;
 
-int syncSendData(struct client *c, struct slice *data)
+int syncSendData(struct conn *c, struct slice *data)
 {
-    if (!isClientValid(c)) {
+    if (!isClientValid(c->client)) {
         return -1;
     }
     if (!data->len)
         return 0;
 
-    insertSliceToSendQueue(c, data);
+    appendSliceToSendQueue(c, data);
     ssize_t sended = 0;
-    while (isClientNeedSend(c)) {
-        sended += clientSendPacketList(c);
-        refreshClient(c, Server.cron_time);
-        if (!isClientValid(c)) {
+    struct client *client = c->client;
+    while (isClientNeedSend(client)) {
+        sended += clientSendPacketList(client);
+        refreshClient(client, Server.cron_time);
+        if (!isClientValid(client)) {
             // This function is IO interface, we shouldn't clean client in order
             // to caller to deal with error.
             return -1;
@@ -105,6 +106,8 @@ parser:
             wheatLog(WHEAT_NOTICE, "parse http data failed");
             stat->stat_failed_request++;
             goto cleanup;
+        } else if (ret == 1) {
+            client->pending = conn;
         }
     } while(ret == 1);
     ret = client->protocol->spotAppAndCall(conn);
@@ -114,7 +117,6 @@ parser:
         goto cleanup;
     }
     stat->stat_total_request++;
-    finishConn(conn);
     if (msgCanRead(client->req_buf)) {
         goto parser;
     }
@@ -172,7 +174,7 @@ accepterror:
         struct listNode *node = NULL;
         struct listIterator *iter = listGetIterator(MaxSelectFd, START_HEAD);
         while ((node = listNext(iter)) != NULL) {
-            int fd = (intptr_t)listNodeValue(node);
+            long fd = (intptr_t)listNodeValue(node);
             FD_SET(fd, &rset);
         }
         freeListIterator(iter);
