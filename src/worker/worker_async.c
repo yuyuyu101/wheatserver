@@ -11,9 +11,6 @@ static void cleanRequest(struct client *c)
 {
     deleteEvent(WorkerCenter, c->clifd, EVENT_READABLE);
     deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
-    struct listNode *node = searchListKey(Clients, c);
-    ASSERT(node);
-    removeListNode(Clients, node);
     freeClient(c);
 }
 
@@ -39,14 +36,6 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
     }
 }
 
-static struct client *initRequest(int fd, char *ip, int port, struct protocol *p)
-{
-    struct client *c = createClient(fd, ip, port, p);
-    c->last_io = Server.cron_time;
-    appendToListTail(Clients, c);
-    return c;
-}
-
 static void clientsCron()
 {
     unsigned long numclients = listLength(Clients);
@@ -60,7 +49,7 @@ static void clientsCron()
         ASSERT(c);
 
         listRotate(Clients);
-        long idletime = Server.cron_time - c->last_io;
+        long idletime = Server.cron_time.tv_sec - c->last_io.tv_sec;
         if (idletime > Server.worker_timeout) {
             wheatLog(WHEAT_VERBOSE,"Closing idle client %d %d", Server.cron_time, c->last_io);
             WorkerProcess->stat->stat_timeout_request++;
@@ -139,7 +128,7 @@ void asyncUnregisterRead(struct client *c)
 void asyncWorkerCron()
 {
     int refresh_seconds = Server.stat_refresh_seconds;
-    time_t elapse =  Server.cron_time, now = Server.cron_time;
+    time_t elapse = Server.cron_time.tv_sec, now = Server.cron_time.tv_sec;
     while (WorkerProcess->alive) {
         processEvents(WorkerCenter, WHEATSERVER_CRON);
         if (WorkerProcess->ppid != getppid()) {
@@ -148,14 +137,14 @@ void asyncWorkerCron()
         }
         clientsCron();
         appCron();
-        elapse = Server.cron_time;
+        elapse = Server.cron_time.tv_sec;
         if (elapse - now > refresh_seconds) {
             sendStatPacket();
             now = elapse;
         }
-        Server.cron_time = time(NULL);
+        gettimeofday(&Server.cron_time, NULL);
     }
-    now = Server.cron_time;
+    now = Server.cron_time.tv_sec;
     while (elapse - now > Server.graceful_timeout) {
         elapse = time(NULL);
         processEvents(WorkerCenter, WHEATSERVER_CRON);
@@ -228,7 +217,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
         wheatLog(WHEAT_WARNING, "spot protocol failed");
         return ;
     }
-    struct client *c = initRequest(cfd, ip, cport, ptcol);
+    struct client *c = createClient(cfd, ip, cport, ptcol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
     WorkerProcess->stat->stat_total_connection++;
 }
