@@ -94,9 +94,14 @@ struct conn *connGet(struct client *client)
     c->ready_send = 0;
     c->send_queue = createList();
     listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
-    c->cleanup = NULL;
-    c->clean_data = NULL;
+    c->cleanup = arrayCreate(sizeof(struct cleanup), 2);
     return c;
+}
+
+static void cleanupCallback(void *data)
+{
+    struct cleanup *c = data;
+    c->func(c->clean_data);
 }
 
 static void connDealloc(struct conn *c)
@@ -106,8 +111,7 @@ static void connDealloc(struct conn *c)
         c->client->protocol->freeProtocolData(c->protocol_data);
     if (c->app_private_data)
         c->app->freeAppData(c->app_private_data);
-    if (c->cleanup)
-        c->cleanup(c->clean_data);
+    arrayEach(c->cleanup, cleanupCallback);
     wfree(c);
     if (!listLength(client->conns))
         msgClean(client->req_buf);
@@ -121,8 +125,10 @@ void finishConn(struct conn *c)
 
 void registerConnFree(struct conn *conn, void (*clean)(void*), void *data)
 {
-    conn->cleanup = clean;
-    conn->clean_data = data;
+    struct cleanup cleanup;
+    cleanup.func = clean;
+    cleanup.clean_data = data;
+    arrayPush(conn->cleanup, &cleanup);
 }
 
 void appendSliceToSendQueue(struct conn *conn, struct slice *s)

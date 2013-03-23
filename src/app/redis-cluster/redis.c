@@ -100,17 +100,17 @@ int redisCall(struct conn *c, void *arg)
         struct client *redis_client = c->client;
         redis_unit = redis_client->client_data;
         app_data = redis_unit->outer_conn->app_private_data;
-        if (--app_data->count)
-            return WHEAT_OK;
-        while ((next = redisBodyNext(c)) != NULL) {
-            ret = sendClientData(redis_unit->outer_conn, next);
-            if (ret == -1)
-                return WHEAT_WRONG;
-        }
+        registerConnFree(redis_unit->outer_conn, (void (*)(void*))redisConnFree, redis_unit);
         registerConnFree(redis_unit->outer_conn, (void (*)(void*))finishConn, c);
-        finishConn(redis_unit->outer_conn);
+        if (!--app_data->count) {
+            while ((next = redisBodyNext(c)) != NULL) {
+                ret = sendClientData(redis_unit->outer_conn, next);
+                if (ret == -1)
+                    return WHEAT_WRONG;
+            }
+            finishConn(redis_unit->outer_conn);
+        }
 
-        redisConnFree(redis_unit);
         return WHEAT_OK;
     }
 }

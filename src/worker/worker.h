@@ -69,6 +69,11 @@ struct app {
     int is_init;
 };
 
+struct cleanup {
+    void (*func)(void *data);
+    void *clean_data;
+};
+
 struct conn {
     struct client *client;
     void *protocol_data;
@@ -76,8 +81,7 @@ struct conn {
     void *app_private_data;
     struct list *send_queue;
     int ready_send;
-    void (*cleanup)(void *data);
-    void *clean_data;
+    struct array *cleanup;
     struct conn *next;
 };
 
