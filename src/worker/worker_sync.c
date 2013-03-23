@@ -1,7 +1,7 @@
 #include "worker.h"
 
 static struct list *MaxSelectFd = NULL;
-static int MaxFd = 0;
+static long MaxFd = 0;
 
 int syncSendData(struct conn *c, struct slice *data)
 {

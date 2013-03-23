@@ -59,18 +59,18 @@ struct dictType wstrDictType = {
 
 unsigned int dictSliceHash(const void *key) {
     const struct slice *s = key;
-    return dictGenHashFunction(s->data, s->len);
+    return dictGenHashFunction(s->data, (int)s->len);
 }
 
 unsigned int dictSliceCaseHash(const void *key) {
     const struct slice *s = key;
-    return dictGenCaseHashFunction(s->data, s->len);
+    return dictGenCaseHashFunction(s->data, (int)s->len);
 }
 
 int dictSliceKeyCompare(const void *key1, const void *key2)
 {
     const struct slice *s1 = key1, *s2 = key2;
-    int l1,l2;
+    size_t l1,l2;
 
     l1 = s1->len;
     l2 = s2->len;
@@ -85,12 +85,36 @@ void dictSliceDestructor(void *val)
 
 struct dictType sliceDictType = {
     dictSliceHash,               /* hash function */
-    NULL,                       /* key dup */
-    NULL,                       /* val dup */
+    NULL,                        /* key dup */
+    NULL,                        /* val dup */
     dictSliceKeyCompare,         /* key compare */
     dictSliceDestructor,         /* key destructor */
     dictSliceDestructor,         /* val destructor */
 };
+
+unsigned int dictEncIntHash(const void *key)
+{
+    char buf[32];
+    int len;
+
+    len = ll2string(buf, 32, (intptr_t)key);
+    return dictGenHashFunction((unsigned char*)buf, len);
+}
+
+int dictEncIntKeyCompare(const void *key1, const void *key2)
+{
+    return key1 == key2;
+}
+
+struct dictType intDictType = {
+    dictEncIntHash,             /* hash function */
+    NULL,                       /* key dup */
+    NULL,                       /* val dup */
+    dictEncIntKeyCompare,       /* key compare */
+    NULL,                       /* key destructor */
+    NULL,                       /* val destructor */
+};
+
 
 int daemonize(int dump_core)
 {
@@ -237,4 +261,26 @@ int fromSameParentDir(wstr parent, wstr child)
     if (wstrlen(parent) > wstrlen(child))
         return 0;
     return memcmp(parent, child, wstrlen(parent)) == 0;
+}
+
+int ll2string(char *s, size_t len, long long value)
+{
+    char buf[32], *p;
+    unsigned long long v;
+    size_t l;
+
+    if (len == 0) return 0;
+    v = (value < 0) ? -value : value;
+    p = buf+31; /* point to the last character */
+    do {
+        *p-- = '0'+(v%10);
+        v /= 10;
+    } while(v);
+    if (value < 0) *p-- = '-';
+    p++;
+    l = 32-(p-buf);
+    if (l+1 > len) l = len-1; /* Make sure it fits, including the nul term */
+    memcpy(s,p,l);
+    s[l] = '\0';
+    return l;
 }
