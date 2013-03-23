@@ -4,10 +4,6 @@
 #define WHEAT_REDIS_CONNS_SIZE   5
 #define WHEAT_MAX_REDIS_CONNS_SIZE   50
 
-#define READER 1
-#define WRITER 1
-#define TOTAL  1
-
 struct redisConnUnit {
     struct conn *outer_conn;
     struct client *redis_client;
@@ -87,9 +83,7 @@ int redisCall(struct conn *c, void *arg)
             instance = getInstance(RedisServer, token->server_idx);
             redis_unit = getRedisUnit(instance, c);
             token = token->next_server;
-            nwritted++;
-        }
-        while (nwritted--) {
+
             redisBodyStart(c);
             send_conn = connGet(redis_unit->redis_client);
             while ((next = redisBodyNext(c)) != NULL) {
@@ -99,6 +93,7 @@ int redisCall(struct conn *c, void *arg)
             }
             finishConn(send_conn);
             registerClientRead(redis_unit->redis_client);
+            nwritted++;
         }
         return WHEAT_OK;
     } else {
@@ -201,7 +196,7 @@ int redisAppInit(struct protocol *ptocol)
             RedisServer->instance_size < RedisServer->nbackup)
         goto cleanup;
 
-    RedisServer->nreader = RedisServer->nwriter = RedisServer->nbackup = 1;
+    RedisServer->nreader = RedisServer->nwriter = RedisServer->nbackup = 2;
     return hashUpdate(RedisServer);
 
 cleanup:
