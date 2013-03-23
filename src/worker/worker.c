@@ -25,7 +25,7 @@ void workerProcessCron()
         halt(1);
     }
 
-    Server.cron_time = time(NULL);
+    gettimeofday(&Server.cron_time, NULL);
     sendStatPacket();
     WorkerProcess->worker->cron();
 }
@@ -50,7 +50,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->pid = getpid();
     worker->ppid = getppid();
     worker->alive = 1;
-    worker->start_time = time(NULL);
+    worker->start_time = Server.cron_time;
     worker->worker_name = worker_name;
     worker->worker = spotWorker(worker_name);
     ASSERT(worker->worker);
@@ -166,6 +166,8 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->valid = 1;
     c->pending = NULL;
     c->client_data = NULL;
+    c->last_io = Server.cron_time;
+    c->notifyFree = NULL;
     return c;
 }
 
@@ -175,6 +177,8 @@ void freeClient(struct client *c)
     wstrFree(c->ip);
     msgFree(c->req_buf);
     freeList(c->conns);
+    if (c->notifyFree)
+        c->notifyFree(c, c->notify_data);
     if (listLength(ClientPool) > 100) {
         appendToListTail(ClientPool, c);
     } else {
@@ -322,8 +326,10 @@ void unregisterClientRead(struct client *c)
 void appCron()
 {
     struct app *app = &AppTable[0];
-    while (app && app->is_init && app->appCron) {
-        app->appCron();
+    while (app->proto_belong) {
+        if (app->is_init && app->appCron) {
+            app->appCron();
+        }
         app++;
     }
 }

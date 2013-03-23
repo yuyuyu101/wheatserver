@@ -11,7 +11,7 @@ static void handleStat(struct workerStat *left, struct workerStat *add)
     left->stat_work_time += add->stat_work_time;
     left->stat_last_send = add->stat_last_send;
 
-    left->refresh_time = Server.cron_time;
+    left->refresh_time = Server.cron_time.tv_sec;
 }
 
 /* ========== Worker Statistic Area ========== */

@@ -103,7 +103,7 @@ struct globalServer {
     struct evcenter *master_center;
     int stat_fd;
     struct workerStat *aggregate_workers_stat;
-    time_t cron_time;
+    struct timeval cron_time;
     struct masterStat *master_stat;
     pid_t pid;
     pid_t relaunch_pid;

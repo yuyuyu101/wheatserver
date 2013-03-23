@@ -14,7 +14,7 @@ struct workerProcess {
     pid_t pid;
     pid_t ppid;
     int alive;
-    time_t start_time;
+    struct timeval start_time;
 
     char *worker_name;
     struct worker *worker;
@@ -100,13 +100,15 @@ struct client {
     int clifd;
     wstr ip;
     int port;
-    time_t last_io;
+    struct timeval last_io;
     char *err;
     struct protocol *protocol;
     struct conn *pending;
     struct list *conns;
     struct msghdr *req_buf;
     void *client_data;       // Only used by app
+    void (*notifyFree)(struct client *, void *);
+    void *notify_data;
 
     unsigned is_outer:1;
     unsigned should_close:1; // Used to indicate whether closing client
@@ -142,14 +144,17 @@ void appendSliceToSendQueue(struct conn *conn, struct slice *s);
 int isClientNeedSend(struct client *);
 void registerConnFree(struct conn*, void (*)(void*), void *data);
 
-#define isClientValid(c)     ((c)->valid)
-#define setClientUnvalid(c)  ((c)->valid = 0)
-#define isClientNeedParse(c) (msgCanRead(c)->req_buf))
-#define refreshClient(c, t)  ((c)->last_io = (t))
-#define getConnIP(c)         ((c)->client->ip)
-#define getConnPort(c)       ((c)->client->port)
-#define setClientClose(c)    ((c)->client->should_close = 1)
-#define isOuterClient(c)     ((c)->is_outer == 1)
+#define isClientValid(c)                   ((c)->valid)
+#define setClientUnvalid(c)                ((c)->valid = 0)
+#define isClientNeedParse(c)               (msgCanRead(c)->req_buf))
+#define refreshClient(c, t)                ((c)->last_io = (t))
+#define getConnIP(c)                       ((c)->client->ip)
+#define getConnPort(c)                     ((c)->client->port)
+#define setClientClose(c)                  ((c)->client->should_close = 1)
+#define isOuterClient(c)                   ((c)->is_outer == 1)
+#define setClientFreeNotify(c, func, data) \
+    (c)->notifyFree = func; \
+     (c)->notify_data = data
 
 /* worker's flow:
  * 0. setup filling workerProcess members

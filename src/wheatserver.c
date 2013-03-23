@@ -15,7 +15,7 @@ void initGlobalServerConfig()
     Server.worker_type = NULL;
     Server.graceful_timeout = WHEATSERVER_GRACEFUL_TIME;
     Server.idle_timeout = WHEATSERVER_IDLE_TIME;
-    Server.cron_time = time(NULL);
+    gettimeofday(&Server.cron_time, NULL);
     Server.daemon = 0;
     Server.pidfile = NULL;
     Server.max_buffer_size = WHEAT_MAX_BUFFER_SIZE;
@@ -210,8 +210,8 @@ void stopWorkers(int graceful)
         sig = SIGQUIT;
     else
         sig = SIGTERM;
-    long seconds = Server.cron_time + Server.graceful_timeout;
-    while (seconds < Server.cron_time && listLength(Server.workers)) {
+    long seconds = Server.cron_time.tv_sec + Server.graceful_timeout;
+    while (seconds < Server.cron_time.tv_sec && listLength(Server.workers)) {
         killAllWorkers(sig);
         usleep(200000);
         reapWorkers();
@@ -223,7 +223,7 @@ static void findTimeoutWorker()
 {
     struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
     struct listNode *node;
-    time_t cache_now = Server.cron_time;
+    time_t cache_now = Server.cron_time.tv_sec;
     unsigned int timeout = Server.worker_timeout;
     while ((node = listNext(iter)) != NULL) {
         struct workerProcess *worker = listNodeValue(node);
@@ -244,7 +244,7 @@ void run()
     while (1) {
         cron_times++;
 
-        Server.cron_time = time(NULL);
+        gettimeofday(&Server.cron_time, NULL);
         reapWorkers();
         if (listLength(Server.signal_queue) == 0) {
         // processEvents will refresh worker status, so findTimeoutWorker
