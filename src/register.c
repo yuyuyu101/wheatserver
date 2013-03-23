@@ -56,14 +56,13 @@ void freeWsgiAppData(void *app_data);
 int redisCall(struct conn *c, void *arg);
 int redisAppInit(struct protocol *);
 void redisAppDeinit();
-void *redisAppDataInit(struct conn *c);
-void redisAppDataDeinit(void *data);
+void redisAppCron();
 struct app AppTable[] = {
     {"Http", "wsgi", NULL, wsgiCall, initWsgi, deallocWsgi,
         initWsgiAppData, freeWsgiAppData, 0},
     {"Http", "static-file", NULL, staticFileCall, initStaticFile, deallocStaticFile,
         initStaticFileData, freeStaticFileData, 0},
-    {"Redis", "redis", NULL, redisCall, redisAppInit, redisAppDataDeinit,
-        redisAppDataInit, redisAppDataDeinit, 0},
+    {"Redis", "redis", redisAppCron, redisCall, redisAppInit, redisAppDeinit,
+        NULL, NULL, 0},
     {NULL}
 };
