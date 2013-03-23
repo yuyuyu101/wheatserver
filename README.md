@@ -1,10 +1,14 @@
-wheatserver(Alpha)
+Wheatserver(Alpha)
 ===========
 
-Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
-[uWSGI](http://projects.unbit.it/uwsgi/).
+Full stack sync/asyc(wait) IO Application Framework, help you build your own
+application server.
 
-Now supporting WSGI and static file handler.
+You can use Wheatserver to develop web server, application proxy server and
+db proxy server etc. You will enjoy using sync programming model to have
+great performance under async model.
+
+Now supporting WSGI, Static file distribute and Redis distribute.
 
 Feature
 ===========
@@ -22,6 +26,9 @@ information from wheatserver.
 * Reload: If you change config file and apply it without restart wheatserver.
 Only you need to do is 'kill -s sighup PID' let wheatserver reload file and
 reset workers.
+
+* Simple: Try to hide complexity logical processing and provide simple
+interfaces to developer.
 
 * Implemented:
 
@@ -55,7 +62,7 @@ Run
 Config
 ===========
 
-*Attention*: you must specify needed options under your choosing protocol
+*Attention*: you must specify needed options under your choosing `protocol`
 
 See [wheatserver.conf](https://github.com/yuyuyu101/wheatserver/blob/master/wheatserver.conf)
 
