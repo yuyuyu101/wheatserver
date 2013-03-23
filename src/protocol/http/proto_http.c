@@ -80,8 +80,8 @@ char *httpDate()
 {
     static char buf[255];
     static time_t now = 0;
-    if (now != Server.cron_time || now == 0) {
-        now = Server.cron_time;
+    if (now != Server.cron_time.tv_sec || now == 0) {
+        now = Server.cron_time.tv_sec;
         convertHttpDate(now, buf, sizeof(buf));
     }
     return buf;

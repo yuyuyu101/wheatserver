@@ -70,7 +70,7 @@ void *arrayTop(struct array *a)
 
 void arrayEach(struct array *a, void(*func)(void *))
 {
-    int len = a->nelem;
+    size_t len = a->nelem;
     uint8_t *pos = a->elements;
     while (len--) {
         func(pos);
@@ -80,7 +80,7 @@ void arrayEach(struct array *a, void(*func)(void *))
 
 void arrayEach2(struct array *a, void(*func)(void *item, void *data), void *data)
 {
-    int len = a->nelem;
+    size_t len = a->nelem;
     uint8_t *pos = a->elements;
     while (len--) {
         func(pos, data);

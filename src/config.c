@@ -381,9 +381,8 @@ void statConfigByName(const char *n, char *result, int len)
 
 static ssize_t constructConfigFormat(struct configuration *conf, char *buf, size_t len)
 {
-    ssize_t ret = 0;
+    int ret = 0, pos = 0;
     struct listIterator *iter = NULL;
-    int pos = 0;
     wstr line = NULL;
     struct listNode *node = NULL;
     switch(conf->format) {
