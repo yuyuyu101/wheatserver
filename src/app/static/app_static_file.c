@@ -252,14 +252,17 @@ int staticFileCall(struct conn *c, void *arg)
     if (file_d > 0) close(file_d);
     return WHEAT_OK;
 
-failed:
-    wheatLog(WHEAT_WARNING, "send static file failed");
-    ok = 0;
 
 failed404:
     sendResponse404(c);
     if (file_d > 0) close(file_d);
+    return WHEAT_OK;
 
+failed:
+    wheatLog(WHEAT_WARNING, "send static file failed");
+    ok = 0;
+
+    if (file_d > 0) close(file_d);
     return ok == 1 ? WHEAT_OK : WHEAT_WRONG;
 }
 
