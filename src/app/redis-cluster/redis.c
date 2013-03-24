@@ -192,13 +192,14 @@ int redisAppInit(struct protocol *ptocol)
 {
     ASSERT(ptocol);
     RedisProtocol = ptocol;
-    struct configuration *conf = getConfiguration("redis-servers");
+    struct configuration *conf;
     int pos = 0;
     long len, mem_len;
     uint8_t *p = NULL;
     struct listIterator *iter = NULL;
     struct redisInstance *instance = NULL;
     struct redisServer *server = RedisServer;
+    conf = getConfiguration("redis-servers");
     if (!conf->target.ptr)
         return WHEAT_WRONG;
 
@@ -241,7 +242,11 @@ int redisAppInit(struct protocol *ptocol)
             server->instance_size < server->nbackup)
         goto cleanup;
 
-    server->nbackup = 2;
+    conf = getConfiguration("backup-size");
+    if (!conf)
+        return WHEAT_WRONG;
+    server->nbackup = conf->target.val;
+
     server->message_center = createList();
     RedisServer = server;
     return hashUpdate(server);

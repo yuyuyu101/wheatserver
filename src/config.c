@@ -67,6 +67,8 @@ struct configuration configTable[] = {
     // Redis
     {"redis-servers",     WHEAT_ARGS_NO_LIMIT,listValidator, {.ptr=NULL},
         NULL,                   LIST_FORMAT},
+    {"backup-size",       2, unsignedIntValidator, {.val=1},
+        NULL,                   INT_FORMAT},
 
     // WSGI Configuration
     {"app-project-path",  2, stringValidator,      {.ptr=NULL},
