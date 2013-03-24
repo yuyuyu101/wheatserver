@@ -259,7 +259,7 @@ failed404:
     return WHEAT_OK;
 
 failed:
-    wheatLog(WHEAT_WARNING, "send static file failed");
+    wheatLog(WHEAT_WARNING, "send static file failed: %s", strerror(errno));
     ok = 0;
 
     if (file_d > 0) close(file_d);

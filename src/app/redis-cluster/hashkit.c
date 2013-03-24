@@ -4,7 +4,7 @@
 #include "redis.h"
 
 #define WHEAT_TOKEN_PER_SERVER   40
-#define WHEAT_KEY_RANGE          (1<<32-1)
+#define WHEAT_KEY_RANGE          ((1<<32)-1)
 #define KETAMA_MAX_HOSTLEN       86
 
 extern void md5_signature(const unsigned char *key, unsigned int length, unsigned char *result);
