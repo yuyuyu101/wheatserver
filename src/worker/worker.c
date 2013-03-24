@@ -277,9 +277,10 @@ int sendClientFile(struct conn *c, int fd, off_t len)
     int send = 0;
     int ret = WHEAT_OK;
     while (!isClientNeedSend(c->client) && send != len) {
-        send += portable_sendfile(c->client->clifd, fd, send, len);
+        ret = portable_sendfile(c->client->clifd, fd, send, len-send);
         if (send == -1)
             return WHEAT_WRONG;
+        send += ret;
     }
     if (send != len) {
         ret = sendFileByCopy(c, fd, len, send);
