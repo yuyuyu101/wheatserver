@@ -196,7 +196,9 @@ void handleWinch()
 /* ========== Worker Singal Handler ========== */
 void handleWorkerUsr1(int sig)
 {
-    sendStatPacket();
+    // worker process refresh_time is used to control when to send statistic
+    // packet, set to zero means to force worker to send
+    WorkerProcess->refresh_time = 0;
     return ;
 }
 

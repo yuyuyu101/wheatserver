@@ -24,8 +24,7 @@ void initGlobalServerConfig()
     Server.stat_port = WHEAT_STATS_PORT;
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
     Server.mbuf_size = WHEAT_MBUF_SIZE;
-    Server.aggregate_workers_stat = initWorkerStat(1);
-    Server.master_stat = initMasterStat();
+    Server.aggregate_stat = StatItems;
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);
@@ -142,17 +141,18 @@ void spawnWorker(char *worker_name)
         halt(1);
     }
 
-    Server.master_stat->total_run_workers++;
 #ifdef WHEAT_DEBUG_WORKER
     pid = 0;
 #else
     pid = fork();
 #endif
     if (pid != 0) {
+        getStatValByName("Total spawn workers")++;
         appendToListTail(Server.workers, new_worker);
-        new_worker->stat = initWorkerStat(1);
+        new_worker->stat = copyStatItems();
         new_worker->pid = pid;
         new_worker->start_time = Server.cron_time;
+        new_worker->refresh_time = Server.cron_time.tv_sec;
         return ;
     } else {
         WorkerProcess = new_worker;
@@ -227,10 +227,11 @@ static void findTimeoutWorker()
     unsigned int timeout = Server.worker_timeout;
     while ((node = listNext(iter)) != NULL) {
         struct workerProcess *worker = listNodeValue(node);
-        if (cache_now - worker->stat->refresh_time > timeout) {
-            Server.master_stat->timeout_workers++;
+        // The first statItem is "Last send" field
+        if (cache_now - worker->refresh_time > timeout) {
+            getStatValByName("Timeout workers")++;
             wheatLog(WHEAT_WARNING, "Worker trigger timeout %d, kill it: %d",
-                    cache_now - worker->stat->stat_last_send, worker->pid);
+                    cache_now-worker->refresh_time, worker->pid);
             killWorker(worker, SIGTERM);
         }
     }
@@ -240,6 +241,7 @@ void run()
 {
     static long cron_times = 1;
     int *sig;
+    gettimeofday(&Server.cron_time, NULL);
     adjustWorkerNumber();
     while (1) {
         cron_times++;
@@ -302,8 +304,7 @@ static void resetMasterClient(struct masterClient *c)
 
 static ssize_t processCommand(struct masterClient *c)
 {
-    if (c->argc == WHEAT_STATCOMMAND_PACKET_FIELD
-            && !wstrCmpNocaseChars(c->argv[0], "statinput", 9)) {
+    if (!wstrCmpNocaseChars(c->argv[0], "statinput", 9)) {
         statinputCommand(c);
     } else if (c->argc == 2 && !wstrCmpNocaseChars(c->argv[0], "config", 6)) {
         configCommand(c);

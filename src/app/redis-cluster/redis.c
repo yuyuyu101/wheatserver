@@ -99,7 +99,7 @@ static int sendOuterError(struct redisUnit *unit)
     char buf[255];
     int ret;
     ret = snprintf(buf, 255, WHEAT_REDIS_ERR);
-    sliceTo(&error, buf, ret);
+    sliceTo(&error, (uint8_t *)buf, ret);
     ret = sendClientData(unit->outer_conn, &error);
     redisUnitFinal(unit);
     return ret;
@@ -223,7 +223,7 @@ int redisAppInit(struct protocol *ptocol)
     uint8_t *p = NULL;
     struct listIterator *iter = NULL;
     struct redisInstance *instance = NULL;
-    struct redisServer *server = RedisServer;
+    struct redisServer *server;
     conf = getConfiguration("redis-servers");
     if (!conf->target.ptr)
         return WHEAT_WRONG;

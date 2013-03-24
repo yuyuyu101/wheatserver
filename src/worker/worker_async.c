@@ -5,6 +5,16 @@
 static struct evcenter *WorkerCenter = NULL;
 static struct list *Clients = NULL;
 
+// Cache below stat field avoid too much query on StatItems
+// --------- Statistic Cache --------------
+static long long StatTotalClient = 0;
+static long long StatBufferSize = 0;
+static long long StatTotalRequest = 0;
+static long long StatFailedRequest = 0;
+static long long StatRunTime = 0;
+//-----------------------------------------
+
+
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask);
 
 static void cleanRequest(struct client *c)
@@ -52,7 +62,7 @@ static void clientsCron()
         long idletime = Server.cron_time.tv_sec - c->last_io.tv_sec;
         if (idletime > Server.worker_timeout) {
             wheatLog(WHEAT_VERBOSE,"Closing idle client %d %d", Server.cron_time, c->last_io);
-            WorkerProcess->stat->stat_timeout_request++;
+            getStatItemByName("Total timeout client")->val++;
             cleanRequest(c);
             continue;
         }
@@ -128,7 +138,8 @@ void asyncUnregisterRead(struct client *c)
 void asyncWorkerCron()
 {
     int refresh_seconds = Server.stat_refresh_seconds;
-    time_t elapse = Server.cron_time.tv_sec, now = Server.cron_time.tv_sec;
+    time_t elapse = Server.cron_time.tv_sec;
+    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
     while (WorkerProcess->alive) {
         processEvents(WorkerCenter, WHEATSERVER_CRON);
         if (WorkerProcess->ppid != getppid()) {
@@ -138,14 +149,24 @@ void asyncWorkerCron()
         clientsCron();
         appCron();
         elapse = Server.cron_time.tv_sec;
-        if (elapse - now > refresh_seconds) {
-            sendStatPacket();
-            now = elapse;
+        if (elapse - WorkerProcess->refresh_time > refresh_seconds) {
+            getStatValByName("Total client") = StatTotalClient;
+            getStatValByName("Max buffer size")= StatBufferSize;
+            getStatValByName("Total request")= StatTotalRequest;
+            getStatValByName("Total failed request")= StatFailedRequest;
+            getStatValByName("Worker run time")= StatRunTime;
+            sendStatPacket(WorkerProcess);
+            StatTotalClient = 0;
+            StatBufferSize = 0;
+            StatTotalRequest = 0;
+            StatFailedRequest = 0;
+            StatRunTime = 0;
+            WorkerProcess->refresh_time = elapse;
         }
         gettimeofday(&Server.cron_time, NULL);
     }
-    now = Server.cron_time.tv_sec;
-    while (elapse - now > Server.graceful_timeout) {
+    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+    while (elapse - WorkerProcess->refresh_time > Server.graceful_timeout) {
         elapse = time(NULL);
         processEvents(WorkerCenter, WHEATSERVER_CRON);
     }
@@ -156,7 +177,6 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     struct client *client = data;
     struct conn *conn = NULL;
     ssize_t nread, ret = 0;
-    struct workerStat *stat = WorkerProcess->stat;
     struct timeval start, end;
     long time_use;
     struct slice slice;
@@ -167,8 +187,9 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         cleanRequest(client);
         return ;
     }
-    if (msgGetSize(client->req_buf) > stat->stat_buffer_size)
-        stat->stat_buffer_size = msgGetSize(client->req_buf);
+    if (msgGetSize(client->req_buf) > StatBufferSize) {
+        StatBufferSize = msgGetSize(client->req_buf);
+    }
     while (msgCanRead(client->req_buf)) {
         conn = connGet(client);
 
@@ -180,10 +201,11 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             wheatLog(WHEAT_NOTICE, "parse data failed");
             break;
         } else if (ret == WHEAT_OK) {
-            stat->stat_total_request++;
+            StatTotalRequest++;
             ret = client->protocol->spotAppAndCall(conn);
+            client->pending = NULL;
             if (ret != WHEAT_OK) {
-                stat->stat_failed_request++;
+                StatFailedRequest++;
                 client->should_close = 1;
                 wheatLog(WHEAT_NOTICE, "app failed");
                 break;
@@ -196,7 +218,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     tryCleanRequest(client);
     gettimeofday(&end, NULL);
     time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
-    stat->stat_work_time += time_use;
+    StatRunTime += time_use;
 }
 
 static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
@@ -219,7 +241,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     }
     struct client *c = createClient(cfd, ip, cport, ptcol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
-    WorkerProcess->stat->stat_total_connection++;
+    StatTotalClient++;
 }
 
 void setupAsync()

@@ -47,8 +47,8 @@ def test_stat_accuracy(port):
     os.kill(async_server.exec_pid, signal.SIGUSR1)
     time.sleep(0.1)
     s = server_socket(port)
-    s.send(construct_command("stat", "worker"))
-    assert "Total Connection: 100" in s.recv(1000)
+    s.send(construct_command("stat", "master"))
+    assert "Total client: 100" in s.recv(1000)
 
 def test_static_file(port):
     time.sleep(0.1)

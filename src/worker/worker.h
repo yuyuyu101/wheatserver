@@ -18,7 +18,14 @@ struct workerProcess {
 
     char *worker_name;
     struct worker *worker;
-    struct workerStat *stat;
+
+    struct statItem *stat;
+    int master_stat_fd;
+    // In worker process side, last statistic packet sended time, use
+    // `refresh_time` to decide this cron should send statistic packet
+    // In master process side, `refresh_time` is used to indicate the last
+    // send time of this worker process
+    time_t refresh_time;
 };
 
 struct client;

@@ -102,9 +102,8 @@ struct globalServer {
     int ipfd;
     struct evcenter *master_center;
     int stat_fd;
-    struct workerStat *aggregate_workers_stat;
+    struct statItem *aggregate_stat;
     struct timeval cron_time;
-    struct masterStat *master_stat;
     pid_t pid;
     pid_t relaunch_pid;
     int pipe_readfd;
@@ -161,6 +160,7 @@ struct configuration {
 struct workerProcess;
 
 extern struct globalServer Server;
+extern struct statItem StatItems[];
 
 void initServer();
 

@@ -3,6 +3,15 @@
 static struct list *MaxSelectFd = NULL;
 static long MaxFd = 0;
 
+// Cache below stat field avoid too much query on StatItems
+// --------- Statistic Cache --------------
+static long long StatTotalClient = 0;
+static long long StatBufferSize = 0;
+static long long StatTotalRequest = 0;
+static long long StatFailedRequest = 0;
+static long long StatRunTime = 0;
+//-----------------------------------------
+
 int syncSendData(struct conn *c, struct slice *data)
 {
     if (!isClientValid(c->client)) {
@@ -83,7 +92,6 @@ void dispatchRequest(int fd, char *ip, int port)
     struct client *client = createClient(fd, ip, port, ptcol);
     if (client == NULL)
         return ;
-    struct workerStat *stat = WorkerProcess->stat;
     int ret, n;
     size_t nparsed;
     struct slice slice;
@@ -93,8 +101,10 @@ void dispatchRequest(int fd, char *ip, int port)
         if (!isClientValid(client)) {
             goto cleanup;
         }
-        if (msgGetSize(client->req_buf) > stat->stat_buffer_size)
-            stat->stat_buffer_size = msgGetSize(client->req_buf);
+        if (msgGetSize(client->req_buf) > StatBufferSize) {
+            getStatItemByName("Max buffer size")->val = msgGetSize(client->req_buf);
+            StatBufferSize = msgGetSize(client->req_buf);
+        }
 parser:
         conn = connGet(client);
 
@@ -104,19 +114,20 @@ parser:
         msgSetReaded(client->req_buf, nparsed);
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse http data failed");
-            stat->stat_failed_request++;
+            StatFailedRequest++;
             goto cleanup;
         } else if (ret == 1) {
             client->pending = conn;
         }
     } while(ret == 1);
+    client->pending = NULL;
     ret = client->protocol->spotAppAndCall(conn);
     if (ret != WHEAT_OK) {
-        stat->stat_failed_request++;
+        StatFailedRequest++;
         wheatLog(WHEAT_NOTICE, "app failed");
         goto cleanup;
     }
-    stat->stat_total_request++;
+    StatTotalRequest++;
     if (msgCanRead(client->req_buf)) {
         goto parser;
     }
@@ -130,17 +141,26 @@ void syncWorkerCron()
     struct timeval start, end;
     int refresh_seconds = Server.stat_refresh_seconds;
     long time_use;
-    time_t elapse, now = time(NULL);
-    struct workerStat *stat = WorkerProcess->stat;
+    time_t elapse = Server.cron_time.tv_sec;
     while (WorkerProcess->alive) {
         int fd, ret;
 
         char ip[46];
         int port;
         elapse = time(NULL);
-        if (elapse - now > refresh_seconds) {
-            sendStatPacket();
-            now = elapse;
+        if (elapse - WorkerProcess->refresh_time > refresh_seconds) {
+            getStatValByName("Total client") = StatTotalClient;
+            getStatValByName("Max buffer size")= StatBufferSize;
+            getStatValByName("Total request")= StatTotalRequest;
+            getStatValByName("Total failed request")= StatFailedRequest;
+            getStatValByName("Worker run time")= StatRunTime;
+            sendStatPacket(WorkerProcess);
+            StatTotalClient = 0;
+            StatBufferSize = 0;
+            StatTotalRequest = 0;
+            StatFailedRequest = 0;
+            StatRunTime = 0;
+            WorkerProcess->refresh_time = elapse;
         }
         fd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
         if (fd == NET_WRONG) {
@@ -155,8 +175,9 @@ void syncWorkerCron()
         dispatchRequest(fd, ip, port);
         gettimeofday(&end, NULL);
         time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
-        stat->stat_work_time += time_use;
-        stat->stat_total_connection++;
+        StatRunTime += time_use;
+        StatTotalClient++;
+        Server.cron_time = end;
 
         continue;
 accepterror:

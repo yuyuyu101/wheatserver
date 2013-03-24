@@ -157,7 +157,7 @@ static struct contenttype ContentTypes[] = {
 
 static int fillResHeaders(struct conn *c, off_t rep_len, time_t m_time)
 {
-    int ret;
+    int ret = 0;
     struct staticFileData *static_data = c->app_private_data;
     int i;
     char buf[50];

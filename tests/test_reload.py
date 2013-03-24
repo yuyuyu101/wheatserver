@@ -14,4 +14,4 @@ def test_reload():
     s = server_socket(10829)
 
     s.send(construct_command("stat", "master"))
-    assert "Total workers spawned: 8" in s.recv(1000)
+    assert "Total spawn workers: 8" in s.recv(1000)

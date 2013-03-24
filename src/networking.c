@@ -47,7 +47,7 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
 {
     struct masterClient *client = data;
     size_t bufpos = 0, totallen = wstrlen(client->response_buf);
-    ssize_t nwritten;
+    ssize_t nwritten = 0;
 
     while (bufpos < totallen) {
         struct slice slice;

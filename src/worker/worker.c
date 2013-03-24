@@ -26,7 +26,7 @@ void workerProcessCron()
     }
 
     gettimeofday(&Server.cron_time, NULL);
-    sendStatPacket();
+    sendStatPacket(WorkerProcess);
     WorkerProcess->worker->cron();
 }
 
@@ -53,8 +53,9 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->start_time = Server.cron_time;
     worker->worker_name = worker_name;
     worker->worker = spotWorker(worker_name);
+    worker->master_stat_fd = 0;
     ASSERT(worker->worker);
-    worker->stat = initWorkerStat(0);
+    worker->stat = StatItems;
     initWorkerSignals();
     ClientPool = createAndFillPool();
     worker->worker->setup();
