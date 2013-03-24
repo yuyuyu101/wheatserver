@@ -278,7 +278,7 @@ int sendClientFile(struct conn *c, int fd, off_t len)
     int ret = WHEAT_OK;
     while (!isClientNeedSend(c->client) && send != len) {
         ret = portable_sendfile(c->client->clifd, fd, send, len-send);
-        if (send == -1)
+        if (ret == -1)
             return WHEAT_WRONG;
         send += ret;
     }
