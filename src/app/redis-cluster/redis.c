@@ -3,6 +3,7 @@
 
 #define WHEAT_REDIS_UNIT_MIN     50
 #define WHEAT_REDIS_TIMEOUT      1000000
+#define WHEAT_REDIS_ERR          "-ERR Server keep this key all timeout\r\n"
 
 struct redisUnit {
     size_t needed;
@@ -97,7 +98,7 @@ static int sendOuterError(struct redisUnit *unit)
     struct slice error;
     char buf[255];
     int ret;
-    ret = snprintf(buf, 255, "-ERR Server keep this key all timeout\r\n");
+    ret = snprintf(buf, 255, WHEAT_REDIS_ERR);
     sliceTo(&error, buf, ret);
     ret = sendClientData(unit->outer_conn, &error);
     redisUnitFinal(unit);
