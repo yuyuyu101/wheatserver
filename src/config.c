@@ -69,6 +69,8 @@ struct configuration configTable[] = {
         NULL,                   LIST_FORMAT},
     {"backup-size",       2, unsignedIntValidator, {.val=1},
         NULL,                   INT_FORMAT},
+    {"redis-timeout",     2, unsignedIntValidator, {.val=1000},
+        NULL,                   INT_FORMAT},
 
     // WSGI Configuration
     {"app-project-path",  2, stringValidator,      {.ptr=NULL},
@@ -158,6 +160,9 @@ int unsignedIntValidator(struct configuration *conf, const char *key, const char
     for (i = 0; val[i] != '\0'; i++) {
         digit = val[i] - 48;
         if (digit < 0 || digit > 9)
+            return VALIDATE_WRONG;
+        // Avoid too long int value
+        if (i >= 10)
             return VALIDATE_WRONG;
     }
 
