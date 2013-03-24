@@ -78,7 +78,6 @@ void sendStatPacket(struct workerProcess *worker_process)
         // If this statItem's val is zero or this statItem only used be in
         // master, skip it
         if (stat->val != 0 && !(stat->flags & ONLY_MASTER)) {
-            wheatLog(WHEAT_DEBUG, "%d:%lld", stat->id, stat->val);
             ret = snprintf(buf, WHEAT_STAT_PACKET_MAX, "\n%d\n%lld",
                     stat->id, stat->val);
             if (ret < 0 || ret > WHEAT_STAT_PACKET_MAX) {

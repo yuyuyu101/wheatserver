@@ -617,11 +617,6 @@ int httpSendBody(struct conn *c, const char *data, size_t len)
     return 0;
 }
 
-//static void httpSendHeadersAction(struct conn *c)
-//{
-//    struct httpData *http_data = c->protocol_data;
-//}
-
 int httpSendHeaders(struct conn *c)
 {
     struct httpData *http_data = c->protocol_data;
@@ -654,6 +649,8 @@ int httpSendHeaders(struct conn *c)
             goto cleanup;
         headers = wstrCatLen(headers, buf, ret);
     }
+    if (!http_data->response_length && http_data->res_status == 200)
+        http_data->keep_live = 0;
     if (!is_connection) {
         const char *connection = connectionField(c);
         ret = snprintf(buf, sizeof(buf), "Connection: %s\r\n", connection);
@@ -662,8 +659,6 @@ int httpSendHeaders(struct conn *c)
         if ((headers = wstrCatLen(headers, buf, ret)) == NULL)
             goto cleanup;
     }
-    if (!http_data->response_length)
-        http_data->keep_live = 0;
 
     headers = wstrCatLen(headers, "\r\n", 2);
     struct slice slice;

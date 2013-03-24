@@ -192,7 +192,6 @@ static int fillResHeaders(struct conn *c, off_t rep_len, time_t m_time)
     return ret;
 }
 
-
 int staticFileCall(struct conn *c, void *arg)
 {
     wstr path = arg;
@@ -230,7 +229,7 @@ int staticFileCall(struct conn *c, void *arg)
         memcpy(buf, modified, wstrlen(modified));
         time_t client_m_time = fromHttpDate(buf);
         if (m_time <= client_m_time) {
-            fillResInfo(c, 304, "Not Changed");
+            fillResInfo(c, 304, "Not Modified");
             ret = fillResHeaders(c, 0, 0);
             if (ret == -1)
                 goto failed;

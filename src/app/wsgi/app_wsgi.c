@@ -90,8 +90,9 @@ void freeWsgiAppData(void *data)
     int i = 0;
 
     for (; i < narray(d->body_items); ++i) {
-        Py_DECREF(arrayIndex(d->body_items, i));
+        Py_XDECREF(arrayIndex(d->body_items, i));
     }
+    arrayDealloc(d->body_items);
     wfree(d);
 }
 
@@ -508,14 +509,14 @@ static PyObject *responseWrite(struct response *self, PyObject *args)
     struct wsgiData *wsgi_data = self->c->app_private_data;
     struct conn *c = self->c;
     const char *data;
-    int dataLen;
+    int datalen;
 
     if (httpGetResStatus(c) != 0) {
         wsgi_data->err = "write() before start_response()";
         return NULL;
     }
 
-    if (!PyArg_ParseTuple(args, "s#:write", &data, &dataLen))
+    if (!PyArg_ParseTuple(args, "s#:write", &data, &datalen))
         return NULL;
 
     /* Send headers if necessary */
@@ -524,7 +525,7 @@ static PyObject *responseWrite(struct response *self, PyObject *args)
             return NULL;
     }
 
-    if (httpSendBody(c, data, dataLen)) {
+    if (httpSendBody(c, data, datalen)) {
         return NULL;
     }
 
@@ -690,16 +691,16 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
         return -1;
 
     while ((item = PyIter_Next(iter))) {
-        size_t dataLen;
+        size_t datalen;
         const char *data;
 
-        dataLen = PyString_Size(item);
+        datalen = PyString_Size(item);
         if (PyErr_Occurred()) {
             Py_DECREF(item);
             break;
         }
 
-        if (dataLen) {
+        if (datalen) {
             if ((data = PyString_AsString(item)) == NULL) {
                 Py_DECREF(item);
                 break;
@@ -714,13 +715,14 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
                 }
             }
 
-            if (httpSendBody(c, data, dataLen)) {
+            if (httpSendBody(c, data, datalen)) {
+                wheatLog(WHEAT_DEBUG, "send data failed %d", datalen);
                 ret = -1;
                 Py_DECREF(item);
                 break;
             }
         }
-        arrayPush(wsgi_data->body_items, item);
+        Py_DECREF(item);
     }
     Py_DECREF(iter);
 
