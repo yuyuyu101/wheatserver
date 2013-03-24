@@ -17,6 +17,7 @@ struct redisServer {
     size_t nbackup;
     struct token *tokens;
     size_t ntoken;
+    long timeout;
     // append new redisUnit to the end of list and keep `message_center`
     // time ordered
     struct list *message_center;

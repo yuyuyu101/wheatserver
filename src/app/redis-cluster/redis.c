@@ -1,8 +1,6 @@
 #include "redis.h"
 #include "../../protocol/redis/proto_redis.h"
 
-#define WHEAT_REDIS_CONNS_SIZE   5
-#define WHEAT_MAX_REDIS_CONNS_SIZE   50
 #define WHEAT_REDIS_UNIT_MIN     50
 #define WHEAT_REDIS_TIMEOUT      1000000
 
@@ -21,6 +19,7 @@ struct redisUnit {
 
 static struct redisServer *RedisServer = NULL;
 static struct protocol *RedisProtocol = NULL;
+static void redisClientClosed(struct client *redis_client, void *data);
 
 static struct redisInstance *getInstance(struct redisServer *server, int idx)
 {
@@ -28,6 +27,19 @@ static struct redisInstance *getInstance(struct redisServer *server, int idx)
     if (instance->live && !instance->ntimeout)
         return instance;
     return NULL;
+}
+
+static int initInstance(struct redisInstance *instance)
+{
+    instance->redis_client = buildConn(instance->ip, instance->port, RedisProtocol);
+    if (!instance->redis_client)
+        return WHEAT_WRONG;
+    instance->redis_client->client_data = instance;
+    instance->live = 1;
+    instance->ntimeout = 0;
+    setClientFreeNotify(instance->redis_client, redisClientClosed, instance);
+    registerClientRead(instance->redis_client);
+    return WHEAT_OK;
 }
 
 static struct redisUnit *getRedisUnit()
@@ -75,8 +87,21 @@ static void redisClientClosed(struct client *redis_client, void *data)
         removeListNode(instance->wait_units, node);
     }
     freeListIterator(iter);
+    instance->ntimeout = 0;
     wheatLog(WHEAT_WARNING, "one redis server disconnect: %s:%d, lived: %d",
             instance->ip, instance->port, RedisServer->live_instances);
+}
+
+static int sendOuterError(struct redisUnit *unit)
+{
+    struct slice error;
+    char buf[255];
+    int ret;
+    ret = snprintf(buf, 255, "-ERR Server keep this key all timeout\r\n");
+    sliceTo(&error, buf, ret);
+    ret = sendClientData(unit->outer_conn, &error);
+    redisUnitFinal(unit);
+    return ret;
 }
 
 static int sendRedisData(struct conn *outer_conn,
@@ -93,7 +118,6 @@ static int sendRedisData(struct conn *outer_conn,
             return WHEAT_WRONG;
     }
     finishConn(send_conn);
-    registerClientRead(instance->redis_client);
     appendToListTail(instance->wait_units, unit);
     unit->sended_instances[unit->sended] = instance;
     unit->sended++;
@@ -163,7 +187,7 @@ int redisCall(struct conn *c, void *arg)
             unit = listNodeValue(node);
             registerConnFree(unit->outer_conn, (void (*)(void*))finishConn, c);
             unit->redis_conns[unit->pos++] = c;
-            if (unit->pos == unit->sended) {
+            if (unit->pos == unit->needed) {
                 sendOuterData(unit);
             }
         } else {
@@ -222,13 +246,8 @@ int redisAppInit(struct protocol *ptocol)
         instance->id = pos;
         instance->ip = wstrDup(frags[0]);
         instance->port = atoi(frags[1]);
-        instance->redis_client = buildConn(instance->ip, instance->port, RedisProtocol);
-        if (!instance->redis_client)
+        if (initInstance(instance) == WHEAT_WRONG)
             goto cleanup;
-        instance->redis_client->client_data = instance;
-        instance->live = 1;
-        instance->ntimeout = 0;
-        setClientFreeNotify(instance->redis_client, redisClientClosed, instance);
         instance->wait_units = createList();
         server->instance_size++;
         pos++;
@@ -246,6 +265,12 @@ int redisAppInit(struct protocol *ptocol)
     if (!conf)
         return WHEAT_WRONG;
     server->nbackup = conf->target.val;
+
+    conf = getConfiguration("redis-timeout");
+    if (!conf)
+        return WHEAT_WRONG;
+    // `redis-timeout` is millisecond, we want microsecond
+    server->timeout = conf->target.val * 1000;
 
     server->message_center = createList();
     RedisServer = server;
@@ -268,41 +293,53 @@ static void handleTimeout(struct redisUnit *unit)
 {
     struct redisServer *server = RedisServer;
     struct redisInstance *instance;
+    struct token *next_token;
+    int ret;
     if (isReadCommand(unit->outer_conn)) {
         // Read command means we only send request to *one* redis server.
         // Now we should choose next server which keep this key to retry
         // this unit request.
         instance = getInstance(RedisServer, unit->first_token->server_idx);
-        struct token *next_token;
+        wheatLog(WHEAT_NOTICE, "Instance %s:%d timeout response, try another",
+                instance->ip, instance->port);
         instance->ntimeout++;
         next_token = unit->first_token->next_server;
         while (unit->retry < server->nbackup - 1) {
+            unit->retry++;
             instance = getInstance(RedisServer, next_token->server_idx);
             unit->first_token = next_token;
             if (instance) {
                 // This node must be the oldest unit in `message_center`,
                 // so if retry send that this unit should be rotate to last
                 removeListNode(server->message_center, unit->node);
-                sendRedisData(unit->outer_conn, instance, unit);
-                break;
+                ret = sendRedisData(unit->outer_conn, instance, unit);
+                unit->node = appendToListTail(RedisServer->message_center, unit);
+                if (ret == WHEAT_OK)
+                    break;
             }
-            unit->retry++;
         }
         if (unit->retry >= server->nbackup - 1) {
-            redisUnitFinal(unit);
+            wheatLog(WHEAT_NOTICE, "Read command failed, retry %d instance",
+                    unit->retry);
+            sendOuterError(unit);
         }
     } else {
         // Write command will send request to all redis server and if have
         // timeout response we should judge whether send response to client
         size_t i;
         for (i = unit->pos; i < unit->sended; i++) {
-            unit->sended_instances[i]->ntimeout++;
+            instance = unit->sended_instances[i];
+            instance->ntimeout++;
+            wheatLog(WHEAT_NOTICE,
+                    "Instance %s:%d write timeout response, it may result in inconsistence",
+                    instance->ip, instance->port);
         }
         if (unit->pos > 0) {
             sendOuterData(unit);
         } else {
-            wheatLog(WHEAT_WARNING, "all instances keep this key timeout");
-            redisUnitFinal(unit);
+            wheatLog(WHEAT_NOTICE,
+                    "Write command failed, none instance response data");
+            sendOuterError(unit);
         }
     }
 }
@@ -319,12 +356,8 @@ void redisAppCron()
         for (i = 0; i < server->instance_size; i++) {
             instance = &server->instances[i];
             if (!instance->live) {
-                instance->redis_client = buildConn(instance->ip, instance->port, RedisProtocol);
-                if (!instance->redis_client)
+                if (initInstance(instance) == WHEAT_WRONG)
                     continue;
-                instance->live = 1;
-                instance->redis_client->client_data = instance;
-                server->live_instances++;
                 wheatLog(WHEAT_WARNING, "missed redis server connectd: %s:%d, lived: %d",
                         instance->ip, instance->port, RedisServer->live_instances);
             }
@@ -339,7 +372,7 @@ void redisAppCron()
             break;
         unit = listNodeValue(node);
         micro_seconds = unit->start.tv_sec * 1000000 + unit->start.tv_usec;
-        if (now_micro - micro_seconds > WHEAT_REDIS_TIMEOUT) {
+        if (now_micro - micro_seconds > server->timeout) {
             wheatLog(WHEAT_NOTICE, "wait redis response timeout");
             handleTimeout(unit);
         } else {
