@@ -79,7 +79,7 @@ void *initWsgiAppData(struct conn *c)
     data->environ = NULL;
     data->response = NULL;
     data->err = NULL;
-    data->body_items = arrayCreate(sizeof(void*), 4);
+    data->body_items = arrayCreate(sizeof(PyObject*), 4);
 
     return data;
 }
@@ -88,9 +88,11 @@ void freeWsgiAppData(void *data)
 {
     struct wsgiData *d = data;
     int i = 0;
+    PyObject *tmp;
 
     for (; i < narray(d->body_items); ++i) {
-        Py_XDECREF(arrayIndex(d->body_items, i));
+        tmp = arrayIndex(d->body_items, i);
+        Py_XDECREF(tmp);
     }
     arrayDealloc(d->body_items);
     wfree(d);
@@ -719,6 +721,8 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
                 break;
             }
         }
+        Py_INCREF(item);
+        arrayPush(wsgi_data->body_items, item);
         Py_DECREF(item);
     }
     Py_DECREF(iter);

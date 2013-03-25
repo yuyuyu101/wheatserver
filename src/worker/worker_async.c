@@ -41,6 +41,7 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
 
     clientSendPacketList(c);
     if (!isClientValid(c) || !isClientNeedSend(c)) {
+        wheatLog(WHEAT_DEBUG, "delete write event on sendReplyToClient");
         deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
         tryCleanRequest(c);
     }

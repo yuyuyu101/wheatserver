@@ -231,9 +231,6 @@ static int sendPacket(struct client *c, struct sendPacket *packet)
     struct fileWrapper file_wrapper;
     switch (packet->type) {
         case SLICE:
-            if (packet->type != SLICE)
-                ASSERT(0);
-
             data = &packet->target.slice;
             while (data->len != 0) {
                 nwritten = writeBulkTo(c->clifd, data);

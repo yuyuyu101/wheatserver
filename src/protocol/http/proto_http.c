@@ -649,7 +649,7 @@ int httpSendHeaders(struct conn *c)
             goto cleanup;
         headers = wstrCatLen(headers, buf, ret);
     }
-    if (!http_data->response_length && http_data->res_status == 200)
+    if (!http_data->response_length && http_data->res_status != 302)
         http_data->keep_live = 0;
     if (!is_connection) {
         const char *connection = connectionField(c);
