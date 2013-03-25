@@ -57,7 +57,7 @@ struct worker {
      * Caller will lose ownership of `data` in order to avoid big copy,
      * sendData will free `data`
      */
-    int (*sendData)(struct conn *, struct slice*);
+    int (*sendData)(struct conn *);
     int (*registerRead)(struct client *);
     void (*unregisterRead)(struct client *);
 };
@@ -90,17 +90,6 @@ struct conn {
     int ready_send;
     struct array *cleanup;
     struct conn *next;
-};
-
-enum packetType {
-    SLICE = 1,
-};
-
-struct sendPacket {
-    enum packetType type;
-    union {
-        struct slice slice;
-    } target;
 };
 
 struct client {
@@ -139,7 +128,7 @@ void appCron();
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void finishConn(struct conn *c);
-int clientSendPacketList(struct client *c);
+void clientSendPacketList(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);
 struct client *buildConn(char *ip, int port, struct protocol *p);
 int initAppData(struct conn *);
@@ -147,7 +136,6 @@ int registerClientRead(struct client *c);
 void unregisterClientRead(struct client *c);
 int sendClientData(struct conn *c, struct slice *s);
 struct conn *connGet(struct client *client);
-void appendSliceToSendQueue(struct conn *conn, struct slice *s);
 int isClientNeedSend(struct client *);
 void registerConnFree(struct conn*, void (*)(void*), void *data);
 

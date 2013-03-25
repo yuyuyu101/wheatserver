@@ -12,28 +12,23 @@ static long long StatFailedRequest = 0;
 static long long StatRunTime = 0;
 //-----------------------------------------
 
-int syncSendData(struct conn *c, struct slice *data)
+int syncSendData(struct conn *c)
 {
     if (!isClientValid(c->client)) {
         return -1;
     }
-    if (!data->len)
-        return 0;
-
-    appendSliceToSendQueue(c, data);
-    ssize_t sended = 0;
     struct client *client = c->client;
     while (isClientNeedSend(client)) {
-        sended += clientSendPacketList(client);
+        clientSendPacketList(client);
         refreshClient(client, Server.cron_time);
         if (!isClientValid(client)) {
             // This function is IO interface, we shouldn't clean client in order
             // to caller to deal with error.
-            return -1;
+            return WHEAT_WRONG;
         }
     }
 
-    return sended;
+    return WHEAT_OK;
 }
 
 static int syncRecvData(struct client *c)
@@ -58,8 +53,11 @@ static int syncRecvData(struct client *c)
         total += n;
         msgSetWritted(c->req_buf, n);
     } while (n == slice.len || n == 0);
-    if (msgGetSize(c->req_buf) > Server.max_buffer_size)
+    if (msgGetSize(c->req_buf) > Server.max_buffer_size) {
+        wheatLog(WHEAT_VERBOSE, "Client buffer size larger than limit %d>%d",
+                msgGetSize(c->req_buf), Server.max_buffer_size);
         setClientUnvalid(c);
+    }
     refreshClient(c, Server.cron_time);
 
     return (int)total;

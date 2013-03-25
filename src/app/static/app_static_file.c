@@ -241,14 +241,20 @@ int staticFileCall(struct conn *c, void *arg)
     }
     fillResInfo(c, 200, "OK");
     ret = fillResHeaders(c, len, m_time);
-    if (ret == -1)
+    if (ret == -1) {
+        wheatLog(WHEAT_WARNING, "fill Res Headers failes: %s", strerror(errno));
         goto failed;
+    }
     ret = httpSendHeaders(c);
-    if (ret == -1)
+    if (ret == -1) {
+        wheatLog(WHEAT_WARNING, "static file send headers failed: %s", strerror(errno));
         goto failed;
+    }
     ret = sendClientFile(c, file_d, len);
-    if (ret == WHEAT_WRONG)
+    if (ret == WHEAT_WRONG) {
+        wheatLog(WHEAT_WARNING, "send static file failed: %s", strerror(errno));
         goto failed;
+    }
     if (file_d > 0) close(file_d);
     return WHEAT_OK;
 
@@ -259,7 +265,6 @@ failed404:
     return WHEAT_OK;
 
 failed:
-    wheatLog(WHEAT_WARNING, "send static file failed: %s", strerror(errno));
     ok = 0;
 
     if (file_d > 0) close(file_d);

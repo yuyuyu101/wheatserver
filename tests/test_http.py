@@ -37,8 +37,8 @@ def test_post_file():
     else:
         assert "" == a
     s.send(POST_DATA[302:])
-    a = s.recv(100)
-    assert "200" in a
+    a = s.recv(1000)
+    assert "200" in a and "1234" in a
 
 def test_document_root_and_static_file_dir():
     async = WheatServer("", "--worker-type %s" % "AsyncWorker",

@@ -69,29 +69,25 @@ static void clientsCron()
     }
 }
 
-int asyncSendData(struct conn *c, struct slice *data)
+int asyncSendData(struct conn *c)
 {
     if (!isClientValid(c->client))
-        return -1;
-    if (!data->len)
-        return 0;
+        return WHEAT_WRONG;
 
-    ssize_t sended;
     struct client *client = c->client;
-    appendSliceToSendQueue(c, data);
-    sended = clientSendPacketList(client);
+    clientSendPacketList(client);
     refreshClient(client, Server.cron_time);
     if (!isClientValid(client)) {
         // This function is IO interface, we shouldn't clean client in order
         // to caller to deal with error.
-        return -1;
+        return WHEAT_WRONG;
     }
     if (isClientNeedSend(client)) {
-        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData %d ", sended);
+        wheatLog(WHEAT_DEBUG, "create write event on asyncSendData");
         createEvent(WorkerCenter, client->clifd, EVENT_WRITABLE, sendReplyToClient, client);
     }
 
-    return sended;
+    return WHEAT_OK;
 }
 
 static int asyncRecvData(struct client *c)
@@ -118,8 +114,11 @@ static int asyncRecvData(struct client *c)
         total += n;
         msgSetWritted(c->req_buf, n);
     } while (n == slice.len);
-    if (msgGetSize(c->req_buf) > Server.max_buffer_size)
+    if (msgGetSize(c->req_buf) > Server.max_buffer_size) {
+        wheatLog(WHEAT_VERBOSE, "Client buffer size larger than limit %d>%d",
+                msgGetSize(c->req_buf), Server.max_buffer_size);
         setClientUnvalid(c);
+    }
     refreshClient(c, Server.cron_time);
     return (int)total;
 }

@@ -3,14 +3,14 @@
 /* Sync worker Area */
 void setupSync();
 void syncWorkerCron();
-int syncSendData(struct conn *c, struct slice *data); // pass `data` ownership to
+int syncSendData(struct conn *c); // pass `data` ownership to
 int syncRegisterRead(struct client *c);
 void syncUnregisterRead(struct client *c);
 
 /* Async worker Area */
 void setupAsync();
 void asyncWorkerCron();
-int asyncSendData(struct conn *c, struct slice *data); // pass `data` ownership to
+int asyncSendData(struct conn *c); // pass `data` ownership to
 int asyncRegisterRead(struct client *c);
 void asyncUnregisterRead(struct client *c);
 

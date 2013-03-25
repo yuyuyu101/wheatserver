@@ -12,7 +12,7 @@ ssize_t portable_sendfile(int out_fd, int in_fd, off_t off, off_t len) {
         else
             return 0;
     }
-    return ret;
+    return len;
 }
 #endif
 #ifdef __linux

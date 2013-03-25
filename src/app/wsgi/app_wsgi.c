@@ -671,8 +671,7 @@ static int wsgiSendFileWrapper(struct conn *c, FileWrapper *wrapper)
 /* Send the application's response */
 int wsgiSendResponse(struct conn *c, PyObject *result)
 {
-    PyObject *iter;
-    PyObject *item;
+    PyObject *iter, *item;
     int ret = 0;
     struct wsgiData *wsgi_data = c->app_private_data;
 
@@ -684,6 +683,13 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
         if (!ret)
             return 0;
         /* Fallthrough */
+    }
+
+    /* Send headers if necessary */
+    if (!ishttpHeaderSended(c)) {
+        if (httpSendHeaders(c)) {
+            return -1;
+        }
     }
 
     iter = PyObject_GetIter(result);
@@ -706,15 +712,6 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
                 break;
             }
 
-            /* Send headers if necessary */
-            if (!ishttpHeaderSended(c)) {
-                if (httpSendHeaders(c)) {
-                    ret = -1;
-                    Py_DECREF(item);
-                    break;
-                }
-            }
-
             if (httpSendBody(c, data, datalen)) {
                 wheatLog(WHEAT_DEBUG, "send data failed %d", datalen);
                 ret = -1;
@@ -729,10 +726,5 @@ int wsgiSendResponse(struct conn *c, PyObject *result)
     if (PyErr_Occurred())
         return -1;
 
-    /* Send headers if they haven't been sent at this point */
-    if (!ishttpHeaderSended(c)) {
-        if (httpSendHeaders(c))
-            return -1;
-    }
     return ret;
 }

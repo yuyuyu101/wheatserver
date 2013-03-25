@@ -4,6 +4,25 @@ struct workerProcess *WorkerProcess = NULL;
 
 /* ========== Worker Area ========== */
 
+enum packetType {
+    SLICE = 1,
+    FILE_DESCRIPTION = 2,
+};
+
+struct fileWrapper {
+    int fd;
+    off_t off;
+    size_t len;
+};
+
+struct sendPacket {
+    enum packetType type;
+    union {
+        struct slice slice;
+        struct fileWrapper file;
+    } target;
+};
+
 static struct list *ClientPool = NULL;
 
 struct worker *spotWorker(char *worker_name)
@@ -201,21 +220,17 @@ int isClientNeedSend(struct client *c)
     return 0;
 }
 
-int clientSendPacketList(struct client *c)
+// Return value:
+// 0: send packet completely
+// 1: send packet incompletely
+// -1: send packet error client need closed
+static int sendPacket(struct client *c, struct sendPacket *packet)
 {
-    struct sendPacket *packet = NULL;
-    struct conn *send_conn = NULL;
-    size_t allsend = 0;
-    struct listNode *node = NULL, *node2 = NULL;
     struct slice *data;
-    while (isClientNeedSend(c)) {
-        ssize_t nwritten = 0;
-        node = listFirst(c->conns);
-        send_conn = listNodeValue(node);
-
-        while (listLength(send_conn->send_queue)) {
-            node2 = listFirst(send_conn->send_queue);
-            packet = listNodeValue(node2);
+    ssize_t nwritten = 0;
+    struct fileWrapper file_wrapper;
+    switch (packet->type) {
+        case SLICE:
             if (packet->type != SLICE)
                 ASSERT(0);
 
@@ -226,23 +241,59 @@ int clientSendPacketList(struct client *c)
                     break;
                 data->len -= nwritten;
                 data->data += nwritten;
-                allsend += nwritten;
             }
 
             if (nwritten == -1) {
-                setClientUnvalid(c);
-                break;
+                return -1;
             }
 
             if (nwritten == 0) {
-                break;
+                return 1;
             }
+            break;
+        case FILE_DESCRIPTION:
+            file_wrapper = packet->target.file;
+            while (file_wrapper.len != 0) {
+                nwritten = portable_sendfile(c->clifd, file_wrapper.fd,
+                        file_wrapper.off, file_wrapper.len);
+                if (nwritten == -1)
+                    return -1;
+                else if (nwritten == 0) {
+                    return 1;
+                }
+                file_wrapper.off += nwritten;
+                file_wrapper.len -= nwritten;
+            }
+    }
+    return 0;
+}
+
+void clientSendPacketList(struct client *c)
+{
+    struct sendPacket *packet = NULL;
+    struct conn *send_conn = NULL;
+    struct listNode *node = NULL, *node2 = NULL;
+    ssize_t ret = 0;
+    while (isClientNeedSend(c)) {
+        node = listFirst(c->conns);
+        send_conn = listNodeValue(node);
+
+        while (listLength(send_conn->send_queue)) {
+            node2 = listFirst(send_conn->send_queue);
+            packet = listNodeValue(node2);
+            ret = sendPacket(c, packet);
+            if (ret == -1) {
+                setClientUnvalid(c);
+                return ;
+            } else if (ret == 1) {
+                return ;
+            }
+            ASSERT(ret == 0);
             removeListNode(send_conn->send_queue, node2);
         }
         if (send_conn->ready_send)
             removeListNode(c->conns, node);
     }
-    return (int)allsend;
 }
 
 int sendFileByCopy(struct conn *c, int fd, off_t len, off_t offset)
@@ -272,20 +323,17 @@ int sendFileByCopy(struct conn *c, int fd, off_t len, off_t offset)
     return WHEAT_OK;
 }
 
-int sendClientFile(struct conn *c, int fd, off_t len)
+void appendFileToSendQueue(struct conn *conn, int fd, off_t off, size_t len)
 {
-    int send = 0;
-    int ret = WHEAT_OK;
-    while (!isClientNeedSend(c->client) && send != len) {
-        ret = portable_sendfile(c->client->clifd, fd, send, len-send);
-        if (ret == -1)
-            return WHEAT_WRONG;
-        send += ret;
-    }
-    if (send != len) {
-        ret = sendFileByCopy(c, fd, len, send);
-    }
-    return ret;
+    struct sendPacket *packet = wmalloc(sizeof(*packet));
+    if (!packet)
+        setClientUnvalid(conn->client);
+    packet->type = FILE_DESCRIPTION;
+    packet->target.file.fd = fd;
+    packet->target.file.off = off;
+    packet->target.file.len = len;
+
+    appendToListTail(conn->send_queue, packet);
 }
 
 struct client *buildConn(char *ip, int port, struct protocol *p)
@@ -294,7 +342,7 @@ struct client *buildConn(char *ip, int port, struct protocol *p)
     int fd = wheatTcpConnect(Server.neterr, ip, port);
     if (fd == NET_WRONG) {
         wheatLog(WHEAT_WARNING, "Unable to connect to redis %s:%d: %s %s",
-            ip, port, strerror(errno), Server.neterr);
+                ip, port, strerror(errno), Server.neterr);
         return NULL;
     }
     if (wheatNonBlock(Server.neterr, fd) == NET_WRONG) {
@@ -310,9 +358,19 @@ struct client *buildConn(char *ip, int port, struct protocol *p)
     return c;
 }
 
+int sendClientFile(struct conn *c, int fd, off_t len)
+{
+    int send = 0;
+    appendFileToSendQueue(c, fd, send, len-send);
+    return WorkerProcess->worker->sendData(c);
+}
+
 int sendClientData(struct conn *c, struct slice *s)
 {
-    return WorkerProcess->worker->sendData(c, s);
+    if (!s->len)
+        return WHEAT_OK;
+    appendSliceToSendQueue(c, s);
+    return WorkerProcess->worker->sendData(c);
 }
 
 int registerClientRead(struct client *c)

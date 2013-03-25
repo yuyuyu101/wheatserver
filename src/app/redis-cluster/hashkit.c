@@ -1,10 +1,11 @@
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 
 #include "redis.h"
 
 #define WHEAT_TOKEN_PER_SERVER   40
-#define WHEAT_KEY_RANGE          ((1<<32)-1)
+#define WHEAT_KEY_RANGE          UINT32_MAX
 #define KETAMA_MAX_HOSTLEN       86
 
 extern void md5_signature(const unsigned char *key, unsigned int length, unsigned char *result);
@@ -28,7 +29,7 @@ int hashUpdate(struct redisServer *server)
     size_t ntoken = server->ntoken;
     size_t need_ntoken = server->instance_size*WHEAT_TOKEN_PER_SERVER;
     int i, j, swap, prev_idx;
-    size_t range_per_token;
+    uint64_t range_per_token;
     if (ntoken < need_ntoken) {
         tokens = wrealloc(tokens, sizeof(struct token)*need_ntoken);
         if (!tokens)
