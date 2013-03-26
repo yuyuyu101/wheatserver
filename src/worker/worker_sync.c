@@ -9,11 +9,11 @@ static long MaxFd = 0;
 
 // Cache below stat field avoid too much query on StatItems
 // --------- Statistic Cache --------------
-static long long StatTotalClient = 0;
-static long long StatBufferSize = 0;
-static long long StatTotalRequest = 0;
-static long long StatFailedRequest = 0;
-static long long StatRunTime = 0;
+static struct statItem *StatTotalClient = &StatItems[3];
+static struct statItem *StatBufferSize = &StatItems[7];
+static struct statItem *StatTotalRequest = &StatItems[4];
+static struct statItem *StatFailedRequest = &StatItems[6];
+static struct statItem *StatRunTime = &StatItems[8];
 //-----------------------------------------
 
 int syncSendData(struct conn *c)
@@ -103,9 +103,9 @@ void dispatchRequest(int fd, char *ip, int port)
         if (!isClientValid(client)) {
             goto cleanup;
         }
-        if (msgGetSize(client->req_buf) > StatBufferSize) {
+        if (msgGetSize(client->req_buf) > getStatVal(StatBufferSize)) {
             getStatItemByName("Max buffer size")->val = msgGetSize(client->req_buf);
-            StatBufferSize = msgGetSize(client->req_buf);
+            getStatVal(StatBufferSize) = msgGetSize(client->req_buf);
         }
 parser:
         conn = connGet(client);
@@ -117,7 +117,7 @@ parser:
         if (ret == WHEAT_WRONG) {
             setClientUnvalid(client);
             wheatLog(WHEAT_NOTICE, "parse data failed");
-            StatFailedRequest++;
+            getStatVal(StatFailedRequest)++;
             goto cleanup;
         } else if (ret == 1) {
             client->pending = conn;
@@ -126,11 +126,11 @@ parser:
     client->pending = NULL;
     ret = client->protocol->spotAppAndCall(conn);
     if (ret != WHEAT_OK) {
-        StatFailedRequest++;
+        getStatVal(StatFailedRequest)++;
         wheatLog(WHEAT_NOTICE, "app failed");
         goto cleanup;
     }
-    StatTotalRequest++;
+    getStatVal(StatTotalRequest)++;
     if (msgCanRead(client->req_buf)) {
         goto parser;
     }
@@ -152,17 +152,7 @@ void syncWorkerCron()
         int port;
         elapse = time(NULL);
         if (elapse - WorkerProcess->refresh_time > refresh_seconds) {
-            getStatValByName("Total client") = StatTotalClient;
-            getStatValByName("Max buffer size")= StatBufferSize;
-            getStatValByName("Total request")= StatTotalRequest;
-            getStatValByName("Total failed request")= StatFailedRequest;
-            getStatValByName("Worker run time")= StatRunTime;
             sendStatPacket(WorkerProcess);
-            StatTotalClient = 0;
-            StatBufferSize = 0;
-            StatTotalRequest = 0;
-            StatFailedRequest = 0;
-            StatRunTime = 0;
             WorkerProcess->refresh_time = elapse;
         }
         fd = wheatTcpAccept(Server.neterr, Server.ipfd, ip, &port);
@@ -178,8 +168,8 @@ void syncWorkerCron()
         dispatchRequest(fd, ip, port);
         gettimeofday(&end, NULL);
         time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
-        StatRunTime += time_use;
-        StatTotalClient++;
+        getStatVal(StatRunTime) += time_use;
+        getStatVal(StatTotalClient)++;
         Server.cron_time = end;
 
         continue;

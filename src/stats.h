@@ -10,6 +10,7 @@
 #define ONLY_MASTER                          (1)
 
 #define getStatValByName(name)               (getStatItemByName(name)->val)
+#define getStatVal(stat)                     ((stat)->val)
 
 enum statType {
     SUM_STAT,

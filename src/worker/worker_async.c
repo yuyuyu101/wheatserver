@@ -11,11 +11,11 @@ static struct list *Clients = NULL;
 
 // Cache below stat field avoid too much query on StatItems
 // --------- Statistic Cache --------------
-static long long StatTotalClient = 0;
-static long long StatBufferSize = 0;
-static long long StatTotalRequest = 0;
-static long long StatFailedRequest = 0;
-static long long StatRunTime = 0;
+static struct statItem *StatTotalClient = &StatItems[3];
+static struct statItem *StatBufferSize = &StatItems[7];
+static struct statItem *StatTotalRequest = &StatItems[4];
+static struct statItem *StatFailedRequest = &StatItems[6];
+static struct statItem *StatRunTime = &StatItems[8];
 //-----------------------------------------
 
 
@@ -149,17 +149,7 @@ void asyncWorkerCron()
         workerProcessCron();
         elapse = Server.cron_time.tv_sec;
         if (elapse - WorkerProcess->refresh_time > refresh_seconds) {
-            getStatValByName("Total client") = StatTotalClient;
-            getStatValByName("Max buffer size")= StatBufferSize;
-            getStatValByName("Total request")= StatTotalRequest;
-            getStatValByName("Total failed request")= StatFailedRequest;
-            getStatValByName("Worker run time")= StatRunTime;
             sendStatPacket(WorkerProcess);
-            StatTotalClient = 0;
-            StatBufferSize = 0;
-            StatTotalRequest = 0;
-            StatFailedRequest = 0;
-            StatRunTime = 0;
             WorkerProcess->refresh_time = elapse;
         }
     }
@@ -185,8 +175,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
         cleanRequest(client);
         return ;
     }
-    if (msgGetSize(client->req_buf) > StatBufferSize) {
-        StatBufferSize = msgGetSize(client->req_buf);
+    if (msgGetSize(client->req_buf) > getStatVal(StatBufferSize)) {
+        getStatVal(StatBufferSize) = msgGetSize(client->req_buf);
     }
     while (msgCanRead(client->req_buf)) {
         conn = connGet(client);
@@ -200,11 +190,11 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             setClientUnvalid(client);
             break;
         } else if (ret == WHEAT_OK) {
-            StatTotalRequest++;
+            getStatVal(StatTotalRequest)++;
             ret = client->protocol->spotAppAndCall(conn);
             client->pending = NULL;
             if (ret != WHEAT_OK) {
-                StatFailedRequest++;
+                getStatVal(StatFailedRequest)++;
                 client->should_close = 1;
                 wheatLog(WHEAT_NOTICE, "app failed");
                 break;
@@ -217,7 +207,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     tryCleanRequest(client);
     gettimeofday(&end, NULL);
     time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
-    StatRunTime += time_use;
+    getStatVal(StatRunTime) += time_use;
 }
 
 static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
@@ -240,7 +230,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     }
     struct client *c = createClient(cfd, ip, cport, ptcol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
-    StatTotalClient++;
+    getStatVal(StatTotalClient)++;
 }
 
 void setupAsync()
