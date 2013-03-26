@@ -143,15 +143,10 @@ void asyncWorkerCron()
 {
     int refresh_seconds = Server.stat_refresh_seconds;
     time_t elapse = Server.cron_time.tv_sec;
-    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
     while (WorkerProcess->alive) {
         processEvents(WorkerCenter, WHEATSERVER_CRON);
-        if (WorkerProcess->ppid != getppid()) {
-            wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
-            break;
-        }
         clientsCron();
-        appCron();
+        workerProcessCron();
         elapse = Server.cron_time.tv_sec;
         if (elapse - WorkerProcess->refresh_time > refresh_seconds) {
             getStatValByName("Total client") = StatTotalClient;
@@ -167,7 +162,6 @@ void asyncWorkerCron()
             StatRunTime = 0;
             WorkerProcess->refresh_time = elapse;
         }
-        gettimeofday(&Server.cron_time, NULL);
     }
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
     while (elapse - WorkerProcess->refresh_time > Server.graceful_timeout) {
@@ -203,6 +197,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
 
         if (ret == WHEAT_WRONG) {
             wheatLog(WHEAT_NOTICE, "parse data failed");
+            setClientUnvalid(client);
             break;
         } else if (ret == WHEAT_OK) {
             StatTotalRequest++;

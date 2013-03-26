@@ -17,6 +17,7 @@ struct statItem StatItems[] = {
     {6, "Total failed request", SUM_STAT, RAW, 0, 0},
     {7, "Max buffer size", MAX_STAT, RAW, 0, 0},
     {8, "Worker run time", SUM_STAT, MICORSECONDS_TIME, 0, 0},
+    {9, "Max worker cron interval", ASSIGN_STAT, RAW, 0, 0},
 };
 
 #define STAT_ITEMS_COUNT (sizeof(StatItems)/sizeof(struct statItem))

@@ -14,7 +14,7 @@
 struct listNode {
     struct listNode *next;
     struct listNode *prev;
-    intptr_t value;
+    void *value;
 };
 
 struct list {

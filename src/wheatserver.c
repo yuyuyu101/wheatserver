@@ -163,7 +163,7 @@ void spawnWorker(char *worker_name)
         initWorkerProcess(new_worker, worker_name);
         wheatLog(WHEAT_NOTICE, "new worker %s spawned %d",
                 WorkerProcess->worker->name, getpid());
-        workerProcessCron();
+        WorkerProcess->worker->cron();
         wheatLog(WHEAT_NOTICE, "worker %s exit pid:%d",
                 WorkerProcess->worker->name, getpid());
         exit(0);

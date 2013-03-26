@@ -7,7 +7,7 @@
 
 struct slice *redisBodyNext(struct conn *c);
 void redisBodyStart(struct conn*c);
-int getRedisKey(struct conn *c, struct slice *out);
+void getRedisKey(struct conn *c, struct slice *out);
 int isReadCommand(struct conn*);
 
 

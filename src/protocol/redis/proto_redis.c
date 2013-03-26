@@ -667,7 +667,7 @@ int parseRedis(struct conn *c, struct slice *slice, size_t *out)
 
     if (nparsed == -1) {
         wstr info = wstrNewLen(slice->data, (int)slice->len);
-        wheatLog(WHEAT_VERBOSE, "%d parseRedis() failedd: %s", isOuterClient(c->client),
+        wheatLog(WHEAT_VERBOSE, "%d parseRedis() failed: %s", isOuterClient(c->client),
                 info);
         wstrFree(info);
         return WHEAT_WRONG;
@@ -681,13 +681,10 @@ int parseRedis(struct conn *c, struct slice *slice, size_t *out)
     return 1;
 }
 
-int getRedisKey(struct conn *c, struct slice *out)
+void getRedisKey(struct conn *c, struct slice *out)
 {
     struct redisProcData *redis_data = c->protocol_data;
-    if (redis_data->args < 2)
-        return WHEAT_WRONG;
     sliceTo(out, (uint8_t *)redis_data->key, wstrlen(redis_data->key));
-    return WHEAT_OK;
 }
 
 void *initRedisData()

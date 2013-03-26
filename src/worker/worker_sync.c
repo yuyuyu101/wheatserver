@@ -115,7 +115,8 @@ parser:
         ret = ptcol->parser(conn, &slice, &nparsed);
         msgSetReaded(client->req_buf, nparsed);
         if (ret == WHEAT_WRONG) {
-            wheatLog(WHEAT_NOTICE, "parse http data failed");
+            setClientUnvalid(client);
+            wheatLog(WHEAT_NOTICE, "parse data failed");
             StatFailedRequest++;
             goto cleanup;
         } else if (ret == 1) {
@@ -185,10 +186,6 @@ void syncWorkerCron()
 accepterror:
         if (errno != EAGAIN)
             wheatLog(WHEAT_NOTICE, "workerCron: %s", Server.neterr);
-        if (WorkerProcess->ppid != getppid()) {
-            wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
-            return ;
-        }
         struct timeval tvp;
         fd_set rset;
         tvp.tv_sec = WHEATSERVER_CRON;
@@ -201,7 +198,7 @@ accepterror:
             FD_SET(fd, &rset);
         }
         freeListIterator(iter);
-        appCron();
+        workerProcessCron();
 
         ret = select(Server.ipfd+1, &rset, NULL, NULL, &tvp);
         if (ret >= 0)

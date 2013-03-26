@@ -46,9 +46,9 @@ struct listNode *appendToListTail(struct list *l, void *ptr)
     if (new_node == NULL)
         return NULL;
     if (l->dup)
-        new_node->value = (intptr_t)l->dup(ptr);
+        new_node->value = (void *)l->dup(ptr);
     else
-        new_node->value = (intptr_t)ptr;
+        new_node->value = (void *)ptr;
     new_node->prev = l->last;
     new_node->next = NULL;
 
@@ -67,9 +67,9 @@ struct listNode *insertToListHead(struct list *l, void *ptr)
     if (new_node == NULL)
         return NULL;
     if (l->dup)
-        new_node->value = (intptr_t)l->dup(ptr);
+        new_node->value = (void *)l->dup(ptr);
     else
-        new_node->value = (intptr_t)ptr;
+        new_node->value = (void *)ptr;
     new_node->prev = NULL;
     new_node->next = l->first;
 

@@ -6,7 +6,7 @@
 
 struct workerProcess *WorkerProcess = NULL;
 
-/* ========== Worker Area ========== */
+#define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
 
 enum packetType {
     SLICE = 1,
@@ -42,15 +42,29 @@ struct worker *spotWorker(char *worker_name)
 
 void workerProcessCron()
 {
-    ASSERT(WorkerProcess);
-    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-        halt(1);
+    static long long max_cron_interval = 0;
+    struct timeval nowval;
+    struct app *app = &AppTable[0];
+    long long interval;
+    while (app->proto_belong) {
+        if (app->is_init && app->appCron) {
+            app->appCron();
+        }
+        app++;
+    }
+    if (WorkerProcess->ppid != getppid()) {
+        wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
+        WorkerProcess->alive = 0;
     }
 
-    gettimeofday(&Server.cron_time, NULL);
-    sendStatPacket(WorkerProcess);
-    WorkerProcess->worker->cron();
+    // Get the max worker cron interval for statistic info
+    gettimeofday(&nowval, NULL);
+    interval = getMicroseconds(nowval) - getMicroseconds(Server.cron_time);
+    if (interval > max_cron_interval) {
+        max_cron_interval = interval;
+        getStatValByName("Max worker cron interval") = interval;
+    }
+    Server.cron_time = nowval;
 }
 
 static struct list *createAndFillPool()
@@ -81,7 +95,15 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->stat = StatItems;
     initWorkerSignals();
     ClientPool = createAndFillPool();
+    // It may nonblock after fork???
+    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+        halt(1);
+    }
+    gettimeofday(&Server.cron_time, NULL);
     worker->worker->setup();
+    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+    sendStatPacket(WorkerProcess);
 }
 
 void freeWorkerProcess(void *w)
@@ -382,15 +404,4 @@ int registerClientRead(struct client *c)
 void unregisterClientRead(struct client *c)
 {
     WorkerProcess->worker->unregisterRead(c);
-}
-
-void appCron()
-{
-    struct app *app = &AppTable[0];
-    while (app->proto_belong) {
-        if (app->is_init && app->appCron) {
-            app->appCron();
-        }
-        app++;
-    }
 }

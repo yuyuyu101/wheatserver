@@ -127,7 +127,6 @@ extern struct app AppTable[];
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);
 void workerProcessCron();
-void appCron();
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
@@ -167,10 +166,9 @@ void registerConnFree(struct conn*, void (*)(void*), void *data);
  * worker's duty:
  * 1. provide with send and receive api and refresh client's last_io field
  * 2. if parent changed, worker must detect and exit
- * 3. if alive == 0, worker must exit
- * 4. send worker status every refresh time
- * 5. guarantee closing client in Server.worker_timeout
- * 6. support pipeline processing must reset client use readyClient()
+ * 3. send worker status every refresh time
+ * 4. guarantee closing client in Server.worker_timeout
+ * 5. support pipeline processing
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();
