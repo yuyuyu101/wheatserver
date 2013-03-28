@@ -66,8 +66,7 @@ void wheatLog(int level, const char *fmt, ...)
 {
     va_list ap;
     char msg[WHEATSERVER_MAX_LOG_LEN];
-    char old_msg[WHEATSERVER_MAX_LOG_LEN];
-    int ret, i, j;
+    int ret;
 
     if ((level&0xff) < Server.verbose) return;
 
@@ -75,21 +74,5 @@ void wheatLog(int level, const char *fmt, ...)
     ret = vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    if (ret >= 0 && ret < WHEATSERVER_MAX_LOG_LEN) {
-        for (i = 0, j = 0; i < ret; ++i) {
-            if (msg[i] == '\r') {
-                old_msg[j++] = '\\';
-                old_msg[j++] = 'r';
-            } else if (msg[i] == '\n') {
-                old_msg[j++] = '\\';
-                old_msg[j++] = 'n';
-            } else {
-                old_msg[j++] = msg[i];
-            }
-        }
-        old_msg[j] = '\0';
-        wheatLogRaw(level, old_msg);
-        return ;
-    }
     wheatLogRaw(level, msg);
 }
