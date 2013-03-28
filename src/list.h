@@ -44,11 +44,13 @@ struct listIterator {
 
 struct list *createList();
 void freeList(struct list *);
-void listClean(struct list *l);
+void listClear(struct list *l);
 struct listNode *appendToListTail(struct list *, void *ptr);
 struct listNode *insertToListHead(struct list *, void *ptr);
 void removeListNode(struct list *l, struct listNode *node);
 struct listNode *searchListKey(struct list *l, void *key);
+void listEach(struct list *l, void(*func)(void *));
+void listEach2(struct list *l, void(*func)(void *, void*), void *data);
 struct listIterator *listGetIterator(struct list *list, int direction);
 void listRotate(struct list *l);
 struct listNode *listNext(struct listIterator *iter);

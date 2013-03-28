@@ -19,7 +19,7 @@ struct list *createList()
     return l;
 }
 
-void listClean(struct list *l)
+void listClear(struct list *l)
 {
     struct listNode *current, *next;
     unsigned long len = l->len;
@@ -32,11 +32,13 @@ void listClean(struct list *l)
         wfree(current);
         current = next;
     }
+    l->len = 0;
+    l->first = l->last = NULL;
 }
 
 void freeList(struct list *l)
 {
-    listClean(l);
+    listClear(l);
     wfree(l);
 }
 
@@ -133,6 +135,29 @@ struct listNode *searchListKey(struct list *l, void *key)
     }
     freeListIterator(iter);
     return NULL;
+}
+
+void listEach(struct list *l, void(*func)(void *))
+{
+    struct listNode *curr;
+
+    curr = l->first;
+    while (curr != NULL) {
+        func(listNodeValue(curr));
+        curr = curr->next;
+    }
+}
+
+void listEach2(struct list *l, void(*func)(void *, void*), void *data)
+{
+    struct listNode *curr;
+
+    curr = l->first;
+    while (curr != NULL) {
+        func(listNodeValue(curr), data);
+        curr = curr->next;
+    }
+
 }
 
 struct listIterator *listGetIterator(struct list *list, int direction)
