@@ -53,8 +53,8 @@ void wheatLogRaw(int level, const char *msg)
         struct timeval tv;
 
         gettimeofday(&tv,NULL);
-        off = strftime(buf,sizeof(buf),"%d %b %H:%M:%S.",localtime(&tv.tv_sec));
-        snprintf(buf+off,sizeof(buf)-off,"%03d",(int)tv.tv_usec/1000);
+        off = strftime(buf, sizeof(buf), "%d %b %H:%M:%S.", localtime(&tv.tv_sec));
+        snprintf(buf+off, sizeof(buf)-off, "%03d", (int)tv.tv_usec/1000);
         fprintf(fp,"[%d] %s %c %s\n", (int)getpid(), buf, c[level], msg);
     }
     fflush(fp);
@@ -66,12 +66,30 @@ void wheatLog(int level, const char *fmt, ...)
 {
     va_list ap;
     char msg[WHEATSERVER_MAX_LOG_LEN];
+    char old_msg[WHEATSERVER_MAX_LOG_LEN];
+    int ret, i, j;
 
     if ((level&0xff) < Server.verbose) return;
 
     va_start(ap, fmt);
-    vsnprintf(msg, sizeof(msg), fmt, ap);
+    ret = vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    wheatLogRaw(level,msg);
+    if (ret >= 0 && ret < WHEATSERVER_MAX_LOG_LEN) {
+        for (i = 0, j = 0; i < ret; ++i) {
+            if (msg[i] == '\r') {
+                old_msg[j++] = '\\';
+                old_msg[j++] = 'r';
+            } else if (msg[i] == '\n') {
+                old_msg[j++] = '\\';
+                old_msg[j++] = 'n';
+            } else {
+                old_msg[j++] = msg[i];
+            }
+        }
+        old_msg[j] = '\0';
+        wheatLogRaw(level, old_msg);
+        return ;
+    }
+    wheatLogRaw(level, msg);
 }
