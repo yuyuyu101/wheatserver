@@ -14,6 +14,10 @@ static struct enumIdName Workers[] = {
     {0, "SyncWorker"}, {1, "AsyncWorker"}
 };
 
+static struct enumIdName RedisSources[] = {
+    {0, "UseFile"}, {1, "UseRedis"}, {2, "RedisThenFile"},
+};
+
 /* Configuration Validator */
 int stringValidator(struct configuration *conf, const char *key, const char *val);
 int unsignedIntValidator(struct configuration *conf, const char *key, const char *val);
@@ -75,6 +79,10 @@ struct configuration configTable[] = {
         NULL,                   INT_FORMAT},
     {"redis-timeout",     2, unsignedIntValidator, {.val=1000},
         NULL,                   INT_FORMAT},
+    {"config-server",     2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"config-source",     2, enumValidator,        {.enum_ptr=&RedisSources[2]},
+        &RedisSources[0],       ENUM_FORMAT},
 
     // WSGI Configuration
     {"app-project-path",  2, stringValidator,      {.ptr=NULL},
@@ -137,7 +145,10 @@ int stringValidator(struct configuration *conf, const char *key, const char *val
         wfree(conf->target.ptr);
         conf->helper = NULL;
     }
-    conf->target.ptr = strdup(val);
+    if (!strcasecmp(val, "NULL"))
+        conf->target.ptr = NULL;
+    else
+        conf->target.ptr = strdup(val);
     return VALIDATE_OK;
 }
 
