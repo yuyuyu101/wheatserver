@@ -3,13 +3,15 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "redis.h"
-#include "../../protocol/redis/proto_redis.h"
 
-#define WHEAT_REDIS_UNIT_MIN      50
-#define WHEAT_REDIS_TIMEOUT       1000000
-#define WHEAT_REDIS_ERR           "-ERR Server keep this key all broken\r\n"
-#define WHEAT_REDIS_TIMEOUT_DIRTY 5
+#define WHEAT_REDIS_UNIT_MIN        50
+#define WHEAT_REDIS_TIMEOUT         1000000
+#define WHEAT_REDIS_ERR             "-ERR Server keep this key all broken\r\n"
+#define WHEAT_REDIS_TIMEOUT_DIRTY   5
 
+#define WHEAT_REDIS_USEFILE         0
+#define WHEAT_REDIS_USEREDIS        1
+#define WHEAT_REDIS_REDISTHENFILE   2
 
 // TODO:
 // 1. when a redis instance is marked as `is_dirty` and sync data from others
@@ -24,24 +26,19 @@ struct redisUnit {
     struct listNode *node;
     struct timeval start;
     int retry;
-    int is_sended;
 };
 
 static struct redisServer *RedisServer = NULL;
 static struct protocol *RedisProtocol = NULL;
 static void redisClientClosed(struct client *redis_client, void *data);
+void redisAppDeinit();
 
-static struct redisInstance *getInstance(struct redisServer *server, int idx,
+static struct redisInstance *getInstance(struct redisServer *server, size_t idx,
         int is_readcommand)
 {
     struct redisInstance *instance = arrayIndex(server->instances, idx);
-    if (is_readcommand) {
-        if (instance->live && !instance->is_dirty)
-            return instance;
-    } else {
-        if (instance->live)
-            return instance;
-    }
+    if (instance->live)
+        return instance;
     return NULL;
 }
 
@@ -67,9 +64,10 @@ int initInstance(struct redisInstance *instance, size_t pos, wstr ip,
     instance->port = port;
     instance->is_dirty = is_dirty;
     instance->ntoken = 0;
+    instance->reliability = 0;
+    instance->wait_units = createList();
     if (wakeupInstance(instance) == WHEAT_WRONG)
         return WHEAT_WRONG;
-    instance->wait_units = createList();
     return WHEAT_OK;
 }
 
@@ -83,7 +81,6 @@ static struct redisUnit *getRedisUnit()
     unit->sended = 0;
     unit->retry = 0;
     unit->pos = 0;
-    unit->is_sended = 0;
     unit->outer_conn = NULL;
     unit->first_token = NULL;
     p += sizeof(*unit);
@@ -97,12 +94,9 @@ static struct redisUnit *getRedisUnit()
 
 static void redisUnitFinal(struct redisUnit *unit)
 {
-    unit->is_sended = 1;
-    if (unit->pos == unit->sended) {
-        finishConn(unit->outer_conn);
-        removeListNode(RedisServer->message_center, unit->node);
-        wfree(unit);
-    }
+    finishConn(unit->outer_conn);
+    removeListNode(RedisServer->message_center, unit->node);
+    wfree(unit);
 }
 
 static void redisClientClosed(struct client *redis_client, void *data)
@@ -159,87 +153,182 @@ static int sendRedisData(struct conn *outer_conn,
     return WHEAT_OK;
 }
 
-// Suppose send first received response content
+// send response to client
 static int sendOuterData(struct redisUnit *unit)
 {
     struct slice *next;
-    int ret;
-    struct conn *outer_conn = unit->outer_conn, *redis_conn;
+    int ret, i, consistence, reliability_max;
+    wstr *replys;
+    struct redisInstance *instance, *reliability_instance;
+    struct conn *outer_conn, *redis_conn;
     ASSERT(unit->pos > 0);
+
     redis_conn = unit->redis_conns[0];
-    while ((next = redisBodyNext(redis_conn)) != NULL) {
-        ret = sendClientData(outer_conn, next);
-        if (ret == -1) {
-            redisUnitFinal(unit);
-            return WHEAT_WRONG;
+    outer_conn = unit->outer_conn;
+    if (isReadCommand(outer_conn)) {
+        while ((next = redisBodyNext(redis_conn)) != NULL) {
+            ret = sendClientData(outer_conn, next);
+            if (ret == -1) {
+                redisUnitFinal(unit);
+                return WHEAT_WRONG;
+            }
+        }
+    } else {
+        consistence = 1;
+        replys = wmalloc(sizeof(wstr)*unit->pos);
+        for (i = 0; i < unit->pos; ++i) {
+            replys[i] = wstrNewLen(NULL, 20);
+            while ((next = redisBodyNext(unit->redis_conns[i])) != NULL) {
+                replys[i] = wstrCatLen(replys[i], (char*)next->data,
+                        next->len);
+            }
+            if (i && wstrCmp(replys[i], replys[i-1])) {
+                struct slice key;
+                struct redisInstance *left, *right;
+                getRedisKey(outer_conn, &key);
+                left = unit->redis_conns[i-1]->client->client_data;
+                right = unit->redis_conns[i]->client->client_data;
+                wheatLog(WHEAT_WARNING,
+                        "write command response inconsistence on key %s!"
+                        "Between %s:%d and %s:%d",
+                        key.data, left->ip, left->port, right->ip, right->port);
+                consistence = 0;
+            }
+        }
+        for (i = 0; i < unit->pos; ++i) {
+            wstrFree(replys[i]);
+        }
+        wfree(replys);
+        if (!consistence) {
+            reliability_instance = unit->redis_conns[0]->client->client_data;
+            reliability_max = reliability_instance->reliability;
+            for (i = 1; i < unit->pos; ++i) {
+                instance = unit->redis_conns[i]->client->client_data;
+                if (instance->reliability > reliability_max) {
+                    reliability_instance = instance;
+                    redis_conn = unit->redis_conns[i];
+                }
+            }
+        }
+        redisBodyStart(redis_conn);
+        while ((next = redisBodyNext(redis_conn)) != NULL) {
+            ret = sendClientData(outer_conn, next);
+            if (ret == -1) {
+                redisUnitFinal(unit);
+                return WHEAT_WRONG;
+            }
         }
     }
     redisUnitFinal(unit);
     return WHEAT_OK;
 }
 
+// When client requests comes, we iterate backup instances which keep this key.
+// If is read command, we choose the non-dirty instance. If non-dirty instance
+// is None, we choose the max reliability instance. If is write command, send
+// write command to all backup instances.
+// If all instance isn't alive, send error to client(very rare)
+static int handleClientRequests(struct conn *c)
+{
+    struct token *token;
+    struct redisUnit *unit;
+    struct slice key;
+    int nwritted, is_read;
+    struct redisInstance *instance, *reliability_instance, *nondirty_instance;
+    struct redisServer *server;
+
+    server = RedisServer;
+    getRedisKey(c, &key);
+    token = hashDispatch(server, &key);
+    unit = getRedisUnit();
+    unit->outer_conn = c;
+
+    nwritted = 0;
+    reliability_instance = NULL;
+    is_read = isReadCommand(c);
+    while (nwritted < server->nbackup) {
+        if (!unit->first_token)
+            unit->first_token = token;
+        nwritted++;
+        instance = getInstance(server, token->instance_id,
+                isReadCommand(c));
+        token = &server->tokens[token->next_instance];
+        if (!instance)
+            continue;
+
+        if (is_read) {
+            if (!reliability_instance)
+                reliability_instance = instance;
+            else if (reliability_instance->reliability < instance->reliability)
+                reliability_instance = instance;
+
+            if (!instance->is_dirty)
+                nondirty_instance = instance;
+        } else {
+            sendRedisData(c, instance, unit);
+        }
+    }
+
+    if (is_read) {
+        if (nondirty_instance) {
+            instance = nondirty_instance;
+        } else if (reliability_instance) {
+            instance = reliability_instance;
+        }
+        if (instance)
+            sendRedisData(c, instance, unit);
+    }
+
+    // Check last to ensure at least one request is sent to redis server,
+    // otherwise send error to client.
+    if (!unit->sended) {
+        sendOuterError(unit);
+    }
+    return WHEAT_OK;
+}
+
+static int handleRedisResponse(struct conn *c)
+{
+    struct listNode *node;
+    struct client *redis_client = c->client;
+    struct redisInstance *instance;
+    struct redisUnit *unit;
+    instance = redis_client->client_data;
+    node = listFirst(instance->wait_units);
+    ASSERT(node && listNodeValue(node));
+    if (instance->ntimeout == 0) {
+        unit = listNodeValue(node);
+        registerConnFree(unit->outer_conn, (void (*)(void*))finishConn, c);
+        unit->redis_conns[unit->pos++] = c;
+        if (unit->pos == unit->sended) {
+            sendOuterData(unit);
+        }
+    } else {
+        ASSERT(instance->ntimeout > 0);
+        instance->ntimeout--;
+        if (instance->ntimeout == 0)
+            instance->timeout_duration = 0;
+        finishConn(c);
+    }
+
+    removeListNode(instance->wait_units, node);
+    return WHEAT_OK;
+
+}
+
 int redisCall(struct conn *c, void *arg)
 {
-    struct redisInstance *instance = NULL;
-    struct slice key;
-    struct token *token = NULL;
-    struct redisUnit *unit;
+    int ret;
+    struct redisServer *server = RedisServer;
 
-    if (isOuterClient(c->client)) {
-        int nwritted = 0;
-        size_t needed;
-        struct redisServer *server = RedisServer;
-        getRedisKey(c, &key);
-        token = hashDispatch(server, &key);
-        unit = getRedisUnit();
-        unit->outer_conn = c;
-        if (isReadCommand(c))
-            needed = 1;
+    if (server->is_serve) {
+        if (isOuterClient(c->client))
+            ret = handleClientRequests(c);
         else
-            needed = server->nbackup;
-
-        while (needed > 0 && nwritted < server->nbackup) {
-            if (!unit->first_token)
-                unit->first_token = token;
-            nwritted++;
-            instance = getInstance(server, token->server_idx,
-                    isReadCommand(c));
-            token = token->next_server;
-            if (!instance)
-                continue;
-
-            if (sendRedisData(c, instance, unit) == WHEAT_WRONG)
-                return WHEAT_WRONG;
-            needed--;
-        }
-        // In case of all redis instance keep this key is down and we have to
-        // send error message to client and only apply on read command.
-        if (needed > 0 && isReadCommand(c))
-            sendOuterError(unit);
-        return WHEAT_OK;
+            ret = handleRedisResponse(c);
+        return ret;
     } else {
-        struct listNode *node;
-        struct client *redis_client = c->client;
-        instance = redis_client->client_data;
-        node = listFirst(instance->wait_units);
-        ASSERT(node && listNodeValue(node));
-        if (instance->ntimeout == 0) {
-            unit = listNodeValue(node);
-            registerConnFree(unit->outer_conn, (void (*)(void*))finishConn, c);
-            unit->redis_conns[unit->pos++] = c;
-            if (unit->pos == unit->sended) {
-                sendOuterData(unit);
-            }
-        } else {
-            ASSERT(instance->ntimeout > 0);
-            instance->ntimeout--;
-            if (instance->ntimeout == 0)
-                instance->timeout_duration = 0;
-            finishConn(c);
-        }
-
-        removeListNode(instance->wait_units, node);
-        return WHEAT_OK;
+        return handleConfig(server, c);
     }
 }
 
@@ -247,81 +336,115 @@ void redisAppDeinit()
 {
     int pos;
     struct redisInstance *instance;
-    for (pos = 0; pos < narray(RedisServer->instances); pos++) {
-        instance = arrayIndex(RedisServer->instances, pos);
+    struct redisServer *server = RedisServer;
+
+    for (pos = 0; pos < narray(server->instances); pos++) {
+        instance = arrayIndex(server->instances, pos);
         freeClient(instance->redis_client);
+        freeList(instance->wait_units);
     }
-    if (RedisServer->tokens)
-        wfree(RedisServer->tokens);
-    wfree(RedisServer);
+
+    listEach(server->pending_conns, (void (*)(void*))finishConn);
+    listEach(server->message_center, wfree);
+    freeList(server->message_center);
+    arrayDealloc(server->instances);
+    if (server->tokens)
+        wfree(server->tokens);
+    if (server->config_server)
+        configServerDealloc(server->config_server);
+    wfree(server);
+    RedisServer = NULL;
 }
 
+static struct client *connectConfigServer(char *option)
+{
+    int count, port;
+    struct client *config_client;
+    wstr ip, *frags,ws = wstrNew(option);
+    frags = wstrNewSplit(ws, ":", 1, &count);
+    wstrFree(ws);
+
+    if (!frags || count != 2)
+        goto failed;
+
+    ip = frags[0];
+    port = atoi(frags[1]);
+    config_client = buildConn(ip, port, RedisProtocol);
+    if (!config_client)
+        goto failed;
+
+    return config_client;
+failed:
+    wstrFreeSplit(frags, count);
+    return NULL;
+}
+
+// We should deal with some conditions about config_source:
+// - RedisThenFile
+// 1. config-server is not specified or can't build connection: use file and
+// not save to config-server
+// 2. config-server is specified and build connection successfully, but get
+// info from config-server failed or incompletely: use config file and save
+// to config-server
+// 3. config-server is specified and build connection successfully, get info
+// from config-server is valid: use config-server and not save
+//
+// - UseRedis
+// 1. config-server is not specified or can't build connection, get info from
+// config-server is unvalid: directly exit and log error
+// 2. config-server is specified and build connection successfully, get info
+// from config-server is valid: use config-server and not save
+//
+// - UseFile
+// 1. Use file directly and ignore config-server
 int redisAppInit(struct protocol *ptocol)
 {
     ASSERT(ptocol);
     RedisProtocol = ptocol;
-    struct configuration *conf;
-    int pos, count;
-    long len, mem_len;
+    struct configuration *config_source, *conf;
     uint8_t *p = NULL;
-    struct listIterator *iter = NULL;
-    struct redisInstance ins, *instance;
     struct redisServer *server;
-    conf = getConfiguration("redis-servers");
-    if (!conf->target.ptr)
-        return WHEAT_WRONG;
+    struct client *config_client;
+    int ret;
+    int use_redis_only;
 
-    len = listLength((struct list *)(conf->target.ptr));
-    mem_len = sizeof(struct redisServer);
-    p = wmalloc(mem_len);
-    server = (struct redisServer*)p;
-
-    server->instances = arrayCreate(sizeof(struct redisInstance), len);
-    struct listNode *node = NULL;
-    iter = listGetIterator(conf->target.ptr, START_HEAD);
-    count = 0;
-    pos = 0;
-    while ((node = listNext(iter)) != NULL) {
-        wstr *frags = wstrNewSplit(listNodeValue(node), ":", 1, &count);
-
-        if (!frags) goto cleanup;
-        if (count != 2) goto cleanup;
-        arrayPush(server->instances, &ins);
-        instance = arrayIndex(server->instances, pos);
-        if (initInstance(instance, pos, frags[0], atoi(frags[1]), NONDIRTY) ==
-                WHEAT_WRONG)
-            goto cleanup;
-        server->max_id = pos;
-        pos++;
-        wstrFreeSplit(frags, count);
-    }
-    freeListIterator(iter);
-    server->live_instances = narray(server->instances);
-
-    if (!server->live_instances ||
-            server->live_instances < server->nbackup)
-        goto cleanup;
-
-    conf = getConfiguration("backup-size");
-    if (!conf)
-        return WHEAT_WRONG;
-    server->nbackup = conf->target.val;
-
-    conf = getConfiguration("redis-timeout");
-    if (!conf)
-        return WHEAT_WRONG;
-    // `redis-timeout` is millisecond, we want microsecond
-    server->timeout = conf->target.val * 1000;
-
+    p = wmalloc(sizeof(struct redisServer));
+    RedisServer = server = (struct redisServer*)p;
     server->message_center = createList();
-    RedisServer = server;
-    return hashInit(server);
+    server->pending_conns = createList();
+    server->instances = arrayCreate(sizeof(struct redisInstance), 10);
+    server->config_server = NULL;
+    server->live_instances = 0;
+    server->tokens = wmalloc(sizeof(struct token)*WHEAT_KEYSPACE);
+    server->ntoken = WHEAT_KEYSPACE;
+    server->is_serve = 0;
 
-cleanup:
-    wheatLog(WHEAT_WARNING, "redis init failed");
-    if (iter) freeListIterator(iter);
-    RedisServer = server;
-    redisAppDeinit();
+    config_source = getConfiguration("config-source");
+    use_redis_only = config_source->target.enum_ptr->id == WHEAT_REDIS_USEREDIS;
+    if (config_source->target.enum_ptr->id != WHEAT_REDIS_USEFILE) {
+        conf = getConfiguration("config-server");
+        if (conf->target.ptr) {
+            config_client = connectConfigServer(conf->target.ptr);
+            if (config_client) {
+                server->config_server = configServerCreate(config_client,
+                        config_source->target.enum_ptr->id == WHEAT_REDIS_USEREDIS);
+                ret = getServerFromRedis(server);
+                if (ret == WHEAT_WRONG)
+                    return WHEAT_WRONG;
+                return WHEAT_OK;
+            }
+        }
+        wheatLog(WHEAT_WARNING,
+                "No config server specified or can't build connection");
+    }
+    if (!use_redis_only) {
+        if (configFromFile(server) == WHEAT_WRONG)
+            return WHEAT_WRONG;
+        server->is_serve = 1;
+        return WHEAT_OK;
+    }
+
+    wheatLog(WHEAT_WARNING, "No path access here");
     return WHEAT_WRONG;
 }
 
@@ -341,17 +464,18 @@ static void handleTimeout(struct redisUnit *unit)
         // Read command means we only send request to *one* redis server.
         // Now we should choose next server which keep this key to retry
         // this unit request.
-        instance = getInstance(RedisServer, unit->first_token->server_idx,
+        instance = getInstance(server, unit->first_token->instance_id,
                 isreadcommand);
         wheatLog(WHEAT_NOTICE, "Instance %s:%d timeout response, try another",
                 instance->ip, instance->port);
         instance->ntimeout++;
+        instance->reliability--;
         if (!instance->timeout_duration)
             instance->timeout_duration = Server.cron_time.tv_sec;
-        next_token = unit->first_token->next_server;
+        next_token = &server->tokens[unit->first_token->next_instance];
         while (unit->retry < server->nbackup - 1) {
             unit->retry++;
-            instance = getInstance(RedisServer, next_token->server_idx,
+            instance = getInstance(server, next_token->instance_id,
                     isreadcommand);
             unit->first_token = next_token;
             if (instance) {
@@ -359,7 +483,7 @@ static void handleTimeout(struct redisUnit *unit)
                 // so if retry send that this unit should be rotate to last
                 removeListNode(server->message_center, unit->node);
                 ret = sendRedisData(unit->outer_conn, instance, unit);
-                unit->node = appendToListTail(RedisServer->message_center, unit);
+                unit->node = appendToListTail(server->message_center, unit);
                 if (ret == WHEAT_OK)
                     break;
             }
@@ -376,6 +500,7 @@ static void handleTimeout(struct redisUnit *unit)
         for (i = unit->pos; i < unit->sended; i++) {
             instance = unit->sended_instances[i];
             instance->ntimeout++;
+            instance->reliability--;
             if (!instance->timeout_duration)
                 instance->timeout_duration = Server.cron_time.tv_sec;
             wheatLog(WHEAT_NOTICE,
@@ -397,14 +522,26 @@ void redisAppCron()
     struct redisServer *server = RedisServer;
     struct redisInstance *instance = NULL;
     size_t i;
+    struct listNode *node;
+    struct redisUnit *unit;
+    struct listIterator *iter;
     long length = listLength(server->message_center);
     long now_micro = Server.cron_time.tv_sec * 1000000 + Server.cron_time.tv_usec;
     long micro_seconds;
+
+    if (!server->is_serve) {
+        if (isStartServe(server)) {
+            server->is_serve = 1;
+            wheatLog(WHEAT_VERBOSE, "WheatRedis is starting");
+        }
+        return ;
+    }
     for (i = 0; i < narray(server->instances); i++) {
         instance = arrayIndex(server->instances, i);
         if (!instance->live) {
             if (wakeupInstance(instance) == WHEAT_WRONG)
                 continue;
+            server->live_instances++;
             wheatLog(WHEAT_WARNING, "missed redis server connectd: %s:%d, lived: %d",
                     instance->ip, instance->port, RedisServer->live_instances);
         }
@@ -412,9 +549,7 @@ void redisAppCron()
             instance->is_dirty = 1;
     }
     i = WHEAT_REDIS_UNIT_MIN > length ? WHEAT_REDIS_UNIT_MIN : length;
-    struct listNode *node;
-    struct redisUnit *unit;
-    struct listIterator *iter = listGetIterator(server->message_center, START_HEAD);
+    iter = listGetIterator(server->message_center, START_HEAD);
     while ((node = listNext(iter)) != NULL) {
         if (!--i)
             break;
@@ -428,4 +563,10 @@ void redisAppCron()
         }
     }
     freeListIterator(iter);
+
+    if (listFirst(server->pending_conns)) {
+        listEach2(server->pending_conns,
+                (void (*)(void*, void*))redisCall, NULL);
+        listClear(server->pending_conns);
+    }
 }
