@@ -70,10 +70,13 @@ struct app {
     char *proto_belong;
     char *name;
     void (*appCron)();
-    /* Return WHEAT_OK means all is ok and return WEHAT_WRONG means something
-     * wrong inside and worker will clean this connection */
+    /* Return WHEAT_OK means all is ok and return WHEAT_WRONG means something
+     * wrong inside and worker will deinit this app. It's important to know
+     * requests failed not to return WHEAT_WRONG, request failed your app
+     * decision and it should not affetc app itself */
     int (*appCall)(struct conn *, void *arg);
     int (*initApp)(struct protocol *);
+    // deallocApp must clean up all data alloced
     void (*deallocApp)();
     void *(*initAppData)(struct conn *);
     void (*freeAppData)(void *app_data);
