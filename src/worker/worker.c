@@ -130,8 +130,10 @@ void freeSendPacket(struct sendPacket *p)
 
 struct conn *connGet(struct client *client)
 {
-    if (client->pending)
+    if (client->pending) {
+        ASSERT(client->pending->client);
         return client->pending;
+    }
     struct conn *c = wmalloc(sizeof(*c));
     c->client = client;
     c->protocol_data = client->protocol->initProtocolData();

@@ -191,8 +191,8 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             break;
         } else if (ret == WHEAT_OK) {
             getStatVal(StatTotalRequest)++;
-            ret = client->protocol->spotAppAndCall(conn);
             client->pending = NULL;
+            ret = client->protocol->spotAppAndCall(conn);
             if (ret != WHEAT_OK) {
                 getStatVal(StatFailedRequest)++;
                 client->should_close = 1;
