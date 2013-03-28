@@ -326,7 +326,7 @@ static void commandParse(struct evcenter *center, int fd, void *client_data, int
     client->request_buf = wstrMakeRoom(client->request_buf, 512);
     sliceTo(&slice, (uint8_t *)client->request_buf+wstrlen(client->request_buf),
             wstrfree(client->request_buf));
-    ssize_t nread = readBulkFrom(fd, &slice);
+    int nread = readBulkFrom(fd, &slice);
     if (nread == -1) {
         freeMasterClient(client);
         return ;
