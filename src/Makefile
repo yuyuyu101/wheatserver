@@ -4,7 +4,8 @@ CXX=c++
 APP_SOURCES = app/application.c \
 			  app/wsgi/app_wsgi.c app/wsgi/wsgiwrapper.c app/wsgi/wsgiinput.c \
 			  app/static/app_static_file.c app/wheatredis/redis.c \
-			  app/wheatredis/md5.c app/wheatredis/hashkit.c
+			  app/wheatredis/md5.c app/wheatredis/hashkit.c \
+			  app/wheatredis/redis_config.c
 PROTO_SOURCES =  protocol/protocol.c \
 				 protocol/http/http_parser.c protocol/http/proto_http.c \
 				 protocol/redis/proto_redis.c
