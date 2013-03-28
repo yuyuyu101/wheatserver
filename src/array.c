@@ -72,6 +72,11 @@ void *arrayTop(struct array *a)
     return arrayIndex(a, 0);
 }
 
+void *arrayLast(struct array *a)
+{
+    return arrayIndex(a, a->nelem-1);
+}
+
 void arrayEach(struct array *a, void(*func)(void *))
 {
     size_t len = a->nelem;
