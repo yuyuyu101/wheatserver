@@ -14,5 +14,7 @@ int readBulkFrom(int fd, struct slice *slice);
 int writeBulkTo(int fd, struct slice *clientbuf);
 void replyMasterClient(struct masterClient *c, const char *buf, size_t len);
 ssize_t isClientPreparedWrite(int fd, struct evcenter *center, void *c);
+int syncWriteBulkTo(int fd, struct slice *slice);
+int syncReadBulkFrom(int fd, struct slice *slice);
 
 #endif

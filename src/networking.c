@@ -26,6 +26,16 @@ int readBulkFrom(int fd, struct slice *slice)
     return (int)nread;
 }
 
+int syncReadBulkFrom(int fd, struct slice *slice)
+{
+   int read = 0;
+
+   do {
+       read = readBulkFrom(fd, slice);
+   } while(read == 0);
+   return read;
+}
+
 /* return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN */
 int writeBulkTo(int fd, struct slice *slice)
@@ -45,6 +55,19 @@ int writeBulkTo(int fd, struct slice *slice)
         }
     }
     return (int)nwritten;
+}
+
+int syncWriteBulkTo(int fd, struct slice *slice)
+{
+    int totallen, ret;
+    totallen = 0;
+    while (totallen < slice->len) {
+        ret = writeBulkTo(fd, slice);
+        if (ret == -1)
+            return WHEAT_WRONG;
+        totallen += ret;
+    }
+    return totallen;
 }
 
 static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)
