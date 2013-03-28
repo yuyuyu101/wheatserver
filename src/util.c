@@ -301,12 +301,12 @@ int string2ll(const char *s, size_t slen, long long *value)
     unsigned long long v;
 
     if (plen == slen)
-        return 0;
+        return WHEAT_WRONG;
 
     /* Special case: first and only digit is 0. */
     if (slen == 1 && p[0] == '0') {
         if (value != NULL) *value = 0;
-        return 1;
+        return WHEAT_OK;
     }
 
     if (p[0] == '-') {
@@ -315,7 +315,7 @@ int string2ll(const char *s, size_t slen, long long *value)
 
         /* Abort on only a negative sign. */
         if (plen == slen)
-            return 0;
+            return WHEAT_WRONG;
     }
 
     /* First digit should be 1-9, otherwise the string should just be 0. */
@@ -324,18 +324,18 @@ int string2ll(const char *s, size_t slen, long long *value)
         p++; plen++;
     } else if (p[0] == '0' && slen == 1) {
         *value = 0;
-        return 1;
+        return WHEAT_OK;
     } else {
-        return 0;
+        return WHEAT_WRONG;
     }
 
     while (plen < slen && p[0] >= '0' && p[0] <= '9') {
         if (v > (ULLONG_MAX / 10)) /* Overflow. */
-            return 0;
+            return WHEAT_WRONG;
         v *= 10;
 
         if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow. */
-            return 0;
+            return WHEAT_WRONG;
         v += p[0]-'0';
 
         p++; plen++;
@@ -343,16 +343,16 @@ int string2ll(const char *s, size_t slen, long long *value)
 
     /* Return if not all bytes were used. */
     if (plen < slen)
-        return 0;
+        return WHEAT_WRONG;
 
     if (negative) {
         if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
-            return 0;
+            return WHEAT_WRONG;
         if (value != NULL) *value = -v;
     } else {
         if (v > LLONG_MAX) /* Overflow. */
-            return 0;
+            return WHEAT_WRONG;
         if (value != NULL) *value = v;
     }
-    return 1;
+    return WHEAT_OK;
 }
