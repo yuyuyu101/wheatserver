@@ -20,14 +20,12 @@ enum redisCommand {
     REDIS_GETBIT,
     REDIS_GETRANGE,
     REDIS_GETSET,
-    REDIS_MGET,
     REDIS_STRLEN,
     REDIS_HEXISTS,
     REDIS_HGET,
     REDIS_HGETALL,
     REDIS_HKEYS,
     REDIS_HLEN,
-    REDIS_HMGET,
     REDIS_HVALS,
     REDIS_LINDEX,                 /* redis requests - lists */
     REDIS_LLEN,
@@ -66,7 +64,6 @@ enum redisCommand {
     REDIS_HDEL,                   /* redis requests - hashes */
     REDIS_HINCRBY,
     REDIS_HINCRBYFLOAT,
-    REDIS_HMSET,
     REDIS_HSET,
     REDIS_HSETNX,
     REDIS_LINSERT,
@@ -194,9 +191,6 @@ static int redisCommandHandle(struct redisProcData *redis_data,
             if (str4icmp(c, 't', 'y', 'p', 'e'))
                 return REDIS_TYPE;
 
-            if (str4icmp(c, 'm', 'g', 'e', 't'))
-                return REDIS_MGET;
-
             if (str4icmp(c, 'z', 'a', 'd', 'd'))
                 return REDIS_ZADD;
 
@@ -208,12 +202,6 @@ static int redisCommandHandle(struct redisProcData *redis_data,
         case 5:
             if (str5icmp(c, 'h', 'k', 'e', 'y', 's'))
                 return REDIS_HKEYS;
-
-            if (str5icmp(c, 'h', 'm', 'g', 'e', 't'))
-                return REDIS_HMGET;
-
-            if (str5icmp(c, 'h', 'm', 's', 'e', 't'))
-                return REDIS_HMSET;
 
             if (str5icmp(c, 'h', 'v', 'a', 'l', 's'))
                 return REDIS_HVALS;
@@ -754,5 +742,10 @@ int redisSpot(struct conn *c)
         return WHEAT_WRONG;
     }
     ret = AppTable[i].appCall(c, NULL);
+    if (ret == WHEAT_WRONG) {
+        wheatLog(WHEAT_WARNING, "app failed, exited");
+        AppTable[i].deallocApp();
+        AppTable[i].is_init = 0;
+    }
     return ret;
 }
