@@ -155,7 +155,7 @@ static ssize_t parseStat(struct masterClient *client,
     for (i = 2; i < client->argc; i += 2) {
         stat_id = atoi(client->argv[i]);
         ret = string2ll(client->argv[i+1], wstrlen(client->argv[i+1]), &val);
-        if (ret == 0 || stat_id >= STAT_ITEMS_COUNT)
+        if (ret == WHEAT_WRONG || stat_id >= STAT_ITEMS_COUNT)
             return WHEAT_WRONG;
         switch(server_stat[stat_id].type) {
             case SUM_STAT:
