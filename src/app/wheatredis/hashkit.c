@@ -8,15 +8,13 @@
 
 #include "redis.h"
 
-#define WHEAT_KEYSPACE           1024
-
 extern void md5_signature(const unsigned char *key, unsigned int length, unsigned char *result);
 
 static uint32_t ketamaHash(const char *key, size_t key_length, uint32_t alignment)
 {
     unsigned char results[16];
 
-    md5_signature((unsigned char*)key, key_length, results);
+    md5_signature((unsigned char*)key, (int)key_length, results);
 
     return ((uint32_t) (results[3 + alignment * 4] & 0xFF) << 24)
         | ((uint32_t) (results[2 + alignment * 4] & 0xFF) << 16)
@@ -28,10 +26,10 @@ static uint32_t ketamaHash(const char *key, size_t key_length, uint32_t alignmen
 int hashAdd(struct redisServer *server, wstr ip, int port, int id)
 {
     size_t ninstance, ntoken_per_instance, extra_ntoken, target_idx, ntoken;
-    struct token *token;
+    struct token *token, *tokens;
     struct redisInstance *instance, *target_instance;
     struct redisInstance add_instance;
-    int *sub_ntoken;
+    size_t *sub_ntoken;
     int i;
 
     initInstance(&add_instance, id, ip, port, DIRTY);
@@ -55,16 +53,17 @@ int hashAdd(struct redisServer *server, wstr ip, int port, int id)
 
     target_idx = ninstance-1;
     extra_ntoken = sub_ntoken[target_idx];
-    token = &server->tokens[0];
     target_instance = arrayIndex(server->instances, target_idx);
+    token = tokens = &server->tokens[0];
     while (extra_ntoken) {
-        int skip = random() % ntoken_per_instance + 1;
-        while (skip) {
-            token = token->next_server;
+        size_t skip = random() % ntoken_per_instance + 1;
+        while (skip--) {
+            token = &tokens[token->next_instance];
         }
-        if (token->server_idx != target_idx && sub_ntoken[token->server_idx]) {
-            instance = arrayIndex(server->instances, token->server_idx);
-            token->server_idx = target_idx;
+        if (token->instance_id != target_idx &&
+                sub_ntoken[token->instance_id]) {
+            instance = arrayIndex(server->instances, token->instance_id);
+            token->instance_id = target_idx;
             instance->ntoken--;
             target_instance->ntoken++;
         }
@@ -81,13 +80,15 @@ int hashAdd(struct redisServer *server, wstr ip, int port, int id)
     return WHEAT_OK;
 }
 
+// Only called when config-server is not specifyed. Means that WheatRedis is
+// firstly running on your system.
 int hashInit(struct redisServer *server)
 {
     ASSERT(narray(server->instances) >= server->nbackup);
     struct token *tokens = server->tokens, *last_token = NULL;
     struct redisInstance *instance;
-    size_t ntoken, ninstance;
-    int i, swap, prev_idx;
+    size_t ntoken, ninstance, swap;
+    int i, prev_idx;
 
     ntoken = WHEAT_KEYSPACE;
     tokens = wmalloc(sizeof(struct token)*ntoken);
@@ -98,9 +99,9 @@ int hashInit(struct redisServer *server)
     ninstance = narray(server->instances);
     for (i = 0; i < ntoken; ++i) {
         instance = arrayIndex(server->instances, i%ninstance);
-        tokens[i].next_server = NULL;
-        tokens[i].value = i;
-        tokens[i].server_idx = i%ninstance;
+        tokens[i].next_instance = UINT32_MAX; // An impossible value
+        tokens[i].pos = i;
+        tokens[i].instance_id = i%ninstance;
         instance->ntoken++;
     }
 
@@ -108,19 +109,19 @@ int hashInit(struct redisServer *server)
     for (i = 0; i < ntoken; i++)
     {
         size_t j = i + rand() / (RAND_MAX / (ntoken - i) + 1);
-        swap = tokens[j].server_idx;
-        tokens[j].server_idx = tokens[i].server_idx;
-        tokens[i].server_idx = swap;
+        swap = tokens[j].instance_id;
+        tokens[j].instance_id = tokens[i].instance_id;
+        tokens[i].instance_id = swap;
     }
 
-    // Populate each token.next_server to quicker search node process
+    // Populate each token.next_instance to quicker search node process
     prev_idx = 0;
     i = 1;
     last_token = &tokens[ntoken-1];
-    while (last_token->next_server == NULL) {
-        if (tokens[i%ntoken].server_idx != tokens[prev_idx].server_idx) {
+    while (last_token->next_instance == UINT32_MAX) {
+        if (tokens[i%ntoken].instance_id != tokens[prev_idx].instance_id) {
             for (; prev_idx < i && prev_idx < ntoken; ++prev_idx)
-                tokens[prev_idx].next_server = &tokens[i%ntoken];
+                tokens[prev_idx].next_instance = i%ntoken;
         }
         ++i;
     }
