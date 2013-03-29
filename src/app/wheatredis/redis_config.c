@@ -61,12 +61,14 @@ struct configServer *configServerCreate(struct client *client, int use_redis)
     config_server->serve_wait_milliseconds = 0;
     config_server->read_status = READ_SERVER_MAX_ID;
     config_server->status = CONFIG_READ;
+    config_server->pending_instance.ip = wstrEmpty();
     registerClientRead(client);
     return config_server;
 }
 
 void configServerDealloc(struct configServer *config_server)
 {
+    wstrFree(config_server->pending_instance.ip);
     listEach(config_server->pending_conns, (void (*)(void*))finishConn);
     freeList(config_server->pending_conns);
     wfree(config_server);
@@ -359,7 +361,9 @@ static int getStrFrom(wstr body, wstr *out)
     // Suppose the length of value must less than 9, and it couldn't
     // larger than 9
     len = atoi(&body[1]);
-    *out = wstrNewLen(&body[4], len);
+    ASSERT(*out);
+    wstrClear(*out);
+    *out = wstrCatLen(*out, &body[4], len);
     return WHEAT_OK;
 }
 
@@ -512,7 +516,6 @@ int handleConfigRead(struct redisServer *server, struct conn *c, wstr body)
     ret = WHEAT_OK;
 
 cleanup:
-    wstrFree(body);
     finishConn(c);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_NOTICE, "get config from redis failed");
@@ -637,6 +640,7 @@ int handleConfig(struct redisServer *server, struct conn *c)
     struct configServer *config_server = server->config_server;
     wstr body;
     struct slice *next;
+    int ret;
 
     if (c->client != config_server->config_client) {
         appendToListTail(server->pending_conns, c);
@@ -650,17 +654,23 @@ int handleConfig(struct redisServer *server, struct conn *c)
 
     switch(config_server->status) {
         case CONFIG_READ:
-            return handleConfigRead(server, c, body);
+            ret = handleConfigRead(server, c, body);
+            break;
+
         case CONFIG_SAVE:
-            return handleConfigSave(server, c, body);
+            ret = handleConfigSave(server, c, body);
+            break;
+
         case CONFIG_WAIT:
             wheatLog(WHEAT_WARNING, "Exists config-server connection, failed");
-            return WHEAT_WRONG;
+            ret = WHEAT_WRONG;
+            break;
+
         default:
             wheatLog(WHEAT_WARNING, "No one will reach here");
-            return WHEAT_WRONG;
-
+            ret = WHEAT_WRONG;
+            break;
     }
-    wheatLog(WHEAT_WARNING, "No one will reach here");
-    return WHEAT_WRONG;
+    wstrFree(body);
+    return ret;
 }

@@ -392,6 +392,8 @@ static struct client *connectConfigServer(char *option)
 {
     int count, port;
     struct client *config_client;
+
+    config_client = NULL;
     wstr ip, *frags,ws = wstrNew(option);
     frags = wstrNewSplit(ws, ":", 1, &count);
     wstrFree(ws);
@@ -402,13 +404,9 @@ static struct client *connectConfigServer(char *option)
     ip = frags[0];
     port = atoi(frags[1]);
     config_client = buildConn(ip, port, RedisProtocol);
-    if (!config_client)
-        goto failed;
-
-    return config_client;
 failed:
     wstrFreeSplit(frags, count);
-    return NULL;
+    return config_client;
 }
 
 // We should deal with some conditions about config_source:

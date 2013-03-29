@@ -181,6 +181,8 @@ static void connDealloc(struct conn *c)
     if (c->app_private_data)
         c->app->freeAppData(c->app_private_data);
     arrayEach(c->cleanup, cleanupCallback);
+    arrayDealloc(c->cleanup);
+    freeList(c->send_queue);
     wfree(c);
     if (!listLength(client->conns))
         msgClean(client->req_buf);
