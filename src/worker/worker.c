@@ -277,7 +277,7 @@ static int sendPacket(struct client *c, struct sendPacket *packet)
 {
     struct slice *data;
     ssize_t nwritten = 0;
-    struct fileWrapper file_wrapper;
+    struct fileWrapper *file_wrapper;
     switch (packet->type) {
         case SLICE:
             data = &packet->target.slice;
@@ -298,17 +298,17 @@ static int sendPacket(struct client *c, struct sendPacket *packet)
             }
             break;
         case FILE_DESCRIPTION:
-            file_wrapper = packet->target.file;
-            while (file_wrapper.len != 0) {
-                nwritten = portable_sendfile(c->clifd, file_wrapper.fd,
-                        file_wrapper.off, file_wrapper.len);
+            file_wrapper = &packet->target.file;
+            while (file_wrapper->len > 0) {
+                nwritten = portable_sendfile(c->clifd, file_wrapper->fd,
+                        file_wrapper->off, file_wrapper->len);
                 if (nwritten == -1)
                     return -1;
                 else if (nwritten == 0) {
                     return 1;
                 }
-                file_wrapper.off += nwritten;
-                file_wrapper.len -= nwritten;
+                file_wrapper->off += nwritten;
+                file_wrapper->len -= nwritten;
             }
     }
     return 0;
