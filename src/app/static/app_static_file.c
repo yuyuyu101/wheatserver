@@ -12,6 +12,31 @@
 #include "../application.h"
 #include "../../protocol/http/proto_http.h"
 
+int staticFileCall(struct conn *, void *);
+int initStaticFile(struct protocol *);
+void deallocStaticFile();
+void *initStaticFileData(struct conn *);
+void freeStaticFileData(void *app_data);
+
+// Static File Configuration
+static struct configuration StaticConf[] = {
+    {"static-file-dir",   2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_FILE_LIMIT},
+        NULL,                   INT_FORMAT},
+    {"allowed-extension", 2, stringValidator,      {.ptr=WHEAT_ASTERISK},
+        (void *)WHEAT_NOTFREE,  STRING_FORMAT},
+};
+
+static struct moduleAttr AppStaticAttr = {
+    "static-file", NULL, 0, StaticConf, sizeof(StaticConf)/sizeof(struct configuration)
+};
+
+struct app AppStatic = {
+    &AppStaticAttr, "Http", NULL, staticFileCall, initStaticFile,
+    deallocStaticFile, initStaticFileData, freeStaticFileData, 0
+};
+
 static unsigned int MaxFileSize = WHEAT_MAX_BUFFER_SIZE;
 static struct dict *AllowExtensions = NULL;
 static wstr IfModifiedSince = NULL;
@@ -272,7 +297,7 @@ failed:
     ok = 0;
 
     if (file_d > 0) close(file_d);
-    return ok == 1 ? WHEAT_OK : WHEAT_WRONG;
+    return WHEAT_OK;
 }
 
 int initStaticFile(struct protocol *p)

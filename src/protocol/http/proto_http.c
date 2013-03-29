@@ -8,6 +8,30 @@ static FILE *AccessFp = NULL;
 static struct http_parser_settings HttpPaserSettings;
 #define WHEAT_BODY_LEN 10
 
+int httpSpot(struct conn*);
+int parseHttp(struct conn *, struct slice *, size_t *);
+void *initHttpData();
+void freeHttpData(void *data);
+int initHttp();
+void deallocHttp();
+
+// Http
+static struct configuration HttpConf[] = {
+    {"access-log",        2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"document-root",     2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+};
+
+static struct moduleAttr ProtocolHttpAttr = {
+    "Http", NULL, 0, HttpConf, sizeof(HttpConf)/sizeof(struct configuration)
+};
+
+struct protocol ProtocolHttp = {
+    &ProtocolHttpAttr, httpSpot, parseHttp, initHttpData, freeHttpData,
+        initHttp, deallocHttp
+};
+
 struct staticHandler {
     wstr abs_path;
     wstr root;
@@ -501,7 +525,8 @@ int initHttp()
         char path[1024];
         char *real_path = realpath(conf1->target.ptr, path);
         if (!real_path) {
-            wheatLog(WHEAT_WARNING, "document-root is unvalid");
+            wheatLog(WHEAT_WARNING, "document-root %s is unvalid",
+                    conf1->target.ptr);
             return WHEAT_WRONG;
         }
         StaticPathHandler.abs_path = wstrNew(real_path);
@@ -724,22 +749,27 @@ int httpSpot(struct conn *c)
         path = wstrCat(path, http_data->path);
         i = 1;
     }
-    if (!AppTable[i].is_init) {
-        ret = AppTable[i].initApp(c->client->protocol);
+    if (!AppTable[i]->is_init) {
+        ret = AppTable[i]->initApp(c->client->protocol);
         if (ret == WHEAT_WRONG) {
             wstrFree(path);
             return ret;
         }
-        AppTable[i].is_init = 1;
+        AppTable[i]->is_init = 1;
     }
-    c->app = &AppTable[i];
+    c->app = AppTable[i];
     ret = initAppData(c);
     if (ret == WHEAT_WRONG) {
         wstrFree(path);
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
-    ret = AppTable[i].appCall(c, path);
+    ret = AppTable[i]->appCall(c, path);
+    if (ret == WHEAT_WRONG) {
+        wheatLog(WHEAT_WARNING, "app failed, exited");
+        AppTable[i]->deallocApp();
+        AppTable[i]->is_init = 0;
+    }
     logAccess(c);
     wstrFree(path);
     finishConn(c);

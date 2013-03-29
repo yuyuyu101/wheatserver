@@ -5,6 +5,32 @@
 #include "../application.h"
 #include "app_wsgi.h"
 
+int wsgiCall(struct conn *, void *);
+int initWsgi(struct protocol *);
+void deallocWsgi();
+void *initWsgiAppData(struct conn *);
+void freeWsgiAppData(void *app_data);
+
+// WSGI Configuration
+static struct configuration WsgiConf[] = {
+    {"app-project-path",  2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"app-module-name",   2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"app-name",          2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+};
+
+
+static struct moduleAttr AppWsgiAttr = {
+    "wsgi", NULL, 0, WsgiConf, sizeof(WsgiConf)/sizeof(struct configuration)
+};
+
+struct app AppWsgi = {
+    &AppWsgiAttr, "Http", NULL, wsgiCall, initWsgi, deallocWsgi,
+        initWsgiAppData, freeWsgiAppData, 0
+};
+
 static PyObject *pApp = NULL;
 static PyObject *WsgiStderr = NULL;
 static PyObject *DefaultEnv = NULL;
@@ -70,9 +96,7 @@ out:
         Py_DECREF(req_obj);
     }
 
-    if (is_ok)
-        return WHEAT_OK;
-    return WHEAT_WRONG;
+    return WHEAT_OK;
 }
 
 void *initWsgiAppData(struct conn *c)

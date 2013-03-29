@@ -27,6 +27,19 @@ struct array *arrayCreate(size_t elem_size, size_t cap)
     return arr;
 }
 
+struct array *arrayDup(struct array *a)
+{
+    struct array *dup;
+    size_t len;
+
+    dup = wmalloc(sizeof(struct array));
+    memcpy(dup, a, sizeof(struct array));
+    len = a->elem_size * a->capacity;
+    dup->elements = wmalloc(len);
+    memcpy(dup->elements, a->elements, len);
+    return dup;
+}
+
 void arrayDealloc(struct array *arr)
 {
     wfree(arr->elements);
@@ -100,6 +113,11 @@ void arrayEach2(struct array *a, void(*func)(void *item, void *data), void *data
 size_t narray(struct array *a)
 {
     return a->nelem;
+}
+
+void *arrayData(struct array *a)
+{
+    return a->elements;
 }
 
 #ifdef ARRAY_TEST_MAIN

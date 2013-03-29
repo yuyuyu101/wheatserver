@@ -7,6 +7,4 @@
 
 #include "../wheatserver.h"
 
-struct protocol *spotProtocol(char *ip, int port, int fd);
-
 #endif

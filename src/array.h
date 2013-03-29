@@ -7,6 +7,7 @@
 
 struct array;
 struct array *arrayCreate(size_t elem_size, size_t cap);
+struct array *arrayDup(struct array *a);
 void arrayDealloc(struct array *arr);
 void *arrayIndex(struct array *a, size_t pos);
 void arraySet(struct array *a, void *data, size_t p);
@@ -16,6 +17,7 @@ void *arrayTop(struct array *a);
 void *arrayLast(struct array *a);
 void arrayEach(struct array *a, void(*func)(void *));
 void arrayEach2(struct array *a, void(*func)(void *, void *), void *data);
+void *arrayData(struct array *a);
 
 size_t narray(struct array *a);
 

@@ -40,6 +40,7 @@
 #include "worker/worker.h"
 
 /* Server Configuration */
+#define WHEAT_DEFAULT_ADDR            "127.0.0.1"
 #define WHEAT_SERVERPORT              10828
 #define WHEATSERVER_CONFIGLINE_MAX    1024
 #define WHEATSERVER_MAX_LOG_LEN       1024
@@ -103,10 +104,10 @@ struct globalServer {
     int stat_refresh_seconds;                    //stat-refresh-time, 10
 
     /* status */
+    char master_name[WHEATSERVER_MAX_NAMELEN];
     int ipfd;
     struct evcenter *master_center;
     int stat_fd;
-    struct statItem *aggregate_stat;
     struct timeval cron_time;
     pid_t pid;
     pid_t relaunch_pid;
@@ -116,7 +117,10 @@ struct globalServer {
     struct list *workers;
     struct list *master_clients;
     struct list *signal_queue;
-    char master_name[WHEATSERVER_MAX_NAMELEN];
+
+    struct list *modules;
+    struct list *confs;
+    struct array *stats;
 
     /* log */
     char *logfile;                               //logfile, stdout
@@ -161,10 +165,17 @@ struct configuration {
     enum printFormat format;
 };
 
+struct moduleAttr {
+    char *name;
+    struct statItem *stats;
+    size_t stat_size;
+    struct configuration *confs;
+    size_t conf_size;
+};
+
 struct workerProcess;
 
 extern struct globalServer Server;
-extern struct statItem StatItems[];
 
 void initServer();
 
@@ -198,6 +209,15 @@ void wheatLog(int level, const char *fmt, ...);
 struct masterClient *createMasterClient(int fd);
 void freeMasterClient(struct masterClient *c);
 void logRedirect();
+
+/* Configuration */
+void initServerConfs(struct list *confs);
+int stringValidator(struct configuration *conf, const char *key, const char *val);
+int unsignedIntValidator(struct configuration *conf, const char *key, const char *val);
+int enumValidator(struct configuration *conf, const char *key, const char *val);
+int boolValidator(struct configuration *conf, const char *key, const char *val);
+int listValidator(struct configuration *conf, const char *key, const char *val);
+
 
 #define WHEAT_WRONG -1
 #define WHEAT_OK 0

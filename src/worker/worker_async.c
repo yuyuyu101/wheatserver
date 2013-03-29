@@ -11,12 +11,27 @@ static struct list *Clients = NULL;
 
 // Cache below stat field avoid too much query on StatItems
 // --------- Statistic Cache --------------
-static struct statItem *StatTotalClient = &StatItems[3];
-static struct statItem *StatBufferSize = &StatItems[7];
-static struct statItem *StatTotalRequest = &StatItems[4];
-static struct statItem *StatFailedRequest = &StatItems[6];
-static struct statItem *StatRunTime = &StatItems[8];
+static struct statItem *StatTotalClient = NULL;
+static struct statItem *StatBufferSize = NULL;
+static struct statItem *StatTotalRequest = NULL;
+static struct statItem *StatFailedRequest = NULL;
+static struct statItem *StatRunTime = NULL;
 //-----------------------------------------
+
+void setupAsync();
+void asyncWorkerCron();
+int asyncSendData(struct conn *c); // pass `data` ownership to
+int asyncRegisterRead(struct client *c);
+void asyncUnregisterRead(struct client *c);
+
+static struct moduleAttr AsyncWorkerAttr = {
+    "AsyncWorker", NULL, 0, NULL, 0
+};
+
+struct worker AsyncWorker = {
+    &AsyncWorkerAttr, setupAsync, asyncWorkerCron, asyncSendData,
+    asyncRegisterRead, asyncUnregisterRead,
+};
 
 
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask);
@@ -213,7 +228,10 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
 static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
 {
     char ip[46];
-    int cport, cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
+    struct client *c;
+    int cport, cfd;
+
+    cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
     if (cfd == NET_WRONG) {
         if (errno != EAGAIN)
             wheatLog(WHEAT_WARNING, "Accepting client connection failed: %s", Server.neterr);
@@ -222,13 +240,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     wheatNonBlock(Server.neterr, cfd);
     wheatCloseOnExec(Server.neterr, cfd);
 
-    struct protocol *ptcol = spotProtocol(ip, cport, cfd);
-    if (!ptcol) {
-        close(cfd);
-        wheatLog(WHEAT_WARNING, "spot protocol failed");
-        return ;
-    }
-    struct client *c = createClient(cfd, ip, cport, ptcol);
+    c = createClient(cfd, ip, cport, WorkerProcess->protocol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
     getStatVal(StatTotalClient)++;
 }
@@ -247,4 +259,9 @@ void setupAsync()
         wheatLog(WHEAT_WARNING, "createEvent failed");
         halt(1);
     }
+    StatTotalClient = getStatItemByName("Total client");
+    StatBufferSize = getStatItemByName("Max buffer size");
+    StatTotalRequest = getStatItemByName("Total request");
+    StatFailedRequest = getStatItemByName("Total failed request");
+    StatRunTime = getStatItemByName("Worker run time");
 }

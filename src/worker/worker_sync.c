@@ -9,12 +9,27 @@ static long MaxFd = 0;
 
 // Cache below stat field avoid too much query on StatItems
 // --------- Statistic Cache --------------
-static struct statItem *StatTotalClient = &StatItems[3];
-static struct statItem *StatBufferSize = &StatItems[7];
-static struct statItem *StatTotalRequest = &StatItems[4];
-static struct statItem *StatFailedRequest = &StatItems[6];
-static struct statItem *StatRunTime = &StatItems[8];
+static struct statItem *StatTotalClient = NULL;
+static struct statItem *StatBufferSize = NULL;
+static struct statItem *StatTotalRequest = NULL;
+static struct statItem *StatFailedRequest = NULL;
+static struct statItem *StatRunTime = NULL;
 //-----------------------------------------
+//
+void setupSync();
+void syncWorkerCron();
+int syncSendData(struct conn *c); // pass `data` ownership to
+int syncRegisterRead(struct client *c);
+void syncUnregisterRead(struct client *c);
+
+static struct moduleAttr SyncWorkerAttr = {
+    "SyncWorker", NULL, 0, NULL, 0
+};
+
+struct worker SyncWorker = {
+    &SyncWorkerAttr, setupSync, syncWorkerCron, syncSendData,
+    syncRegisterRead, syncUnregisterRead,
+};
 
 int syncSendData(struct conn *c)
 {
@@ -85,19 +100,17 @@ void syncUnregisterRead(struct client *c)
 
 void dispatchRequest(int fd, char *ip, int port)
 {
-    struct protocol *ptcol = spotProtocol(ip, port, fd);
-    if (!ptcol) {
-        wheatLog(WHEAT_WARNING, "spot protocol failed");
-        close(fd);
-        return ;
-    }
-    struct client *client = createClient(fd, ip, port, ptcol);
-    if (client == NULL)
-        return ;
+    struct protocol *ptcol;
     int ret, n;
     size_t nparsed;
     struct slice slice;
     struct conn *conn = NULL;
+    struct client *client;
+
+    ptcol = WorkerProcess->protocol;
+    client = createClient(fd, ip, port, ptcol);
+    if (client == NULL)
+        return ;
     do {
         n = syncRecvData(client);
         if (!isClientValid(client)) {
@@ -212,4 +225,9 @@ void setupSync()
     intptr_t fd = Server.ipfd;
     appendToListTail(MaxSelectFd, (void*)fd);
     MaxFd = Server.ipfd;
+    StatTotalClient = getStatItemByName("Total client");
+    StatBufferSize = getStatItemByName("Max buffer size");
+    StatTotalRequest = getStatItemByName("Total request");
+    StatFailedRequest = getStatItemByName("Total failed request");
+    StatRunTime = getStatItemByName("Worker run time");
 }

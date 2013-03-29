@@ -13,6 +13,38 @@
 #define WHEAT_REDIS_USEREDIS        1
 #define WHEAT_REDIS_REDISTHENFILE   2
 
+int redisCall(struct conn *c, void *arg);
+int redisAppInit(struct protocol *);
+void redisAppDeinit();
+void redisAppCron();
+
+static struct enumIdName RedisSources[] = {
+    {0, "UseFile"}, {1, "UseRedis"}, {2, "RedisThenFile"},
+};
+
+static struct configuration RedisConf[] = {
+    {"redis-servers",     WHEAT_ARGS_NO_LIMIT,listValidator, {.ptr=NULL},
+        NULL,                   LIST_FORMAT},
+    {"backup-size",       2, unsignedIntValidator, {.val=1},
+        NULL,                   INT_FORMAT},
+    {"redis-timeout",     2, unsignedIntValidator, {.val=1000},
+        NULL,                   INT_FORMAT},
+    {"config-server",     2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
+    {"config-source",     2, enumValidator,        {.enum_ptr=&RedisSources[2]},
+        &RedisSources[0],       ENUM_FORMAT},
+};
+
+static struct moduleAttr AppRedisAttr = {
+    "WheatRedis", NULL, 0,
+    RedisConf, sizeof(RedisConf)/sizeof(struct configuration)
+};
+
+struct app AppRedis = {
+    &AppRedisAttr, "Redis", redisAppCron, redisCall,
+    redisAppInit, redisAppDeinit, NULL, NULL, 0
+};
+
 // TODO:
 // 1. when a redis instance is marked as `is_dirty` and sync data from others
 

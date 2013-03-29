@@ -7,32 +7,47 @@
 // *Attention*: You shouldn't change old StatItems order, id and name,
 // because some code directly use offset of StatItems to get statItem
 // or by name
-struct statItem StatItems[] = {
-    {0, "Last send", ASSIGN_STAT, LOCAL_TIME, 0, 0},
-    {1, "Total spawn workers", SUM_STAT, RAW, ONLY_MASTER, 0},
-    {2, "Timeout workers", SUM_STAT, RAW, ONLY_MASTER, 0},
-    {3, "Total client", SUM_STAT, RAW, 0, 0},
-    {4, "Total request", SUM_STAT, RAW, 0, 0},
-    {5, "Total timeout client", SUM_STAT, RAW, 0, 0},
-    {6, "Total failed request", SUM_STAT, RAW, 0, 0},
-    {7, "Max buffer size", MAX_STAT, RAW, 0, 0},
-    {8, "Worker run time", SUM_STAT, MICORSECONDS_TIME, 0, 0},
-    {9, "Max worker cron interval", ASSIGN_STAT, RAW, 0, 0},
+static struct statItem StatItems[] = {
+    {"Last send", ASSIGN_STAT, LOCAL_TIME, 0, 0},
+    {"Total spawn workers", SUM_STAT, RAW, ONLY_MASTER, 0},
+    {"Timeout workers", SUM_STAT, RAW, ONLY_MASTER, 0},
+    {"Total client", SUM_STAT, RAW, 0, 0},
+    {"Total request", SUM_STAT, RAW, 0, 0},
+    {"Total timeout client", SUM_STAT, RAW, 0, 0},
+    {"Total failed request", SUM_STAT, RAW, 0, 0},
+    {"Max buffer size", MAX_STAT, RAW, 0, 0},
+    {"Worker run time", SUM_STAT, MICORSECONDS_TIME, 0, 0},
+    {"Max worker cron interval", ASSIGN_STAT, RAW, 0, 0},
 };
-
-#define STAT_ITEMS_COUNT (sizeof(StatItems)/sizeof(struct statItem))
 
 struct statItem *getStatItemByName(const char *name)
 {
-    size_t count = STAT_ITEMS_COUNT;
-    struct statItem *stat = StatItems;
-    while (count--) {
+    struct statItem *stat;
+    struct array *stats;
+    int i;
+
+    stats = Server.stats;
+    for (i = 0; i < narray(stats); ++i) {
+        stat = arrayIndex(stats, i);
         if (!strcmp(name, stat->name))
             return stat;
-        stat++;
     }
     ASSERT(0);
     return NULL;
+}
+
+void initServerStats(struct array *stats)
+{
+    struct statItem *stat;
+    int len, i;
+
+    len = sizeof(StatItems) / sizeof(struct statItem);
+    i = 0;
+    while (i != len) {
+        stat = &StatItems[i];
+        arrayPush(stats, stat);
+        i++;
+    }
 }
 
 /* ========== Worker Statistic Area ========== */
@@ -66,25 +81,29 @@ static wstr defaultStatCommand(struct workerProcess *worker_process)
 
 void sendStatPacket(struct workerProcess *worker_process)
 {
-    struct statItem *stat = worker_process->stat;
+    char buf[WHEAT_STAT_PACKET_MAX];
+    ssize_t ret, nwrite;
+    size_t count, pos;
+    struct slice s;
+    struct statItem *stat;
+
+    // Connect to master
     if (worker_process->master_stat_fd == 0) {
-        int ret;
         ret = connectWithMaster(worker_process);
         if (ret == WHEAT_WRONG)
             return ;
     }
-    char buf[WHEAT_STAT_PACKET_MAX];
-    ssize_t ret, nwrite;
-    size_t count;
-    struct slice s;
+
+    stat = arrayData(Server.stats);
+    count = narray(Server.stats);
+    pos = 0;
     wstr stat_packet = defaultStatCommand(worker_process);
-    count = STAT_ITEMS_COUNT;
-    while (count--) {
+    while (pos < count) {
         // If this statItem's val is zero or this statItem only used be in
         // master, skip it
         if (stat->val != 0 && !(stat->flags & ONLY_MASTER)) {
-            ret = snprintf(buf, WHEAT_STAT_PACKET_MAX, "\n%d\n%lld",
-                    stat->id, stat->val);
+            ret = snprintf(buf, WHEAT_STAT_PACKET_MAX, "\n%ld\n%lld",
+                    pos, stat->val);
             if (ret < 0 || ret > WHEAT_STAT_PACKET_MAX) {
                 wstrFree(stat_packet);
                 return ;
@@ -92,9 +111,10 @@ void sendStatPacket(struct workerProcess *worker_process)
 
             stat_packet = wstrCatLen(stat_packet, buf, ret);
             // Avoid set last send field to zero because of this send may failed
-            if (stat->id != 0)
+            if (pos != 0)
                 stat->val = 0;
         }
+        pos++;
         stat++;
     }
     // No stat need to send
@@ -111,19 +131,12 @@ void sendStatPacket(struct workerProcess *worker_process)
                 "send statistic info failed, total %d sended %d",
                 s.len, nwrite);
     } else {
-        worker_process->stat->val = Server.cron_time.tv_sec;
+        stat = arrayData(Server.stats);
+        stat->val = Server.cron_time.tv_sec;
     }
 }
 
 /* ========== Master Statistic Area ========== */
-
-struct statItem *copyStatItems()
-{
-    size_t len = STAT_ITEMS_COUNT * sizeof(struct statItem);
-    uint8_t *p = wmalloc(len);
-    memcpy(p, StatItems, len);
-    return (struct statItem *)p;
-}
 
 static ssize_t parseStat(struct masterClient *client,
         struct workerProcess **owner)
@@ -133,8 +146,10 @@ static ssize_t parseStat(struct masterClient *client,
     struct workerProcess *worker = NULL;
     struct listIterator *iter;
     int i, stat_id, ret;
+    size_t count;
     long long val;
-    struct statItem *server_stat = Server.aggregate_stat;
+    struct statItem *server_stat, *worker_stat;
+
     if (client->argc < 2)
         return WHEAT_WRONG;
     pid = atoi(client->argv[1]);
@@ -152,24 +167,27 @@ static ssize_t parseStat(struct masterClient *client,
     if (client->argc % 2 != 0)
         return WHEAT_WRONG;
 
+    server_stat = arrayData(Server.stats);
+    worker_stat = arrayData(worker->stats);
+    count = narray(Server.stats);
     for (i = 2; i < client->argc; i += 2) {
         stat_id = atoi(client->argv[i]);
         ret = string2ll(client->argv[i+1], wstrlen(client->argv[i+1]), &val);
-        if (ret == WHEAT_WRONG || stat_id >= STAT_ITEMS_COUNT)
+        if (ret == WHEAT_WRONG || stat_id >= count)
             return WHEAT_WRONG;
         switch(server_stat[stat_id].type) {
             case SUM_STAT:
-                worker->stat[stat_id].val += val;
+                worker_stat[stat_id].val += val;
                 server_stat[stat_id].val += val;
                 break;
             case MAX_STAT:
-                if (worker->stat[stat_id].val < val)
-                    worker->stat[stat_id].val = val;
+                if (worker_stat[stat_id].val < val)
+                    worker_stat[stat_id].val = val;
                 if (server_stat[stat_id].val < val)
                     server_stat[stat_id].val = val;
                 break;
             case ASSIGN_STAT:
-                worker->stat[stat_id].val = val;
+                worker_stat[stat_id].val = val;
                 server_stat[stat_id].val = val;
                 break;
         }
@@ -192,11 +210,16 @@ void statinputCommand(struct masterClient *client)
     }
 }
 
-static wstr getStatFormat(struct statItem *stat_items, wstr format_stat)
+static wstr getStatFormat(struct array *stats, wstr format_stat)
 {
     int ret, i = 0;
     char buf[255];
     long long print_val;
+    size_t count;
+    struct statItem *stat_items;
+
+    count = narray(stats);
+    stat_items = arrayData(stats);
     do {
         switch (stat_items[i].format) {
             case MICORSECONDS_TIME:
@@ -212,7 +235,7 @@ static wstr getStatFormat(struct statItem *stat_items, wstr format_stat)
                 break;
         }
         format_stat = wstrCatLen(format_stat, buf, ret);
-    } while (++i < STAT_ITEMS_COUNT);
+    } while (++i < count);
     return format_stat;
 }
 
@@ -220,7 +243,7 @@ void logStat()
 {
     wstr format_stat = wstrEmpty();
     wheatLog(WHEAT_LOG_RAW, "---- Master Statistic Information -----\n");
-    format_stat = getStatFormat(Server.aggregate_stat, format_stat);
+    format_stat = getStatFormat(Server.stats, format_stat);
     wheatLog(WHEAT_LOG_RAW, "%s", format_stat);
 //    wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
 //    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
@@ -240,7 +263,7 @@ void statCommand(struct masterClient *c)
 {
     wstr format_stat = wstrEmpty();
     if (!wstrCmpNocaseChars(c->argv[1], "master", 6)) {
-        format_stat = getStatFormat(Server.aggregate_stat, format_stat);
+        format_stat = getStatFormat(Server.stats, format_stat);
     } else if (!wstrCmpNocaseChars(c->argv[1], "worker", 6)) {
         struct listNode *node = NULL;
         struct workerProcess *worker = NULL;
@@ -248,7 +271,7 @@ void statCommand(struct masterClient *c)
         iter = listGetIterator(Server.workers, START_HEAD);
         while ((node = listNext(iter)) != NULL) {
             worker = listNodeValue(node);
-            format_stat = getStatFormat(worker->stat, format_stat);
+            format_stat = getStatFormat(worker->stats, format_stat);
         }
         freeListIterator(iter);
     }

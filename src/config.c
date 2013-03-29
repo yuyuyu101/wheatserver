@@ -14,17 +14,6 @@ static struct enumIdName Workers[] = {
     {0, "SyncWorker"}, {1, "AsyncWorker"}
 };
 
-static struct enumIdName RedisSources[] = {
-    {0, "UseFile"}, {1, "UseRedis"}, {2, "RedisThenFile"},
-};
-
-/* Configuration Validator */
-int stringValidator(struct configuration *conf, const char *key, const char *val);
-int unsignedIntValidator(struct configuration *conf, const char *key, const char *val);
-int enumValidator(struct configuration *conf, const char *key, const char *val);
-int boolValidator(struct configuration *conf, const char *key, const char *val);
-int listValidator(struct configuration *conf, const char *key, const char *val);
-
 // configTable is immutable after worker setuped in *Worker Process*
 // Attention: If modify configTable, three places should be attention to.
 // 1. initGlobalServerConfig() in wheatserver.c
@@ -37,8 +26,8 @@ struct configuration configTable[] = {
     // Master Configuration
     {"protocol",          2, stringValidator,      {.ptr=WHEAT_PROTOCOL_DEFAULT},
         (void *)WHEAT_NOTFREE,  STRING_FORMAT},
-    {"bind-addr",         2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
+    {"bind-addr",         2, stringValidator,      {.ptr=WHEAT_DEFAULT_ADDR},
+        (void *)WHEAT_NOTFREE,  STRING_FORMAT},
     {"port",              2, unsignedIntValidator, {.val=WHEAT_SERVERPORT},
         NULL,                   INT_FORMAT},
     {"worker-number",     2, unsignedIntValidator, {.val=2},
@@ -65,47 +54,12 @@ struct configuration configTable[] = {
         (void *)300,            INT_FORMAT},
     {"mbuf-size",         2, unsignedIntValidator, {.val=WHEAT_MBUF_SIZE},
         (void *)WHEAT_BUFLIMIT, INT_FORMAT},
-
-    // Http
-    {"access-log",        2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-    {"document-root",     2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-
-    // Redis
-    {"redis-servers",     WHEAT_ARGS_NO_LIMIT,listValidator, {.ptr=NULL},
-        NULL,                   LIST_FORMAT},
-    {"backup-size",       2, unsignedIntValidator, {.val=1},
-        NULL,                   INT_FORMAT},
-    {"redis-timeout",     2, unsignedIntValidator, {.val=1000},
-        NULL,                   INT_FORMAT},
-    {"config-server",     2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-    {"config-source",     2, enumValidator,        {.enum_ptr=&RedisSources[2]},
-        &RedisSources[0],       ENUM_FORMAT},
-
-    // WSGI Configuration
-    {"app-project-path",  2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-    {"app-module-name",   2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-    {"app-name",          2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-
-    // Static File Configuration
-    {"static-file-dir",   2, stringValidator,      {.ptr=NULL},
-        NULL,                   STRING_FORMAT},
-    {"file-maxsize",      2, unsignedIntValidator, {.val=WHEAT_MAX_FILE_LIMIT},
-        NULL,                   INT_FORMAT},
-    {"allowed-extension", 2, stringValidator,      {.ptr=WHEAT_ASTERISK},
-        (void *)WHEAT_NOTFREE,  STRING_FORMAT},
 };
 
 void fillServerConfig()
 {
-    struct configuration *conf = &configTable[0];
+    struct configuration *conf = &configTable[1];
 
-    conf++;
     Server.bind_addr = conf->target.ptr;
     conf++;
     Server.port = conf->target.val;
@@ -226,15 +180,38 @@ static void extraValidator()
     ASSERT(Server.port && Server.stat_port);
 }
 
+/* ================ Handle Configuration ================ */
+
+void initServerConfs(struct list *confs)
+{
+    struct configuration *conf;
+    int len, i;
+
+    len = sizeof(configTable) / sizeof(struct configuration);
+    i = 0;
+    while (i != len) {
+        conf = &configTable[i];
+        appendToListTail(confs, conf);
+        i++;
+    }
+}
+
 struct configuration *getConfiguration(const char *name)
 {
-    int len = sizeof(configTable) / sizeof(struct configuration);
-    int i;
-    for (i = 0; i < len; i++) {
-        if (!strncasecmp(name, configTable[i].name, strlen(name))) {
-            return &configTable[i];
+    struct listNode *node;
+    struct listIterator *iter;
+    struct configuration *conf;
+
+    iter = listGetIterator(Server.confs, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        conf = listNodeValue(node);
+        if (!strncasecmp(name, conf->name, strlen(name))) {
+            freeListIterator(iter);
+            return conf;
         }
     }
+    freeListIterator(iter);
+
     return NULL;
 }
 

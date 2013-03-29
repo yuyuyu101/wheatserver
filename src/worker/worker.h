@@ -15,6 +15,7 @@
 #define WHEATSERVER_REQ_MAXLEN 8*1024
 
 struct workerProcess {
+    struct protocol *protocol;
     pid_t pid;
     pid_t ppid;
     int alive;
@@ -23,7 +24,8 @@ struct workerProcess {
     char *worker_name;
     struct worker *worker;
 
-    struct statItem *stat;
+    // Used by master process
+    struct array *stats;
     int master_stat_fd;
     // In worker process side, last statistic packet sended time, use
     // `refresh_time` to decide this cron should send statistic packet
@@ -36,7 +38,7 @@ struct client;
 struct conn;
 
 struct protocol {
-    char *name;
+    struct moduleAttr *attr;
     int (*spotAppAndCall)(struct conn *);
     /* `parser` parse `data` and assign protocol data to client
      * if return 0 imply parser success,
@@ -50,7 +52,7 @@ struct protocol {
 };
 
 struct worker {
-    char *name;
+    struct moduleAttr *attr;
     void (*setup)();
     void (*cron)();
     /* Send data in buffer which `buf` points
@@ -67,8 +69,8 @@ struct worker {
 };
 
 struct app {
+    struct moduleAttr *attr;
     char *proto_belong;
-    char *name;
     void (*appCron)();
     /* Return WHEAT_OK means all is ok and return WHEAT_WRONG means something
      * wrong inside and worker will deinit this app. It's important to know
@@ -122,9 +124,9 @@ struct client {
 
 #define WHEAT_WORKERS    2
 extern struct workerProcess *WorkerProcess;
-extern struct worker WorkerTable[];
-extern struct protocol ProtocolTable[];
-extern struct app AppTable[];
+extern struct worker *WorkerTable[];
+extern struct protocol *ProtocolTable[];
+extern struct app *AppTable[];
 
 /* modify attention. Worker, Protocol, Applicantion interface */
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);

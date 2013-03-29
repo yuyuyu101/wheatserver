@@ -33,8 +33,8 @@ struct worker *spotWorker(char *worker_name)
 {
     int i;
     for (i = 0; i < WHEAT_WORKERS; i++) {
-        if (strcmp(WorkerTable[i].name, worker_name) == 0) {
-            return &WorkerTable[i];
+        if (strcmp(WorkerTable[i]->attr->name, worker_name) == 0) {
+            return WorkerTable[i];
         }
     }
     return NULL;
@@ -44,13 +44,14 @@ void workerProcessCron()
 {
     static long long max_cron_interval = 0;
     struct timeval nowval;
-    struct app *app = &AppTable[0];
     long long interval;
-    while (app->proto_belong) {
+    int i = 0;
+    struct app *app = AppTable[0];
+    while (app) {
         if (app->is_init && app->appCron) {
             app->appCron();
         }
-        app++;
+        app = AppTable[++i];
     }
     if (WorkerProcess->ppid != getppid()) {
         wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
@@ -81,6 +82,9 @@ static struct list *createAndFillPool()
 
 void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
+    struct configuration *conf;
+    int i;
+    struct protocol *p;
     if (Server.stat_fd != 0)
         close(Server.stat_fd);
     setProctitle(worker_name);
@@ -92,7 +96,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->worker = spotWorker(worker_name);
     worker->master_stat_fd = 0;
     ASSERT(worker->worker);
-    worker->stat = StatItems;
+    worker->stats = NULL;
     initWorkerSignals();
     ClientPool = createAndFillPool();
     // It may nonblock after fork???
@@ -100,6 +104,22 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
         wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
         halt(1);
     }
+    conf = getConfiguration("protocol");
+    for (i = 0; i < 2; ++i) {
+        p = ProtocolTable[i];
+        if (!strcasecmp(conf->target.ptr, p->attr->name)) {
+            if (p->initProtocol() == WHEAT_WRONG) {
+                wheatLog(WHEAT_WARNING, "init protocol failed");
+                halt(1);
+            }
+            worker->protocol = p;
+        }
+    }
+    if (!worker->protocol) {
+        wheatLog(WHEAT_WARNING, "find protocol %s failed", conf->target.ptr);
+        halt(1);
+    }
+
     gettimeofday(&Server.cron_time, NULL);
     worker->worker->setup();
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
@@ -109,7 +129,8 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 void freeWorkerProcess(void *w)
 {
     struct workerProcess *worker = w;
-    wfree(worker->stat);
+    if (worker->stats)
+        wfree(worker->stats);
     wfree(worker);
 }
 

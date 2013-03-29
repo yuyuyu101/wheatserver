@@ -10,6 +10,22 @@
 
 #define REDIS_FINISHED(r)   (((r)->stage) == MES_END)
 
+int redisSpot(struct conn *c);
+int parseRedis(struct conn *c, struct slice *slice, size_t *);
+void *initRedisData();
+void freeRedisData(void *d);
+int initRedis();
+void deallocRedis();
+
+static struct moduleAttr ProtocolRedisAttr = {
+    "Redis", NULL, 0, NULL, 0
+};
+
+struct protocol ProtocolRedis = {
+    &ProtocolRedisAttr, redisSpot, parseRedis, initRedisData, freeRedisData,
+        initRedis, deallocRedis,
+};
+
 enum redisCommand {
     REDIS_EXISTS,
     REDIS_PTTL,
@@ -729,23 +745,23 @@ int isReadCommand(struct conn *c)
 int redisSpot(struct conn *c)
 {
     int i = 2, ret;
-    if (!AppTable[i].is_init) {
-        ret = AppTable[i].initApp(c->client->protocol);
+    if (!AppTable[i]->is_init) {
+        ret = AppTable[i]->initApp(c->client->protocol);
         if (ret == WHEAT_WRONG)
             return WHEAT_WRONG;
-        AppTable[i].is_init = 1;
+        AppTable[i]->is_init = 1;
     }
-    c->app = &AppTable[i];
+    c->app = AppTable[i];
     ret = initAppData(c);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
-    ret = AppTable[i].appCall(c, NULL);
+    ret = AppTable[i]->appCall(c, NULL);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "app failed, exited");
-        AppTable[i].deallocApp();
-        AppTable[i].is_init = 0;
+        AppTable[i]->deallocApp();
+        AppTable[i]->is_init = 0;
     }
     return ret;
 }

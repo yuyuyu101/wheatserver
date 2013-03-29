@@ -25,7 +25,6 @@ enum statPrintFormat {
 };
 
 struct statItem {
-    int id;
     char *name;
     enum statType type;
     enum statPrintFormat format;
@@ -36,11 +35,11 @@ struct statItem {
 struct masterClient;
 struct workerProcess;
 
-struct statItem *copyStatItems();
 struct statItem *getStatItemByName(const char *name);
 void sendStatPacket(struct workerProcess *worker_process);
 void logStat();
 void statinputCommand(struct masterClient *c);
 void statCommand(struct masterClient *c);
+void initServerStats(struct array *confs);
 
 #endif

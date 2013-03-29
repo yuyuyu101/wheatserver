@@ -6,6 +6,48 @@
 
 struct globalServer Server;
 
+static void collectModules(struct list *modules, struct array *stats,
+        struct list *confs)
+{
+    struct listNode *node;
+    struct listIterator *iter;
+    struct moduleAttr *module_attr;
+    struct app **app;
+    struct protocol **protocol;
+    struct worker **worker;
+    int i;
+
+    app = &AppTable[0];
+    while (*app) {
+        appendToListTail(modules, (*app)->attr);
+        app++;
+    }
+
+    protocol = &ProtocolTable[0];
+    while (*protocol) {
+        appendToListTail(modules, (*protocol)->attr);
+        protocol++;
+    }
+
+    worker = &WorkerTable[0];
+    while (*worker) {
+        appendToListTail(modules, (*worker)->attr);
+        worker++;
+    }
+
+    iter = listGetIterator(modules, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        module_attr = listNodeValue(node);
+        for (i = 0; i < module_attr->conf_size; ++i) {
+            appendToListTail(confs, &module_attr->confs[i]);
+        }
+        for (i = 0; i < module_attr->stat_size; ++i) {
+            arrayPush(stats, &module_attr->stats[i]);
+        }
+    }
+    freeListIterator(iter);
+}
+
 void initGlobalServerConfig()
 {
     Server.bind_addr = NULL;
@@ -28,7 +70,12 @@ void initGlobalServerConfig()
     Server.stat_port = WHEAT_STATS_PORT;
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
     Server.mbuf_size = WHEAT_MBUF_SIZE;
-    Server.aggregate_stat = StatItems;
+    Server.modules = createList();
+    Server.confs = createList();
+    Server.stats = arrayCreate(sizeof(struct statItem), 20);
+    initServerConfs(Server.confs);
+    initServerStats(Server.stats);
+    collectModules(Server.modules, Server.stats, Server.confs);
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);
@@ -153,7 +200,7 @@ void spawnWorker(char *worker_name)
     if (pid != 0) {
         getStatValByName("Total spawn workers")++;
         appendToListTail(Server.workers, new_worker);
-        new_worker->stat = copyStatItems();
+        new_worker->stats = arrayDup(Server.stats);
         new_worker->pid = pid;
         new_worker->start_time = Server.cron_time;
         new_worker->refresh_time = Server.cron_time.tv_sec;
@@ -162,10 +209,10 @@ void spawnWorker(char *worker_name)
         WorkerProcess = new_worker;
         initWorkerProcess(new_worker, worker_name);
         wheatLog(WHEAT_NOTICE, "new worker %s spawned %d",
-                WorkerProcess->worker->name, getpid());
+                WorkerProcess->worker->attr->name, getpid());
         WorkerProcess->worker->cron();
         wheatLog(WHEAT_NOTICE, "worker %s exit pid:%d",
-                WorkerProcess->worker->name, getpid());
+                WorkerProcess->worker->attr->name, getpid());
         exit(0);
     }
 }
@@ -462,7 +509,8 @@ void initServer()
         halt(1);
     }
 
-   if (createEvent(Server.master_center, Server.pipe_readfd, EVENT_READABLE, handlePipe,  NULL) == WHEAT_WRONG)
+    if (createEvent(Server.master_center, Server.pipe_readfd, EVENT_READABLE,
+                handlePipe,  NULL) == WHEAT_WRONG)
     {
         wheatLog(WHEAT_WARNING, "createEvent failed");
         halt(1);
