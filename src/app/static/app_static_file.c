@@ -49,6 +49,7 @@ struct contenttype {
 struct staticFileData {
     wstr filename;
     wstr extension;
+    int fd;
 };
 
 static struct contenttype ContentTypes[] = {
@@ -224,12 +225,15 @@ static int fillResHeaders(struct conn *c, off_t rep_len, time_t m_time)
 int staticFileCall(struct conn *c, void *arg)
 {
     wstr path = arg;
-    int file_d = open(path, O_RDONLY), ret;
-    struct staticFileData *static_data = c->app_private_data;
+    struct staticFileData *static_data;
     off_t len;
     time_t m_time;
-    int ok = 1;
-    if (file_d == -1) {
+    int ret;
+
+    static_data = c->app_private_data;
+    static_data->fd = open(path, O_RDONLY);
+
+    if (static_data->fd  == -1) {
         wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
     }
@@ -241,7 +245,7 @@ int staticFileCall(struct conn *c, void *arg)
             !dictFetchValue(AllowExtensions, static_data->extension)) {
         goto failed404;
     }
-    ret = getFileSizeAndMtime(file_d, &len, &m_time);
+    ret = getFileSizeAndMtime(static_data->fd , &len, &m_time);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
@@ -279,24 +283,20 @@ int staticFileCall(struct conn *c, void *arg)
         wheatLog(WHEAT_WARNING, "static file send headers failed: %s", strerror(errno));
         goto failed;
     }
-    ret = sendClientFile(c, file_d, len);
+    ret = sendClientFile(c, static_data->fd , len);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "send static file failed: %s", strerror(errno));
         goto failed;
     }
-    if (file_d > 0) close(file_d);
     return WHEAT_OK;
 
 
 failed404:
     sendResponse404(c);
-    if (file_d > 0) close(file_d);
     return WHEAT_OK;
 
 failed:
-    ok = 0;
-
-    if (file_d > 0) close(file_d);
+    setClientClose(c);
     return WHEAT_OK;
 }
 
@@ -355,6 +355,7 @@ void *initStaticFileData(struct conn *c)
             data->filename = wstrNewLen(base_name, (int)(point-base_name));
         }
     }
+    data->fd = 0;
     return data;
 }
 
@@ -363,5 +364,7 @@ void freeStaticFileData(void *app_data)
     struct staticFileData *data = app_data;
     wstrFree(data->extension);
     wstrFree(data->filename);
+    if (data->fd > 0)
+        close(data->fd);
     wfree(data);
 }
