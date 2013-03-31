@@ -431,16 +431,20 @@ void configCommand(struct masterClient *c)
 
 void printServerConfig(int test)
 {
-    int level = test ? WHEAT_NOTICE : WHEAT_DEBUG;
-    wheatLog(level, "---- Now Configuration are ----");
-    int size = sizeof(configTable) / sizeof(struct configuration);
-    int i;
-    struct configuration *conf = &configTable[0];
+    struct configuration *conf;
+    int level;
+    struct listNode *node;
+    struct listIterator *iter;
     char buf[255];
-    for (i = 0; i < size; i++) {
+
+    level = test ? WHEAT_NOTICE : WHEAT_DEBUG;
+    wheatLog(level, "---- Now Configuration are ----");
+    iter = listGetIterator(Server.confs, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        conf = listNodeValue(node);
         constructConfigFormat(conf, buf, 255);
         wheatLog(level, "%s", buf);
-        conf++;
     }
+    freeListIterator(iter);
     wheatLog(level, "-------------------------------");
 }
