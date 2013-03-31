@@ -5,6 +5,10 @@
 #ifndef WHEATSERVER_EVENT_H_
 #define WHEATSERVER_EVENT_H_
 
+#ifdef __APPLE__
+#include <AvailabilityMacros.h>
+#endif
+
 /* Test for polling API */
 #ifdef __linux__
 #define HAVE_EPOLL 1
