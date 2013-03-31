@@ -76,7 +76,6 @@ struct configServer *configServerCreate(struct client *client, int use_redis)
     config_server->pending_instance.ip = wstrEmpty();
     config_server->is_valid = 1;
     setClientName(client, "Redis config server");
-    registerClientRead(client);
     setClientFreeNotify(client, restartConfigClient);
     return config_server;
 }
@@ -84,7 +83,6 @@ struct configServer *configServerCreate(struct client *client, int use_redis)
 void configServerDealloc(struct configServer *config_server)
 {
     wstrFree(config_server->pending_instance.ip);
-    unregisterClientRead(config_server->config_client);
     freeClient(config_server->config_client);
     wfree(config_server);
 }

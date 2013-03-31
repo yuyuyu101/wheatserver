@@ -7,6 +7,15 @@
 struct workerProcess *WorkerProcess = NULL;
 
 #define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
+#define WHEAT_CLIENT_MAX      120
+
+// Cache below stat field avoid too much query on StatItems
+// --------- Statistic Cache --------------
+static struct statItem *StatBufferSize = NULL;
+static struct statItem *StatTotalRequest = NULL;
+static struct statItem *StatFailedRequest = NULL;
+static struct statItem *StatRunTime = NULL;
+//-----------------------------------------
 
 enum packetType {
     SLICE = 1,
@@ -35,6 +44,9 @@ struct callback {
 static struct list *FreeClients = NULL;
 static struct list *Clients = NULL;
 static struct statItem *StatTotalClient = NULL;
+
+static void acceptClient(struct evcenter *center, int fd, void *data, int mask);
+static void handleRequest(struct evcenter *center, int fd, void *data, int mask);
 
 struct worker *spotWorker(char *worker_name)
 {
@@ -83,31 +95,52 @@ void workerProcessCron()
 
     struct timeval nowval;
     long long interval;
-    int i = 0;
+    int i;
     struct app *app;
+    int refresh_seconds;
 
-    app = AppTable[0];
-    while (app) {
-        if (app->is_init && app->appCron) {
-            app->appCron();
+    refresh_seconds = Server.stat_refresh_seconds;
+
+    while (WorkerProcess->alive) {
+        i = 0;
+        app = AppTable[0];
+        while (app) {
+            if (app->is_init && app->appCron) {
+                app->appCron();
+            }
+            app = AppTable[++i];
         }
-        app = AppTable[++i];
+
+        clientsCron();
+        WorkerProcess->worker->cron();
+        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
+        if (WorkerProcess->ppid != getppid()) {
+            wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
+            WorkerProcess->alive = 0;
+        }
+
+        if (Server.cron_time.tv_sec - WorkerProcess->refresh_time > refresh_seconds) {
+            sendStatPacket(WorkerProcess);
+            WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+        }
+
+        // Get the max worker cron interval for statistic info
+        gettimeofday(&nowval, NULL);
+        interval = getMicroseconds(nowval) - getMicroseconds(Server.cron_time);
+        if (interval > max_cron_interval) {
+            max_cron_interval = interval;
+            getStatValByName("Max worker cron interval") = interval;
+        }
+        Server.cron_time = nowval;
     }
 
-    clientsCron();
-    if (WorkerProcess->ppid != getppid()) {
-        wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
-        WorkerProcess->alive = 0;
+    // Stop accept new client
+    deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
+    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+    while (Server.cron_time.tv_sec - WorkerProcess->refresh_time < Server.graceful_timeout) {
+        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
+        gettimeofday(&Server.cron_time, NULL);
     }
-
-    // Get the max worker cron interval for statistic info
-    gettimeofday(&nowval, NULL);
-    interval = getMicroseconds(nowval) - getMicroseconds(Server.cron_time);
-    if (interval > max_cron_interval) {
-        max_cron_interval = interval;
-        getStatValByName("Max worker cron interval") = interval;
-    }
-    Server.cron_time = nowval;
 }
 
 static struct list *createAndFillPool()
@@ -141,8 +174,17 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     ASSERT(worker->worker);
     worker->stats = NULL;
     initWorkerSignals();
-    FreeClients = createAndFillPool();
-    Clients = createList();
+    worker->center = eventcenterInit(WHEAT_CLIENT_MAX);
+    if (!worker->center) {
+        wheatLog(WHEAT_WARNING, "eventcenter_init failed");
+        halt(1);
+    }
+    if (createEvent(worker->center, Server.ipfd, EVENT_READABLE, acceptClient,  NULL) == WHEAT_WRONG)
+    {
+        wheatLog(WHEAT_WARNING, "createEvent failed");
+        halt(1);
+    }
+
     // It may nonblock after fork???
     if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
         wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
@@ -168,6 +210,15 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     gettimeofday(&Server.cron_time, NULL);
     worker->worker->setup();
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+
+    FreeClients = createAndFillPool();
+    Clients = createList();
+    StatBufferSize = getStatItemByName("Max buffer size");
+    StatTotalRequest = getStatItemByName("Total request");
+    StatFailedRequest = getStatItemByName("Total failed request");
+    StatRunTime = getStatItemByName("Worker run time");
+
+
     sendStatPacket(WorkerProcess);
 }
 
@@ -275,7 +326,6 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->protocol = p;
     c->conns = createList();
     listSetFree(c->conns, (void (*)(void*))connDealloc);
-    c->err = NULL;
     c->req_buf = msgCreate(Server.mbuf_size);
     c->is_outer = 1;
     c->should_close = 0;
@@ -286,6 +336,8 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->last_io = Server.cron_time;
     c->name = wstrEmpty();
 
+    createEvent(WorkerProcess->center, c->clifd, EVENT_READABLE,
+            handleRequest, c);
     getStatVal(StatTotalClient)++;
     return c;
 }
@@ -301,6 +353,7 @@ void freeClient(struct client *c)
     freeList(c->conns);
     arrayDealloc(c->notifies);
     node = searchListKey(Clients, c);
+    deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
     if (!node)
         ASSERT(0);
     removeListNode(Clients, node);
@@ -406,33 +459,6 @@ void clientSendPacketList(struct client *c)
     }
 }
 
-int sendFileByCopy(struct conn *c, int fd, off_t len, off_t offset)
-{
-    off_t send = offset;
-    int ret;
-    if (fd < 0 || len == 0) {
-        return WHEAT_WRONG;
-    }
-
-    size_t unit_read = Server.max_buffer_size < WHEAT_MAX_BUFFER_SIZE ?
-        Server.max_buffer_size/20 : WHEAT_MAX_BUFFER_SIZE/20;
-    char ctx[unit_read];
-    struct slice slice;
-    sliceTo(&slice, (uint8_t *)ctx, unit_read);
-    while (send < len) {
-        int nread;
-        lseek(fd, send, SEEK_SET);
-        nread = readBulkFrom(fd, &slice);
-        if (nread <= 0)
-            return WHEAT_WRONG;
-        send += nread;
-        ret = sendClientData(c, &slice);
-        if (ret == -1)
-            return WHEAT_WRONG;
-    }
-    return WHEAT_OK;
-}
-
 void appendFileToSendQueue(struct conn *conn, int fd, off_t off, size_t len)
 {
     struct sendPacket *packet = wmalloc(sizeof(*packet));
@@ -483,12 +509,86 @@ int sendClientData(struct conn *c, struct slice *s)
     return WorkerProcess->worker->sendData(c);
 }
 
-int registerClientRead(struct client *c)
+void tryCleanRequest(struct client *c)
 {
-    return WorkerProcess->worker->registerRead(c);
+    if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
+        return;
+    freeClient(c);
 }
 
-void unregisterClientRead(struct client *c)
+static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
 {
-    WorkerProcess->worker->unregisterRead(c);
+    struct client *client;
+    struct conn *conn;
+    ssize_t nread, ret;
+    struct timeval start, end;
+    long time_use;
+    struct slice slice;
+    size_t parsed;
+
+    parsed = 0;
+    ret = 0;
+    client = data;
+
+    gettimeofday(&start, NULL);
+    nread = WorkerProcess->worker->recvData(client);
+    if (!isClientValid(client)) {
+        freeClient(client);
+        return ;
+    }
+
+    if (msgGetSize(client->req_buf) > getStatVal(StatBufferSize)) {
+        getStatVal(StatBufferSize) = msgGetSize(client->req_buf);
+    }
+
+    while (msgCanRead(client->req_buf)) {
+        conn = connGet(client);
+
+        msgRead(client->req_buf, &slice);
+        ret = client->protocol->parser(conn, &slice, &parsed);
+
+        if (ret == WHEAT_WRONG) {
+            wheatLog(WHEAT_NOTICE, "parse data failed");
+            msgSetReaded(client->req_buf, 0);
+            setClientUnvalid(client);
+            break;
+        } else if (ret == WHEAT_OK) {
+            msgSetReaded(client->req_buf, parsed);
+            getStatVal(StatTotalRequest)++;
+            client->pending = NULL;
+            ret = client->protocol->spotAppAndCall(conn);
+            if (ret != WHEAT_OK) {
+                getStatVal(StatFailedRequest)++;
+                client->should_close = 1;
+                wheatLog(WHEAT_NOTICE, "app failed");
+                break;
+            }
+        } else if (ret == 1) {
+            client->pending = conn;
+            msgSetReaded(client->req_buf, parsed);
+            continue;
+        }
+    }
+    tryCleanRequest(client);
+    gettimeofday(&end, NULL);
+    time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
+    getStatVal(StatRunTime) += time_use;
+}
+
+static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
+{
+    char ip[46];
+    struct client *c;
+    int cport, cfd;
+
+    cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
+    if (cfd == NET_WRONG) {
+        if (errno != EAGAIN)
+            wheatLog(WHEAT_WARNING, "Accepting client connection failed: %s", Server.neterr);
+        return;
+    }
+    wheatNonBlock(Server.neterr, cfd);
+    wheatCloseOnExec(Server.neterr, cfd);
+
+    c = createClient(cfd, ip, cport, WorkerProcess->protocol);
 }

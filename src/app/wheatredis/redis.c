@@ -97,7 +97,6 @@ static int wakeupInstance(struct redisInstance *instance)
     snprintf(name, 255, "Redis Instance %s:%d", instance->ip, instance->port);
     setClientName(instance->redis_client, name);
     setClientFreeNotify(instance->redis_client, (void (*)(void*))redisClientClosed);
-    registerClientRead(instance->redis_client);
     return WHEAT_OK;
 }
 
@@ -155,7 +154,6 @@ static void redisClientClosed(struct client *redis_client)
     instance = redis_client->client_data;
     RedisServer->live_instances--;
     instance->live = 0;
-    unregisterClientRead(instance->redis_client);
     instance->redis_client = NULL;
     instance->is_dirty = 1;
     iter = listGetIterator(instance->wait_units, START_HEAD);

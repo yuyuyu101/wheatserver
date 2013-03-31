@@ -26,6 +26,7 @@ struct workerProcess {
 
     // Used by master process
     struct array *stats;
+    struct evcenter *center;
     int master_stat_fd;
     // In worker process side, last statistic packet sended time, use
     // `refresh_time` to decide this cron should send statistic packet
@@ -64,8 +65,7 @@ struct worker {
      * sendData will free `data`
      */
     int (*sendData)(struct conn *);
-    int (*registerRead)(struct client *);
-    void (*unregisterRead)(struct client *);
+    int (*recvData)(struct client *);
 };
 
 struct app {
@@ -101,7 +101,6 @@ struct client {
     wstr ip;
     int port;
     struct timeval last_io;
-    char *err;
     wstr name;
     struct protocol *protocol;
     struct conn *pending;
@@ -132,12 +131,11 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
 void setClientFreeNotify(struct client *c, void (*func)(void *));
 void finishConn(struct conn *c);
+void tryCleanRequest(struct client *c);
 void clientSendPacketList(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);
 struct client *buildConn(char *ip, int port, struct protocol *p);
 int initAppData(struct conn *);
-int registerClientRead(struct client *c);
-void unregisterClientRead(struct client *c);
 int sendClientData(struct conn *c, struct slice *s);
 struct conn *connGet(struct client *client);
 int isClientNeedSend(struct client *);
@@ -153,7 +151,7 @@ void registerConnFree(struct conn*, void (*)(void*), void *data);
 #define isOuterClient(c)                   ((c)->is_outer == 1)
 #define setClientName(c, n)                ((c)->name = wstrCat(c->name, (n)))
 
-/* worker's flow:
+/* workerprocess's flow:
  * 0. setup filling workerProcess members
  * 1. accept connection and init client
  * 2. recognize protocol(http or pop3 etc...)
@@ -163,11 +161,7 @@ void registerConnFree(struct conn*, void (*)(void*), void *data);
  * 6. construct response and send to
  *
  * worker's duty:
- * 1. provide with send and receive api and refresh client's last_io field
- * 2. if parent changed, worker must detect and exit
- * 3. send worker status every refresh time
- * 4. guarantee closing client in Server.worker_timeout
- * 5. support pipeline processing
+ * provide with send and receive api and refresh client's last_io field
  * */
 struct protocol *spotProtocol(char *ip, int port, int fd);
 struct app *spotAppInterface();
