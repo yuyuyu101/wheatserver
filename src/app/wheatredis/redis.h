@@ -30,6 +30,8 @@ struct redisServer {
     size_t nbackup;
     long timeout;
 
+    // `config_server` only valid in init period, if finishing init,
+    // `config_server` will be release and set NULL
     struct configServer *config_server;
     size_t live_instances;
     // append new redisUnit to the end of list and keep `message_center`
@@ -77,6 +79,7 @@ struct redisInstance {
 struct token *hashDispatch(struct redisServer *server, struct slice *key);
 int hashInit(struct redisServer *server);
 int initInstance(struct redisInstance *instance, size_t, wstr, int, int);
+struct client *connectConfigServer(char *option);
 
 struct configServer *configServerCreate(struct client *client, int use_redis);
 void configServerDealloc(struct configServer *config_server);

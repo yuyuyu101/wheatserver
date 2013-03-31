@@ -43,10 +43,22 @@ struct configServer {
     size_t pos;
     int use_redis;
     long serve_wait_milliseconds;
-    struct list *pending_conns;
+    int is_valid;
 };
 
 static int saveConfigToServer(struct redisServer *server);
+
+static void restartConfigClient(void *item)
+{
+    struct client *client;
+    struct configServer *config_server;
+
+    client = item;
+    config_server = client->client_data;
+
+    config_server->config_client = NULL;
+    config_server->is_valid = 0;
+}
 
 struct configServer *configServerCreate(struct client *client, int use_redis)
 {
@@ -54,23 +66,26 @@ struct configServer *configServerCreate(struct client *client, int use_redis)
     config_server = wmalloc(sizeof(struct configServer));
     if (!config_server)
         return NULL;
+    client->client_data = config_server;
     config_server->config_client = client;
     config_server->pos = 0;
     config_server->use_redis = use_redis;
-    config_server->pending_conns = createList();
     config_server->serve_wait_milliseconds = 0;
     config_server->read_status = READ_SERVER_MAX_ID;
     config_server->status = CONFIG_READ;
     config_server->pending_instance.ip = wstrEmpty();
+    config_server->is_valid = 1;
+    setClientName(client, "Redis config server");
     registerClientRead(client);
+    setClientFreeNotify(client, restartConfigClient);
     return config_server;
 }
 
 void configServerDealloc(struct configServer *config_server)
 {
     wstrFree(config_server->pending_instance.ip);
-    listEach(config_server->pending_conns, (void (*)(void*))finishConn);
-    freeList(config_server->pending_conns);
+    unregisterClientRead(config_server->config_client);
+    freeClient(config_server->config_client);
     wfree(config_server);
 }
 
@@ -527,7 +542,6 @@ cleanup:
 int configFromFile(struct redisServer *server)
 {
     int pos, count, ret;
-    long len;
     struct listIterator *iter = NULL;
     struct redisInstance ins, *instance;
     struct configuration *conf;
@@ -537,7 +551,6 @@ int configFromFile(struct redisServer *server)
     if (!conf->target.ptr)
         return WHEAT_WRONG;
 
-    len = listLength((struct list *)(conf->target.ptr));
     struct listNode *node = NULL;
     iter = listGetIterator(conf->target.ptr, START_HEAD);
     count = 0;
@@ -624,7 +637,13 @@ int isStartServe(struct redisServer *server)
 {
     struct configServer *config_server;
     long millisecond_now = Server.cron_time.tv_sec * 1000 + Server.cron_time.tv_usec /1000;
+
     config_server = server->config_server;
+    if (!config_server->is_valid) {
+        wheatLog(WHEAT_WARNING, "WheatRedis init period failed, now choosing halt");
+        halt(1);
+    }
+
     if (config_server->status != CONFIG_WAIT)
         return 0;
     if (millisecond_now - config_server->serve_wait_milliseconds > WHEAT_SERVE_WAIT_MILLISECONDS)
@@ -645,6 +664,11 @@ int handleConfig(struct redisServer *server, struct conn *c)
     if (c->client != config_server->config_client) {
         appendToListTail(server->pending_conns, c);
         return WHEAT_OK;
+    }
+
+    if (!config_server->is_valid) {
+        wheatLog(WHEAT_WARNING, "WheatRedis config server is unvalid");
+        ASSERT(0);
     }
 
     body = wstrEmpty();

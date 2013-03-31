@@ -35,10 +35,20 @@ static struct configuration RedisConf[] = {
         &RedisSources[0],       ENUM_FORMAT},
 };
 
+static struct statItem RedisStats[] = {
+    {"Current redis unit count", ASSIGN_STAT, RAW, 0, 0},
+    {"Total redis unit count", SUM_STAT, RAW, 0, 0},
+    {"Total timeout response", SUM_STAT, RAW, 0, 0},
+};
+
 static struct moduleAttr AppRedisAttr = {
-    "WheatRedis", NULL, 0,
+    "WheatRedis", RedisStats, sizeof(RedisStats)/sizeof(struct statItem),
     RedisConf, sizeof(RedisConf)/sizeof(struct configuration)
 };
+
+static long long *CurrentUnitCount = NULL;
+static long long *TotalUnitCount = NULL;
+static long long *TotalTimeoutResponse = NULL;
 
 struct app AppRedis = {
     &AppRedisAttr, "Redis", redisAppCron, redisCall,
@@ -62,7 +72,7 @@ struct redisUnit {
 
 static struct redisServer *RedisServer = NULL;
 static struct protocol *RedisProtocol = NULL;
-static void redisClientClosed(struct client *redis_client, void *data);
+static void redisClientClosed(struct client *redis_client);
 void redisAppDeinit();
 
 static struct redisInstance *getInstance(struct redisServer *server, size_t idx,
@@ -76,6 +86,7 @@ static struct redisInstance *getInstance(struct redisServer *server, size_t idx,
 
 static int wakeupInstance(struct redisInstance *instance)
 {
+    char name[255];
     instance->redis_client = buildConn(instance->ip, instance->port, RedisProtocol);
     if (!instance->redis_client)
         return WHEAT_WRONG;
@@ -83,7 +94,9 @@ static int wakeupInstance(struct redisInstance *instance)
     instance->live = 1;
     instance->ntimeout = 0;
     instance->timeout_duration = 0;
-    setClientFreeNotify(instance->redis_client, redisClientClosed, instance);
+    snprintf(name, 255, "Redis Instance %s:%d", instance->ip, instance->port);
+    setClientName(instance->redis_client, name);
+    setClientFreeNotify(instance->redis_client, (void (*)(void*))redisClientClosed);
     registerClientRead(instance->redis_client);
     return WHEAT_OK;
 }
@@ -121,6 +134,7 @@ static struct redisUnit *getRedisUnit()
     unit->sended_instances = (struct redisInstance **)p;
     unit->node = appendToListTail(RedisServer->message_center, unit);
     unit->start = Server.cron_time;
+    (*TotalUnitCount)++;
     return unit;
 }
 
@@ -131,14 +145,17 @@ static void redisUnitFinal(struct redisUnit *unit)
     wfree(unit);
 }
 
-static void redisClientClosed(struct client *redis_client, void *data)
+static void redisClientClosed(struct client *redis_client)
 {
-    struct redisInstance *instance = data;
+    struct redisInstance *instance;
     struct listIterator *iter;
     struct listNode *node;
     struct redisUnit *unit;
+
+    instance = redis_client->client_data;
     RedisServer->live_instances--;
     instance->live = 0;
+    unregisterClientRead(instance->redis_client);
     instance->redis_client = NULL;
     instance->is_dirty = 1;
     iter = listGetIterator(instance->wait_units, START_HEAD);
@@ -237,7 +254,6 @@ static int sendOuterData(struct redisUnit *unit)
             for (i = 1; i < unit->pos; ++i) {
                 instance = unit->redis_conns[i]->client->client_data;
                 if (instance->reliability > reliability_max) {
-                    reliability_instance = instance;
                     redis_conn = unit->redis_conns[i];
                 }
             }
@@ -276,7 +292,7 @@ static int handleClientRequests(struct conn *c)
     unit->outer_conn = c;
 
     nwritted = 0;
-    reliability_instance = NULL;
+    reliability_instance = nondirty_instance = NULL;
     is_read = isReadCommand(c);
     while (nwritted < server->nbackup) {
         if (!unit->first_token)
@@ -388,7 +404,7 @@ void redisAppDeinit()
     RedisServer = NULL;
 }
 
-static struct client *connectConfigServer(char *option)
+struct client *connectConfigServer(char *option)
 {
     int count, port;
     struct client *config_client;
@@ -438,6 +454,8 @@ int redisAppInit(struct protocol *ptocol)
     int ret;
     int use_redis_only;
 
+    CurrentUnitCount = &getStatValByName("Current redis unit count");
+    TotalUnitCount = &getStatValByName("Total redis unit count");
     p = wmalloc(sizeof(struct redisServer));
     RedisServer = server = (struct redisServer*)p;
     server->message_center = createList();
@@ -560,14 +578,23 @@ void redisAppCron()
     long micro_seconds;
 
     if (!server->is_serve) {
+        // server is not starting, we can infer that user is choosing redis to
+        // get config. And now we need to affirm is init config fininshed.
+        // If init config from redis fininshed, we should clean up
+        // `config_server`
         if (isStartServe(server)) {
             server->is_serve = 1;
             wheatLog(WHEAT_VERBOSE, "WheatRedis is starting");
+            configServerDealloc(server->config_server);
+            server->config_server = NULL;
         }
         return ;
     }
+
     for (i = 0; i < narray(server->instances); i++) {
         instance = arrayIndex(server->instances, i);
+        // refresh client avoid being closed because timeout
+        refreshClient(instance->redis_client);
         if (!instance->live) {
             if (wakeupInstance(instance) == WHEAT_WRONG)
                 continue;
@@ -578,6 +605,7 @@ void redisAppCron()
         if (instance->timeout_duration > WHEAT_REDIS_TIMEOUT_DIRTY)
             instance->is_dirty = 1;
     }
+
     i = WHEAT_REDIS_UNIT_MIN > length ? WHEAT_REDIS_UNIT_MIN : length;
     iter = listGetIterator(server->message_center, START_HEAD);
     while ((node = listNext(iter)) != NULL) {
@@ -588,11 +616,14 @@ void redisAppCron()
         if (now_micro - micro_seconds > server->timeout) {
             wheatLog(WHEAT_NOTICE, "wait redis response timeout");
             handleTimeout(unit);
+            TotalTimeoutResponse++;
         } else {
             break;
         }
     }
     freeListIterator(iter);
+
+    *CurrentUnitCount = listLength(server->message_center);
 
     if (listFirst(server->pending_conns)) {
         listEach2(server->pending_conns,
