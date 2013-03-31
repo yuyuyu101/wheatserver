@@ -32,7 +32,7 @@ struct statItem *getStatItemByName(const char *name)
         if (!strcmp(name, stat->name))
             return stat;
     }
-    ASSERT(0);
+    wheatLog(WHEAT_WARNING, "no matched %s", name);
     return NULL;
 }
 

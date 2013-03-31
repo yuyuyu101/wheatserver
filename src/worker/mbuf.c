@@ -53,6 +53,7 @@ struct mbuf {
     uint8_t *end;
 };
 
+
 static struct mbuf *mbufGet(size_t mbuf_size)
 {
     struct mbuf *mbuf;
@@ -81,7 +82,7 @@ struct msghdr *msgCreate(size_t mbuf_size)
         return NULL;
     struct msghdr *hdr = wmalloc(sizeof(*hdr));
     if (hdr == NULL) {
-        mbufFree(mbuf, hdr->mbuf_size);
+        mbufFree(mbuf, mbuf_size);
         return NULL;
     }
     hdr->last_read = hdr->last_write = hdr->protected = mbuf;
@@ -148,6 +149,7 @@ void msgFree(struct msghdr *hdr)
         next = curr->next;
         mbufFree(curr, hdr->mbuf_size);
         curr = next;
+        hdr->mbuf_len--;
     }
     wfree(hdr);
 }

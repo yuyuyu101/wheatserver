@@ -81,5 +81,5 @@ test_mbuf: worker/mbuf.c worker/mbuf.h slice.c slice.h
 
 .PHONY: clean
 clean:
-	rm $(SERVER_OBJECTS) *.gch wheatserver wheatworker
+	rm $(SERVER_OBJECTS) *.gch wheatserver wheatworker wheatworker.o
 

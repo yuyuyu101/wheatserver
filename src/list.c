@@ -98,8 +98,8 @@ void removeListNode(struct list *l, struct listNode *node)
     else
         l->last = node->prev;
     if (l->free) l->free((void*)(node->value));
-    wfree(node);
     l->len--;
+    wfree(node);
 }
 
 void listRotate(struct list *l)
