@@ -16,6 +16,9 @@ Feature
 * Fast: Full C implemented, and discards any module unnecessary and try to
 avoid to copy data.
 
+* Low memory: Keep low memory and take actions to let multi worker processes
+share read-only memory.
+
 * Pluggable: Worker type, protocol implement and application server all can be
 remove and add. You can construct your own worker, application server and
 other.
