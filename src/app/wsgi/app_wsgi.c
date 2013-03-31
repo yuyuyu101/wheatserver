@@ -70,6 +70,7 @@ int wsgiCall(struct conn *c, void *arg)
     /* Build arguments and call application object */
     args = Py_BuildValue("(OO)", env, start_resp);
     Py_DECREF(start_resp);
+    Py_DECREF(env);
     if (args == NULL)
         goto out;
 
