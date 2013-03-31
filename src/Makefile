@@ -1,5 +1,4 @@
 CC=cc
-CXX=c++
 
 APP_SOURCES = app/application.c \
 			  app/wsgi/app_wsgi.c app/wsgi/wsgiwrapper.c app/wsgi/wsgiinput.c \
@@ -26,8 +25,12 @@ WORKER_OBJECTS += wheatworker.o
 PYTHON_VERSION = $(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_version()")
 LIBS += -lpython$(PYTHON_VERSION)
 PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_inc()")
-EXTRA ?=  
+DEBUG ?= 0
+ifeq (DEBUG,1)
 CFLAGS = -O0 -Wall -g $(EXTRA)
+else
+CFLAGS = -O3 -Wall $(EXTRA)
+endif
 
 TESTS = test_wstr test_list test_dict test_slice test_mbuf test_array
 
@@ -82,4 +85,3 @@ test_mbuf: worker/mbuf.c worker/mbuf.h slice.c slice.h
 .PHONY: clean
 clean:
 	rm $(SERVER_OBJECTS) *.gch wheatserver wheatworker wheatworker.o
-
