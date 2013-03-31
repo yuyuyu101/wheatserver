@@ -7,11 +7,9 @@
 #define WHEAT_ASYNC_CLIENT_MAX     1000
 
 static struct evcenter *WorkerCenter = NULL;
-static struct list *Clients = NULL;
 
 // Cache below stat field avoid too much query on StatItems
 // --------- Statistic Cache --------------
-static struct statItem *StatTotalClient = NULL;
 static struct statItem *StatBufferSize = NULL;
 static struct statItem *StatTotalRequest = NULL;
 static struct statItem *StatFailedRequest = NULL;
@@ -36,18 +34,17 @@ struct worker AsyncWorker = {
 
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask);
 
-static void cleanRequest(struct client *c)
+static void deleteEvents(struct client *c)
 {
     deleteEvent(WorkerCenter, c->clifd, EVENT_READABLE);
     deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
-    freeClient(c);
 }
 
 static void tryCleanRequest(struct client *c)
 {
     if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
         return;
-    cleanRequest(c);
+    freeClient(c);
 }
 
 static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)
@@ -56,36 +53,13 @@ static void sendReplyToClient(struct evcenter *center, int fd, void *data, int m
     if (!isClientValid(c))
         return ;
 
-    refreshClient(c, Server.cron_time);
+    refreshClient(c);
 
     clientSendPacketList(c);
     if (!isClientValid(c) || !isClientNeedSend(c)) {
         wheatLog(WHEAT_DEBUG, "delete write event on sendReplyToClient");
         deleteEvent(WorkerCenter, c->clifd, EVENT_WRITABLE);
         tryCleanRequest(c);
-    }
-}
-
-static void clientsCron()
-{
-    unsigned long numclients = listLength(Clients);
-    unsigned long iteration = numclients < 50 ? numclients : numclients / 10;
-    struct client *c = NULL;
-    struct listNode *node = NULL;
-
-    while (listLength(Clients) && iteration--) {
-        node = listFirst(Clients);
-        c = listNodeValue(node);
-        ASSERT(c);
-
-        listRotate(Clients);
-        long idletime = Server.cron_time.tv_sec - c->last_io.tv_sec;
-        if (idletime > Server.worker_timeout) {
-            wheatLog(WHEAT_VERBOSE,"Closing idle client %d %d", Server.cron_time, c->last_io);
-            getStatItemByName("Total timeout client")->val++;
-            cleanRequest(c);
-            continue;
-        }
     }
 }
 
@@ -96,7 +70,7 @@ int asyncSendData(struct conn *c)
 
     struct client *client = c->client;
     clientSendPacketList(client);
-    refreshClient(client, Server.cron_time);
+    refreshClient(client);
     if (!isClientValid(client)) {
         // This function is IO interface, we shouldn't clean client in order
         // to caller to deal with error.
@@ -139,7 +113,7 @@ static int asyncRecvData(struct client *c)
                 msgGetSize(c->req_buf), Server.max_buffer_size);
         setClientUnvalid(c);
     }
-    refreshClient(c, Server.cron_time);
+    refreshClient(c);
     return (int)total;
 }
 
@@ -160,7 +134,6 @@ void asyncWorkerCron()
     time_t elapse = Server.cron_time.tv_sec;
     while (WorkerProcess->alive) {
         processEvents(WorkerCenter, WHEATSERVER_CRON);
-        clientsCron();
         workerProcessCron();
         elapse = Server.cron_time.tv_sec;
         if (elapse - WorkerProcess->refresh_time > refresh_seconds) {
@@ -187,7 +160,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
     gettimeofday(&start, NULL);
     nread = asyncRecvData(client);
     if (!isClientValid(client)) {
-        cleanRequest(client);
+        freeClient(client);
         return ;
     }
     if (msgGetSize(client->req_buf) > getStatVal(StatBufferSize)) {
@@ -242,13 +215,12 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
 
     c = createClient(cfd, ip, cport, WorkerProcess->protocol);
     createEvent(center, cfd, EVENT_READABLE, handleRequest, c);
-    getStatVal(StatTotalClient)++;
+    setClientFreeNotify(c, (void (*)(void*))deleteEvents);
 }
 
 void setupAsync()
 {
     WorkerCenter = eventcenterInit(WHEAT_ASYNC_CLIENT_MAX);
-    Clients = createList();
     if (!WorkerCenter) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
         halt(1);
@@ -259,7 +231,6 @@ void setupAsync()
         wheatLog(WHEAT_WARNING, "createEvent failed");
         halt(1);
     }
-    StatTotalClient = getStatItemByName("Total client");
     StatBufferSize = getStatItemByName("Max buffer size");
     StatTotalRequest = getStatItemByName("Total request");
     StatFailedRequest = getStatItemByName("Total failed request");

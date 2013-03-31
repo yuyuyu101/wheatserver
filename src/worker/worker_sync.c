@@ -39,7 +39,7 @@ int syncSendData(struct conn *c)
     struct client *client = c->client;
     while (isClientNeedSend(client)) {
         clientSendPacketList(client);
-        refreshClient(client, Server.cron_time);
+        refreshClient(client);
         if (!isClientValid(client)) {
             // This function is IO interface, we shouldn't clean client in order
             // to caller to deal with error.
@@ -77,7 +77,7 @@ static int syncRecvData(struct client *c)
                 msgGetSize(c->req_buf), Server.max_buffer_size);
         setClientUnvalid(c);
     }
-    refreshClient(c, Server.cron_time);
+    refreshClient(c);
 
     return (int)total;
 }

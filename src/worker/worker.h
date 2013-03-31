@@ -85,11 +85,6 @@ struct app {
     int is_init;
 };
 
-struct cleanup {
-    void (*func)(void *data);
-    void *clean_data;
-};
-
 struct conn {
     struct client *client;
     void *protocol_data;
@@ -107,13 +102,13 @@ struct client {
     int port;
     struct timeval last_io;
     char *err;
+    wstr name;
     struct protocol *protocol;
     struct conn *pending;
     struct list *conns;
     struct msghdr *req_buf;
     void *client_data;       // Only used by app
-    void (*notifyFree)(struct client *, void *);
-    void *notify_data;
+    struct array *notifies;
 
     unsigned is_outer:1;
     unsigned should_close:1; // Used to indicate whether closing client
@@ -135,6 +130,7 @@ void workerProcessCron();
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
+void setClientFreeNotify(struct client *c, void (*func)(void *));
 void finishConn(struct conn *c);
 void clientSendPacketList(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);
@@ -150,14 +146,12 @@ void registerConnFree(struct conn*, void (*)(void*), void *data);
 #define isClientValid(c)                   ((c)->valid)
 #define setClientUnvalid(c)                ((c)->valid = 0)
 #define isClientNeedParse(c)               (msgCanRead(c)->req_buf))
-#define refreshClient(c, t)                ((c)->last_io = (t))
+#define refreshClient(c)                   ((c)->last_io = (Server.cron_time))
 #define getConnIP(c)                       ((c)->client->ip)
 #define getConnPort(c)                     ((c)->client->port)
 #define setClientClose(c)                  ((c)->client->should_close = 1)
 #define isOuterClient(c)                   ((c)->is_outer == 1)
-#define setClientFreeNotify(c, func, data) \
-    (c)->notifyFree = func; \
-     (c)->notify_data = data
+#define setClientName(c, n)                ((c)->name = wstrCat(c->name, (n)))
 
 /* worker's flow:
  * 0. setup filling workerProcess members

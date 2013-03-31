@@ -27,7 +27,14 @@ struct sendPacket {
     } target;
 };
 
-static struct list *ClientPool = NULL;
+struct callback {
+    void (*func)(void *item);
+    void *data;
+};
+
+static struct list *FreeClients = NULL;
+static struct list *Clients = NULL;
+static struct statItem *StatTotalClient = NULL;
 
 struct worker *spotWorker(char *worker_name)
 {
@@ -40,19 +47,54 @@ struct worker *spotWorker(char *worker_name)
     return NULL;
 }
 
+static void clientsCron()
+{
+    long idletime;
+    unsigned long numclients;
+    unsigned long iteration;
+    struct client *c;
+    struct listNode *node;
+
+    numclients = listLength(Clients);
+    iteration = numclients < 50 ? numclients : numclients / 10;
+    while (listLength(Clients) && iteration--) {
+        node = listFirst(Clients);
+        c = listNodeValue(node);
+        ASSERT(c);
+
+        listRotate(Clients);
+        idletime = Server.cron_time.tv_sec - c->last_io.tv_sec;
+        if (idletime > Server.worker_timeout) {
+            wheatLog(WHEAT_VERBOSE, "Closing idle client %s timeout: %lds",
+                    c->name, idletime);
+            getStatItemByName("Total timeout client")->val++;
+            freeClient(c);
+            continue;
+        }
+
+        if (!listLength(c->conns))
+            msgClean(c->req_buf);
+    }
+}
+
 void workerProcessCron()
 {
     static long long max_cron_interval = 0;
+
     struct timeval nowval;
     long long interval;
     int i = 0;
-    struct app *app = AppTable[0];
+    struct app *app;
+
+    app = AppTable[0];
     while (app) {
         if (app->is_init && app->appCron) {
             app->appCron();
         }
         app = AppTable[++i];
     }
+
+    clientsCron();
     if (WorkerProcess->ppid != getppid()) {
         wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
         WorkerProcess->alive = 0;
@@ -70,10 +112,10 @@ void workerProcessCron()
 
 static struct list *createAndFillPool()
 {
+    int i;
     struct list *l = createList();
-    int i = 0;
     ASSERT(l);
-    for (; i < 120; ++i) {
+    for (i = 0; i < 120; ++i) {
         struct client *c = wmalloc(sizeof(*c));
         appendToListTail(l, c);
     }
@@ -85,6 +127,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     struct configuration *conf;
     int i;
     struct protocol *p;
+
     if (Server.stat_fd != 0)
         close(Server.stat_fd);
     setProctitle(worker_name);
@@ -98,7 +141,8 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     ASSERT(worker->worker);
     worker->stats = NULL;
     initWorkerSignals();
-    ClientPool = createAndFillPool();
+    FreeClients = createAndFillPool();
+    Clients = createList();
     // It may nonblock after fork???
     if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
         wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
@@ -120,6 +164,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
         halt(1);
     }
 
+    StatTotalClient = getStatItemByName("Total client");
     gettimeofday(&Server.cron_time, NULL);
     worker->worker->setup();
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
@@ -163,29 +208,26 @@ struct conn *connGet(struct client *client)
     c->ready_send = 0;
     c->send_queue = createList();
     listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
-    c->cleanup = arrayCreate(sizeof(struct cleanup), 2);
+    c->cleanup = arrayCreate(sizeof(struct callback), 2);
     return c;
 }
 
-static void cleanupCallback(void *data)
+static void callbackCall(void *data)
 {
-    struct cleanup *c = data;
-    c->func(c->clean_data);
+    struct callback *c = data;
+    c->func(c->data);
 }
 
 static void connDealloc(struct conn *c)
 {
-    struct client *client = c->client;
     if (c->protocol_data)
         c->client->protocol->freeProtocolData(c->protocol_data);
     if (c->app_private_data)
         c->app->freeAppData(c->app_private_data);
-    arrayEach(c->cleanup, cleanupCallback);
+    arrayEach(c->cleanup, callbackCall);
     arrayDealloc(c->cleanup);
     freeList(c->send_queue);
     wfree(c);
-    if (!listLength(client->conns))
-        msgClean(client->req_buf);
 }
 
 void finishConn(struct conn *c)
@@ -196,9 +238,9 @@ void finishConn(struct conn *c)
 
 void registerConnFree(struct conn *conn, void (*clean)(void*), void *data)
 {
-    struct cleanup cleanup;
+    struct callback cleanup;
     cleanup.func = clean;
-    cleanup.clean_data = data;
+    cleanup.data = data;
     arrayPush(conn->cleanup, &cleanup);
 }
 
@@ -216,11 +258,14 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
 {
     struct client *c;
     struct listNode *node;
-    if ((node = listFirst(ClientPool)) == NULL) {
+
+    node = listFirst(FreeClients);
+    if (node == NULL) {
         c = wmalloc(sizeof(*c));
     } else {
         c = listNodeValue(node);
-        removeListNode(ClientPool, node);
+        removeListNode(FreeClients, node);
+        appendToListTail(Clients, c);
     }
     if (c == NULL)
         return NULL;
@@ -237,21 +282,30 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->valid = 1;
     c->pending = NULL;
     c->client_data = NULL;
+    c->notifies = arrayCreate(sizeof(struct callback), 1);
     c->last_io = Server.cron_time;
-    c->notifyFree = NULL;
+    c->name = wstrEmpty();
+
+    getStatVal(StatTotalClient)++;
     return c;
 }
 
 void freeClient(struct client *c)
 {
+    struct listNode *node;
+    arrayEach(c->notifies, callbackCall);
     close(c->clifd);
     wstrFree(c->ip);
+    wstrFree(c->name);
     msgFree(c->req_buf);
     freeList(c->conns);
-    if (c->notifyFree)
-        c->notifyFree(c, c->notify_data);
-    if (listLength(ClientPool) > 100) {
-        appendToListTail(ClientPool, c);
+    arrayDealloc(c->notifies);
+    node = searchListKey(Clients, c);
+    if (!node)
+        ASSERT(0);
+    removeListNode(Clients, node);
+    if (listLength(FreeClients) <= 120) {
+        appendToListTail(FreeClients, c);
     } else {
         wfree(c);
     }
@@ -269,6 +323,14 @@ int isClientNeedSend(struct client *c)
         }
     }
     return 0;
+}
+
+void setClientFreeNotify(struct client *c, void (*func)(void *))
+{
+    struct callback notify;
+    notify.func = func;
+    notify.data = c;
+    arrayPush(c->notifies, &notify);
 }
 
 // Return value:
