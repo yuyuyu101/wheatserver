@@ -85,10 +85,10 @@ int hashAdd(struct redisServer *server, wstr ip, int port, int id)
 int hashInit(struct redisServer *server)
 {
     ASSERT(narray(server->instances) >= server->nbackup);
-    struct token *tokens = server->tokens, *last_token = NULL;
     struct redisInstance *instance;
     size_t ntoken, ninstance, swap;
     int i, prev_idx;
+    struct token *tokens = server->tokens, *last_token = NULL;
 
     ntoken = WHEAT_KEYSPACE;
     tokens = wmalloc(sizeof(struct token)*ntoken);
