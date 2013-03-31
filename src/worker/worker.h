@@ -129,9 +129,9 @@ void workerProcessCron();
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
-void setClientFreeNotify(struct client *c, void (*func)(void *));
+void setClientFreeNotify(struct client *c, void (*func)(struct client *));
 void finishConn(struct conn *c);
-void tryCleanRequest(struct client *c);
+void tryFreeClient(struct client *c);
 void clientSendPacketList(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);
 struct client *buildConn(char *ip, int port, struct protocol *p);

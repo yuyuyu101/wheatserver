@@ -89,60 +89,6 @@ static void clientsCron()
     }
 }
 
-void workerProcessCron()
-{
-    static long long max_cron_interval = 0;
-
-    struct timeval nowval;
-    long long interval;
-    int i;
-    struct app *app;
-    int refresh_seconds;
-
-    refresh_seconds = Server.stat_refresh_seconds;
-
-    while (WorkerProcess->alive) {
-        i = 0;
-        app = AppTable[0];
-        while (app) {
-            if (app->is_init && app->appCron) {
-                app->appCron();
-            }
-            app = AppTable[++i];
-        }
-
-        clientsCron();
-        WorkerProcess->worker->cron();
-        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
-        if (WorkerProcess->ppid != getppid()) {
-            wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
-            WorkerProcess->alive = 0;
-        }
-
-        if (Server.cron_time.tv_sec - WorkerProcess->refresh_time > refresh_seconds) {
-            sendStatPacket(WorkerProcess);
-            WorkerProcess->refresh_time = Server.cron_time.tv_sec;
-        }
-
-        // Get the max worker cron interval for statistic info
-        gettimeofday(&nowval, NULL);
-        interval = getMicroseconds(nowval) - getMicroseconds(Server.cron_time);
-        if (interval > max_cron_interval) {
-            max_cron_interval = interval;
-            getStatValByName("Max worker cron interval") = interval;
-        }
-        Server.cron_time = nowval;
-    }
-
-    // Stop accept new client
-    deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
-    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
-    while (Server.cron_time.tv_sec - WorkerProcess->refresh_time < Server.graceful_timeout) {
-        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
-        gettimeofday(&Server.cron_time, NULL);
-    }
-}
-
 static struct list *createAndFillPool()
 {
     int i;
@@ -230,19 +176,15 @@ void freeWorkerProcess(void *w)
     wfree(worker);
 }
 
-int initAppData(struct conn *c)
-{
-    if (c->app && c->app->initAppData) {
-        c->app_private_data = c->app->initAppData(c);
-        if (!c->app_private_data)
-            return WHEAT_WRONG;
-    }
-    return WHEAT_OK;
-}
-
-void freeSendPacket(struct sendPacket *p)
+static void freeSendPacket(struct sendPacket *p)
 {
     wfree(p);
+}
+
+static void callbackCall(void *data)
+{
+    struct callback *c = data;
+    c->func(c->data);
 }
 
 struct conn *connGet(struct client *client)
@@ -261,12 +203,6 @@ struct conn *connGet(struct client *client)
     listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
     c->cleanup = arrayCreate(sizeof(struct callback), 2);
     return c;
-}
-
-static void callbackCall(void *data)
-{
-    struct callback *c = data;
-    c->func(c->data);
 }
 
 static void connDealloc(struct conn *c)
@@ -295,7 +231,20 @@ void registerConnFree(struct conn *conn, void (*clean)(void*), void *data)
     arrayPush(conn->cleanup, &cleanup);
 }
 
-void appendSliceToSendQueue(struct conn *conn, struct slice *s)
+static void appendFileToSendQueue(struct conn *conn, int fd, off_t off, size_t len)
+{
+    struct sendPacket *packet = wmalloc(sizeof(*packet));
+    if (!packet)
+        setClientUnvalid(conn->client);
+    packet->type = FILE_DESCRIPTION;
+    packet->target.file.fd = fd;
+    packet->target.file.off = off;
+    packet->target.file.len = len;
+
+    appendToListTail(conn->send_queue, packet);
+}
+
+static void appendSliceToSendQueue(struct conn *conn, struct slice *s)
 {
     struct sendPacket *packet = wmalloc(sizeof(*packet));
     if (!packet)
@@ -364,6 +313,13 @@ void freeClient(struct client *c)
     }
 }
 
+void tryFreeClient(struct client *c)
+{
+    if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
+        return;
+    freeClient(c);
+}
+
 int isClientNeedSend(struct client *c)
 {
     struct listNode *node;
@@ -378,10 +334,10 @@ int isClientNeedSend(struct client *c)
     return 0;
 }
 
-void setClientFreeNotify(struct client *c, void (*func)(void *))
+void setClientFreeNotify(struct client *c, void (*func)(struct client *))
 {
     struct callback notify;
-    notify.func = func;
+    notify.func = (void (*)(void*))func;
     notify.data = c;
     arrayPush(c->notifies, &notify);
 }
@@ -459,19 +415,6 @@ void clientSendPacketList(struct client *c)
     }
 }
 
-void appendFileToSendQueue(struct conn *conn, int fd, off_t off, size_t len)
-{
-    struct sendPacket *packet = wmalloc(sizeof(*packet));
-    if (!packet)
-        setClientUnvalid(conn->client);
-    packet->type = FILE_DESCRIPTION;
-    packet->target.file.fd = fd;
-    packet->target.file.off = off;
-    packet->target.file.len = len;
-
-    appendToListTail(conn->send_queue, packet);
-}
-
 struct client *buildConn(char *ip, int port, struct protocol *p)
 {
     struct client *c = NULL;
@@ -492,28 +435,6 @@ struct client *buildConn(char *ip, int port, struct protocol *p)
     }
     c->is_outer = 0;
     return c;
-}
-
-int sendClientFile(struct conn *c, int fd, off_t len)
-{
-    int send = 0;
-    appendFileToSendQueue(c, fd, send, len-send);
-    return WorkerProcess->worker->sendData(c);
-}
-
-int sendClientData(struct conn *c, struct slice *s)
-{
-    if (!s->len)
-        return WHEAT_OK;
-    appendSliceToSendQueue(c, s);
-    return WorkerProcess->worker->sendData(c);
-}
-
-void tryCleanRequest(struct client *c)
-{
-    if (isClientValid(c) && (isClientNeedSend(c) || !c->should_close))
-        return;
-    freeClient(c);
 }
 
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
@@ -569,7 +490,7 @@ static void handleRequest(struct evcenter *center, int fd, void *data, int mask)
             continue;
         }
     }
-    tryCleanRequest(client);
+    tryFreeClient(client);
     gettimeofday(&end, NULL);
     time_use = 1000000 * (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec);
     getStatVal(StatRunTime) += time_use;
@@ -592,3 +513,84 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
 
     c = createClient(cfd, ip, cport, WorkerProcess->protocol);
 }
+
+int initAppData(struct conn *c)
+{
+    if (c->app && c->app->initAppData) {
+        c->app_private_data = c->app->initAppData(c);
+        if (!c->app_private_data)
+            return WHEAT_WRONG;
+    }
+    return WHEAT_OK;
+}
+
+int sendClientFile(struct conn *c, int fd, off_t len)
+{
+    int send = 0;
+    appendFileToSendQueue(c, fd, send, len-send);
+    return WorkerProcess->worker->sendData(c);
+}
+
+int sendClientData(struct conn *c, struct slice *s)
+{
+    if (!s->len)
+        return WHEAT_OK;
+    appendSliceToSendQueue(c, s);
+    return WorkerProcess->worker->sendData(c);
+}
+
+void workerProcessCron()
+{
+    static long long max_cron_interval = 0;
+
+    struct timeval nowval;
+    long long interval;
+    int i;
+    struct app *app;
+    int refresh_seconds;
+
+    refresh_seconds = Server.stat_refresh_seconds;
+
+    while (WorkerProcess->alive) {
+        i = 0;
+        app = AppTable[0];
+        while (app) {
+            if (app->is_init && app->appCron) {
+                app->appCron();
+            }
+            app = AppTable[++i];
+        }
+
+        clientsCron();
+        WorkerProcess->worker->cron();
+        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
+        if (WorkerProcess->ppid != getppid()) {
+            wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
+            WorkerProcess->alive = 0;
+        }
+
+        if (Server.cron_time.tv_sec - WorkerProcess->refresh_time > refresh_seconds) {
+            sendStatPacket(WorkerProcess);
+            WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+        }
+
+        // Get the max worker cron interval for statistic info
+        gettimeofday(&nowval, NULL);
+        interval = getMicroseconds(nowval) - getMicroseconds(Server.cron_time);
+        if (interval > max_cron_interval) {
+            max_cron_interval = interval;
+            getStatValByName("Max worker cron interval") = interval;
+        }
+        Server.cron_time = nowval;
+    }
+
+    // Stop accept new client
+    deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
+    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+    while (Server.cron_time.tv_sec - WorkerProcess->refresh_time < Server.graceful_timeout) {
+        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
+        gettimeofday(&Server.cron_time, NULL);
+    }
+}
+
+

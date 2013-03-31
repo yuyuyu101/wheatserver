@@ -96,7 +96,7 @@ static int wakeupInstance(struct redisInstance *instance)
     instance->timeout_duration = 0;
     snprintf(name, 255, "Redis Instance %s:%d", instance->ip, instance->port);
     setClientName(instance->redis_client, name);
-    setClientFreeNotify(instance->redis_client, (void (*)(void*))redisClientClosed);
+    setClientFreeNotify(instance->redis_client, redisClientClosed);
     return WHEAT_OK;
 }
 
