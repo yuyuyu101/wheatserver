@@ -204,65 +204,18 @@ static int sendRedisData(struct conn *outer_conn,
 static int sendOuterData(struct redisUnit *unit)
 {
     struct slice *next;
-    int ret, i, consistence, reliability_max;
-    wstr *replys;
-    struct redisInstance *instance, *reliability_instance;
+    int ret;
     struct conn *outer_conn, *redis_conn;
     ASSERT(unit->pos > 0);
 
     redis_conn = unit->redis_conns[0];
     outer_conn = unit->outer_conn;
-    if (isReadCommand(outer_conn)) {
-        while ((next = redisBodyNext(redis_conn)) != NULL) {
-            ret = sendClientData(outer_conn, next);
-            if (ret == -1) {
-                redisUnitFinal(unit);
-                return WHEAT_WRONG;
-            }
-        }
-    } else {
-        consistence = 1;
-        replys = wmalloc(sizeof(wstr)*unit->pos);
-        for (i = 0; i < unit->pos; ++i) {
-            replys[i] = wstrNewLen(NULL, 20);
-            while ((next = redisBodyNext(unit->redis_conns[i])) != NULL) {
-                replys[i] = wstrCatLen(replys[i], (char*)next->data,
-                        next->len);
-            }
-            if (i && wstrCmp(replys[i], replys[i-1])) {
-                struct slice key;
-                struct redisInstance *left, *right;
-                getRedisKey(outer_conn, &key);
-                left = unit->redis_conns[i-1]->client->client_data;
-                right = unit->redis_conns[i]->client->client_data;
-                wheatLog(WHEAT_WARNING,
-                        "write command response inconsistence on key %s!"
-                        "Between %s:%d and %s:%d",
-                        key.data, left->ip, left->port, right->ip, right->port);
-                consistence = 0;
-            }
-        }
-        for (i = 0; i < unit->pos; ++i) {
-            wstrFree(replys[i]);
-        }
-        wfree(replys);
-        if (!consistence) {
-            reliability_instance = unit->redis_conns[0]->client->client_data;
-            reliability_max = reliability_instance->reliability;
-            for (i = 1; i < unit->pos; ++i) {
-                instance = unit->redis_conns[i]->client->client_data;
-                if (instance->reliability > reliability_max) {
-                    redis_conn = unit->redis_conns[i];
-                }
-            }
-        }
-        redisBodyStart(redis_conn);
-        while ((next = redisBodyNext(redis_conn)) != NULL) {
-            ret = sendClientData(outer_conn, next);
-            if (ret == -1) {
-                redisUnitFinal(unit);
-                return WHEAT_WRONG;
-            }
+    redisBodyStart(redis_conn);
+    while ((next = redisBodyNext(redis_conn)) != NULL) {
+        ret = sendClientData(outer_conn, next);
+        if (ret == -1) {
+            redisUnitFinal(unit);
+            return WHEAT_WRONG;
         }
     }
     redisUnitFinal(unit);

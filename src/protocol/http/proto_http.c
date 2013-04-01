@@ -117,32 +117,27 @@ char *httpDate()
 
 const char *httpGetUrlScheme(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->url_scheme;
+    return ((struct httpData*)c->protocol_data)->url_scheme;
 }
 
 const char *httpGetMethod(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->method;
+    return ((struct httpData*)c->protocol_data)->method;
 }
 
 const char *httpGetProtocolVersion(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->protocol_version;
+    return ((struct httpData*)c->protocol_data)->protocol_version;
 }
 
 const wstr httpGetQueryString(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->query_string;
+    return ((struct httpData*)c->protocol_data)->query_string;
 }
 
 const wstr httpGetPath(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->path;
+    return ((struct httpData*)c->protocol_data)->path;
 }
 
 const struct slice *httpGetBodyNext(struct conn *c)
@@ -157,29 +152,25 @@ const struct slice *httpGetBodyNext(struct conn *c)
 
 int httpBodyGetSize(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->body.body_len;
+    return ((struct httpData*)c->protocol_data)->body.body_len;
 }
 
 struct dict *httpGetReqHeaders(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->req_headers;
+    return ((struct httpData*)c->protocol_data)->req_headers;
 }
 
 int ishttpHeaderSended(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->headers_sent;
+    return ((struct httpData*)c->protocol_data)->headers_sent;
 }
 
 int httpGetResStatus(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    return data->res_status;
+    return ((struct httpData*)c->protocol_data)->res_status;
 }
 
-int isChunked(struct httpData *http_data)
+static int isChunked(struct httpData *http_data)
 {
     return http_data->is_chunked_in_header &&
         http_data->response_length == 0 &&
