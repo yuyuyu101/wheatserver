@@ -4,8 +4,6 @@
 
 #include "worker.h"
 
-void setupSync();
-void syncWorkerCron();
 int syncSendData(struct conn *c); // pass `data` ownership to
 int syncRecvData(struct client *c);
 
@@ -14,7 +12,7 @@ static struct moduleAttr SyncWorkerAttr = {
 };
 
 struct worker SyncWorker = {
-    &SyncWorkerAttr, setupSync, syncWorkerCron, syncSendData,
+    &SyncWorkerAttr, NULL, NULL, syncSendData,
     syncRecvData
 };
 
@@ -65,12 +63,4 @@ int syncRecvData(struct client *c)
     refreshClient(c);
 
     return (int)total;
-}
-
-void syncWorkerCron()
-{
-}
-
-void setupSync()
-{
 }

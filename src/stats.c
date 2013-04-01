@@ -241,21 +241,31 @@ static wstr getStatFormat(struct array *stats, wstr format_stat)
 
 void logStat()
 {
+    FILE *fp;
     wstr format_stat = wstrEmpty();
-    wheatLog(WHEAT_LOG_RAW, "---- Master Statistic Information -----\n");
     format_stat = getStatFormat(Server.stats, format_stat);
-    wheatLog(WHEAT_LOG_RAW, "%s", format_stat);
-//    wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
-//    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
-//    while ((node = listNext(iter)) != NULL) {
-//        worker = listNodeValue(node);
-//        stat = worker->stat;
-//        wheatLog(WHEAT_LOG_RAW, "\nStart Time: %s", ctime(&worker->start_time));
-//        getWorkerStatFormat(stat, buf, 1024);
-//        wheatLog(WHEAT_LOG_RAW, "%s", buf);
-//    }
-//    freeListIterator(iter);
-    wheatLog(WHEAT_LOG_RAW, "---------------------------------------\n");
+    if (!Server.stat_file) {
+        wheatLog(WHEAT_LOG_RAW, "---- Master Statistic Information -----\n");
+        wheatLog(WHEAT_LOG_RAW, "%s", format_stat);
+        //    wheatLog(WHEAT_LOG_RAW, "-- Workers Statistic Information are --\n");
+        //    struct listIterator *iter = listGetIterator(Server.workers, START_HEAD);
+        //    while ((node = listNext(iter)) != NULL) {
+        //        worker = listNodeValue(node);
+        //        stat = worker->stat;
+        //        wheatLog(WHEAT_LOG_RAW, "\nStart Time: %s", ctime(&worker->start_time));
+        //        getWorkerStatFormat(stat, buf, 1024);
+        //        wheatLog(WHEAT_LOG_RAW, "%s", buf);
+        //    }
+        //    freeListIterator(iter);
+        wheatLog(WHEAT_LOG_RAW, "---------------------------------------\n");
+    } else {
+        fp = fopen(Server.stat_file, "a");
+        if (!fp)
+            return;
+        fprintf(fp, "%s", format_stat);
+        fflush(fp);
+        fclose(fp);
+    }
     wstrFree(format_stat);
 }
 

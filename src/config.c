@@ -50,6 +50,8 @@ struct configuration configTable[] = {
         NULL,                   INT_FORMAT},
     {"stat-refresh-time", 2, unsignedIntValidator, {.val=WHEAT_STAT_REFRESH},
         NULL,                   INT_FORMAT},
+    {"stat-file",         2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
     {"timeout-seconds",   2, unsignedIntValidator, {.val=WHEATSERVER_TIMEOUT},
         (void *)300,            INT_FORMAT},
     {"mbuf-size",         2, unsignedIntValidator, {.val=WHEAT_MBUF_SIZE},
@@ -84,6 +86,8 @@ void fillServerConfig()
     conf++;
     Server.stat_refresh_seconds = conf->target.val;
     conf++;
+    Server.stat_file = conf->target.ptr;
+    conf++;
     Server.worker_timeout = conf->target.val;
     conf++;
     Server.mbuf_size = conf->target.val;
@@ -99,7 +103,7 @@ int stringValidator(struct configuration *conf, const char *key, const char *val
         wfree(conf->target.ptr);
         conf->helper = NULL;
     }
-    if (!strcasecmp(val, "NULL"))
+    if (!strncasecmp(val, WHEAT_STR_NULL, sizeof(WHEAT_STR_NULL)))
         conf->target.ptr = NULL;
     else
         conf->target.ptr = strdup(val);

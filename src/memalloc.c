@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#if 0
+#ifdef DEBUG
 #include <stdio.h>
 static int alloc[33000];
 #define STAT_ALLOC(size) do { \
@@ -49,5 +49,3 @@ void wfree(void *ptr)
 {
     free(ptr);
 }
-
-

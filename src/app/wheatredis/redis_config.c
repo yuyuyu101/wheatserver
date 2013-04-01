@@ -48,12 +48,10 @@ struct configServer {
 
 static int saveConfigToServer(struct redisServer *server);
 
-static void restartConfigClient(void *item)
+static void restartConfigClient(struct client *client)
 {
-    struct client *client;
     struct configServer *config_server;
 
-    client = item;
     config_server = client->client_data;
 
     config_server->config_client = NULL;

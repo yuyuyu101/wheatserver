@@ -67,6 +67,7 @@
 #define WHEAT_PREALLOC_CLIENT  100
 #define WHEAT_MAX_BUFFER_SIZE  4*1024*1024
 #define WHEAT_MAX_FILE_LIMIT   16*1024*1024
+#define WHEAT_STR_NULL         "NULL"
 
 /* Command Format */
 #define WHEAT_START_SPLIT     "\r\r"
@@ -81,11 +82,9 @@
 #define VALIDATE_OK       0
 #define VALIDATE_WRONG    1
 
-/* This exists some drawbacks taht globalServer include server configuration
+/* This exists some drawbacks globalServer include server configuration
  * and master info */
 struct globalServer {
-    /* if it can be configated, right comment is the config name and default value */
-    /* base Configuration */
     char *bind_addr;                             //bind-addr, *
     int port;                                    //port, 10828
     int worker_number;                           //worker-number, 2
@@ -102,6 +101,7 @@ struct globalServer {
     char *stat_addr;                             //stat-bind-addr, 127.0.0.1
     int stat_port;                               //stat-port, 10829
     int stat_refresh_seconds;                    //stat-refresh-time, 10
+    char *stat_file;
 
     /* status */
     char master_name[WHEATSERVER_MAX_NAMELEN];

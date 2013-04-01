@@ -132,7 +132,6 @@ struct redisProcData {
     int curr_arg;
     int args;
     wstr key;
-//  struct slice *argvs;
     enum reqStage stage;
     enum redisCommand command;
     int is_read;

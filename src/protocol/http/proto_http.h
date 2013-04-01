@@ -8,14 +8,14 @@
 #include "../protocol.h"
 #include "http_parser.h"
 
-#define TRANSFER_ENCODING "Transfer-Encoding"
-#define CONTENT_LENGTH    "Content-Length"
-#define CONTENT_TYPE      "Content-Type"
-#define CONNECTION        "Connection"
-#define LAST_MODIFIED     "Last-Modified"
-#define IF_MODIFIED_SINCE "If-Modified-Since"
-#define CHUNKED           "Chunked"
-#define HTTP_CONTINUE     "HTTP/1.1 100 Continue\r\n\r\n"
+#define TRANSFER_ENCODING    "Transfer-Encoding"
+#define CONTENT_LENGTH       "Content-Length"
+#define CONTENT_TYPE         "Content-Type"
+#define CONNECTION           "Connection"
+#define LAST_MODIFIED        "Last-Modified"
+#define IF_MODIFIED_SINCE    "If-Modified-Since"
+#define CHUNKED              "Chunked"
+#define HTTP_CONTINUE        "HTTP/1.1 100 Continue\r\n\r\n"
 
 const wstr httpGetPath(struct conn *c);
 const wstr httpGetQueryString(struct conn *c);

@@ -154,7 +154,8 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 
     StatTotalClient = getStatItemByName("Total client");
     gettimeofday(&Server.cron_time, NULL);
-    worker->worker->setup();
+    if (worker->worker->setup)
+        worker->worker->setup();
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
 
     FreeClients = createAndFillPool();
@@ -163,7 +164,6 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     StatTotalRequest = getStatItemByName("Total request");
     StatFailedRequest = getStatItemByName("Total failed request");
     StatRunTime = getStatItemByName("Worker run time");
-
 
     sendStatPacket(WorkerProcess);
 }
@@ -548,9 +548,10 @@ void workerProcessCron()
     int i;
     struct app *app;
     int refresh_seconds;
+    void (*worker_cron)();
 
     refresh_seconds = Server.stat_refresh_seconds;
-
+    worker_cron = WorkerProcess->worker->cron;
     while (WorkerProcess->alive) {
         i = 0;
         app = AppTable[0];
@@ -562,7 +563,8 @@ void workerProcessCron()
         }
 
         clientsCron();
-        WorkerProcess->worker->cron();
+        if(worker_cron)
+            worker_cron();
         processEvents(WorkerProcess->center, WHEATSERVER_CRON);
         if (WorkerProcess->ppid != getppid()) {
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
@@ -592,5 +594,3 @@ void workerProcessCron()
         gettimeofday(&Server.cron_time, NULL);
     }
 }
-
-

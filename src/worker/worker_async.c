@@ -4,8 +4,6 @@
 
 #include "worker.h"
 
-void setupAsync();
-void asyncWorkerCron();
 int asyncSendData(struct conn *c); // pass `data` ownership to
 int asyncRecvData(struct client *c);
 
@@ -14,7 +12,7 @@ static struct moduleAttr AsyncWorkerAttr = {
 };
 
 struct worker AsyncWorker = {
-    &AsyncWorkerAttr, setupAsync, asyncWorkerCron, asyncSendData,
+    &AsyncWorkerAttr, NULL, NULL, asyncSendData,
     asyncRecvData
 };
 
@@ -85,12 +83,4 @@ int asyncRecvData(struct client *c)
     }
     refreshClient(c);
     return (int)total;
-}
-
-void asyncWorkerCron()
-{
-}
-
-void setupAsync()
-{
 }
