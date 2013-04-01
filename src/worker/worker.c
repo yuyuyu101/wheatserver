@@ -7,7 +7,7 @@
 struct workerProcess *WorkerProcess = NULL;
 
 #define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
-#define WHEAT_CLIENT_MAX      120
+#define WHEAT_CLIENT_MAX      1000
 
 // Cache below stat field avoid too much query on StatItems
 // --------- Statistic Cache --------------
@@ -302,7 +302,7 @@ void freeClient(struct client *c)
     freeList(c->conns);
     arrayDealloc(c->notifies);
     node = searchListKey(Clients, c);
-    deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
+    deleteEvent(WorkerProcess->center, c->clifd, EVENT_READABLE|EVENT_WRITABLE);
     if (!node)
         ASSERT(0);
     removeListNode(Clients, node);
