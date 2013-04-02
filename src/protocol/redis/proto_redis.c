@@ -143,8 +143,11 @@ struct redisProcData {
 static int redisCommandHandle(struct redisProcData *redis_data,
         wstr command)
 {
-    uint8_t *c = (uint8_t *)command;
-    int args = wstrlen(command);
+    uint8_t *c;
+    int args;
+
+    args = wstrlen(command);
+    c = (uint8_t *)command;
     switch (args) {
         case 3:
             if (str3icmp(c, 'd', 'e', 'l'))
@@ -402,9 +405,10 @@ static int redisCommandHandle(struct redisProcData *redis_data,
 
 static ssize_t redisResParser(struct redisProcData *redis_data, struct slice *s)
 {
+    char ch;
     size_t pos = 0;
     while (pos < s->len) {
-        char ch = s->data[pos];
+        ch = s->data[pos];
         switch (redis_data->stage) {
             case MES_START:
                 if (ch == '+' || ch == '-' || ch == ':') {
@@ -530,10 +534,11 @@ redis_err:
 
 static ssize_t redisReqParser(struct redisProcData *redis_data, struct slice *s)
 {
-    size_t pos = 0;
     enum redisCommand command_type;
+    char ch;
+    size_t pos = 0;
     while (pos < s->len) {
-        char ch = s->data[pos];
+        ch = s->data[pos];
         switch (redis_data->stage) {
             case MES_START:
                 if (ch != '*')

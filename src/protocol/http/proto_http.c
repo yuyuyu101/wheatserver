@@ -142,8 +142,11 @@ const wstr httpGetPath(struct conn *c)
 
 const struct slice *httpGetBodyNext(struct conn *c)
 {
-    struct httpData *data = c->protocol_data;
-    struct slice *s = data->body.curr_body;
+    struct httpData *data;
+    struct slice *s;
+
+    data = c->protocol_data;
+    s = data->body.curr_body;
     if (s == data->body.end_body)
         return NULL;
     data->body.curr_body++;
@@ -212,8 +215,11 @@ static const char *connectionField(struct conn *c)
 int appendToResHeaders(struct conn *c, const char *field,
         const char *value)
 {
-    struct httpData *http_data = c->protocol_data;
-    int ret = dictAdd(http_data->res_headers, wstrNew(field), wstrNew(value));
+    struct httpData *http_data;
+    int ret;
+
+    http_data = c->protocol_data;
+    ret = dictAdd(http_data->res_headers, wstrNew(field), wstrNew(value));
     if (ret == DICT_WRONG)
         return -1;
     return 0;
@@ -228,9 +234,9 @@ void fillResInfo(struct conn *c, int status, const char *msg)
 
 static wstr defaultResHeader(struct conn *c, wstr headers)
 {
-    struct httpData *http_data = c->protocol_data;
     char buf[256];
     int ret;
+    struct httpData *http_data = c->protocol_data;
     ASSERT(http_data->res_status && http_data->res_status_msg);
 
     ret = snprintf(buf, sizeof(buf), "%s %d %s\r\n", http_data->protocol_version,
@@ -311,8 +317,9 @@ void parserForward(wstr value, wstr *h, wstr *p)
 int on_header_field(http_parser *parser, const char *at, size_t len)
 {
     int ret;
-    struct httpData *data = parser->data;
     wstr key;
+    struct httpData *data = parser->data;
+
     if (!data->last_was_value && data->last_entry != NULL) {
         key = data->last_entry->key;
         ret = dictDeleteNoFree(data->req_headers, key);
@@ -336,8 +343,8 @@ int on_header_field(http_parser *parser, const char *at, size_t len)
  */
 int on_header_value(http_parser *parser, const char *at, size_t len)
 {
-    struct httpData *data = parser->data;
     wstr value;
+    struct httpData *data = parser->data;
     if (data->last_was_value) {
         value = dictGetVal(data->last_entry);
         value = wstrCatLen(value, at, len);
@@ -353,11 +360,13 @@ int on_header_value(http_parser *parser, const char *at, size_t len)
 
 int on_body(http_parser *parser, const char *at, size_t len)
 {
-    struct httpData *data = parser->data;
-    struct httpBody *body = &data->body;
+    struct httpData *data;
+    struct httpBody *body;
+
+    data = parser->data;
+    body = &data->body;
     if (body->end_body == body->body + body->slice_len) {
-        int ret = enlargeHttpBody(&data->body);
-        if (ret == -1)
+        if (enlargeHttpBody(&data->body) == -1);
             return 1;
         body = &data->body;
     }
@@ -386,11 +395,11 @@ int on_message_complete(http_parser *parser)
 
 int on_url(http_parser *parser, const char *at, size_t len)
 {
-    struct httpData *data = parser->data;
     struct http_parser_url parser_url;
+    struct httpData *data = parser->data;
+
     memset(&parser_url, 0, sizeof(struct http_parser_url));
-    int ret = http_parser_parse_url(at, len, 0, &parser_url);
-    if (ret)
+    if (http_parser_parse_url(at, len, 0, &parser_url))
         return 1;
     data->query_string = wstrNewLen(at+parser_url.field_data[UF_QUERY].off, parser_url.field_data[UF_QUERY].len);
     data->path = wstrNewLen(at+parser_url.field_data[UF_PATH].off, parser_url.field_data[UF_PATH].len);
@@ -488,6 +497,7 @@ static FILE *openAccessLog()
     struct configuration *conf;
     FILE *fp;
     char *access_log;
+
     conf = getConfiguration("access-log");
     access_log = conf->target.ptr;
     if (access_log == NULL)
@@ -563,13 +573,13 @@ void logAccess(struct conn *c)
 {
     if (!AccessFp)
         return ;
-    struct httpData *http_data = c->protocol_data;
     const char *remote_addr, *hyphen, *user, *datetime, *request;
     const char *refer, *user_agent;
     char status_str[100], resp_length[32];
     char buf[255];
     wstr temp;
     int ret;
+    struct httpData *http_data = c->protocol_data;
 
     temp = wstrNew("Remote_Addr");
     remote_addr = dictFetchValue(http_data->req_headers, temp);
@@ -615,10 +625,13 @@ void logAccess(struct conn *c)
 /* Send a chunk of data */
 int httpSendBody(struct conn *c, const char *data, size_t len)
 {
-    struct httpData *http_data = c->protocol_data;
-    size_t tosend = len, restsend;
+    size_t tosend, restsend;
     ssize_t ret;
     struct slice slice;
+    struct httpData *http_data;
+
+    tosend = len;
+    http_data = c->protocol_data;
     if (!len || !strcasecmp(http_data->method, "HEAD"))
         return 0;
     if (http_data->response_length != 0) {
@@ -640,17 +653,21 @@ int httpSendBody(struct conn *c, const char *data, size_t len)
 int httpSendHeaders(struct conn *c)
 {
     struct httpData *http_data = c->protocol_data;
-    int len;
-    int ok = 0;
+    int ok, len, ret, is_connection;
+    struct dictIterator *iter;
+    struct dictEntry *entry;
+    const char *connection;
+    char buf[256];
+    wstr field, value, headers;
+    struct slice slice;
 
     if (http_data->headers_sent)
         return 0;
-    struct dictIterator *iter = dictGetIterator(http_data->res_headers);
-    struct dictEntry *entry = NULL;
-    char buf[256];
-    int ret, is_connection = 0;
-    wstr field, value;
-    wstr headers = defaultResHeader(c, http_data->send_header);
+
+    is_connection = 0;
+    ok = 0;
+    iter = dictGetIterator(http_data->res_headers);
+    headers = defaultResHeader(c, http_data->send_header);
     while((entry = dictNext(iter)) != NULL) {
         field = dictGetKey(entry);
         value = dictGetVal(entry);
@@ -672,7 +689,7 @@ int httpSendHeaders(struct conn *c)
     if (!http_data->response_length && http_data->res_status != 302)
         http_data->keep_live = 0;
     if (!is_connection) {
-        const char *connection = connectionField(c);
+        connection = connectionField(c);
         ret = snprintf(buf, sizeof(buf), "Connection: %s\r\n", connection);
         if (ret == -1 || ret > sizeof(buf))
             goto cleanup;
@@ -681,7 +698,6 @@ int httpSendHeaders(struct conn *c)
     }
 
     headers = wstrCatLen(headers, "\r\n", 2);
-    struct slice slice;
     sliceTo(&slice, (uint8_t *)headers, wstrlen(headers));
 
     len = sendClientData(c, &slice);
@@ -732,8 +748,8 @@ void sendResponse500(struct conn *c)
 
 int httpSpot(struct conn *c)
 {
-    struct httpData *http_data = c->protocol_data;
     int i = 0, ret;
+    struct httpData *http_data = c->protocol_data;
     wstr path = NULL;
     if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
         path = wstrNew(StaticPathHandler.root);
