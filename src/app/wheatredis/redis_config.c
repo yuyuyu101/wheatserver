@@ -658,7 +658,7 @@ int handleConfig(struct redisServer *server, struct conn *c)
     int ret;
 
     if (c->client != config_server->config_client) {
-        appendToListTail(server->pending_conns, c);
+        appendToPendingConn(c);
         return WHEAT_OK;
     }
 
