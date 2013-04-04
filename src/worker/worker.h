@@ -107,7 +107,8 @@ struct client {
     struct list *conns;
     struct msghdr *req_buf;
     void *client_data;       // Only used by app
-    struct array *notifies;
+    void (*notify)(struct client*);
+    void *notify_data;
 
     unsigned is_outer:1;
     unsigned should_close:1; // Used to indicate whether closing client
@@ -129,7 +130,6 @@ void workerProcessCron();
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
-void setClientFreeNotify(struct client *c, void (*func)(struct client *));
 void finishConn(struct conn *c);
 void tryFreeClient(struct client *c);
 void clientSendPacketList(struct client *c);
@@ -150,6 +150,7 @@ void registerConnFree(struct conn*, void (*)(void*), void *data);
 #define setClientClose(c)                  ((c)->client->should_close = 1)
 #define isOuterClient(c)                   ((c)->is_outer == 1)
 #define setClientName(c, n)                ((c)->name = wstrCat(c->name, (n)))
+#define setClientFreeNotify(c, func)       ((c)->notify = (func))
 
 /* workerprocess's flow:
  * 0. setup filling workerProcess members

@@ -281,7 +281,7 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->valid = 1;
     c->pending = NULL;
     c->client_data = NULL;
-    c->notifies = arrayCreate(sizeof(struct callback), 1);
+    c->notify = NULL;
     c->last_io = Server.cron_time;
     c->name = wstrEmpty();
 
@@ -294,13 +294,14 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
 void freeClient(struct client *c)
 {
     struct listNode *node;
-    arrayEach(c->notifies, callbackCall);
-    close(c->clifd);
+
+    if (c->notify)
+        c->notify(c);
     wstrFree(c->ip);
     wstrFree(c->name);
     msgFree(c->req_buf);
     freeList(c->conns);
-    arrayDealloc(c->notifies);
+    close(c->clifd);
     node = searchListKey(Clients, c);
     deleteEvent(WorkerProcess->center, c->clifd, EVENT_READABLE|EVENT_WRITABLE);
     if (!node)
@@ -332,14 +333,6 @@ int isClientNeedSend(struct client *c)
         }
     }
     return 0;
-}
-
-void setClientFreeNotify(struct client *c, void (*func)(struct client *))
-{
-    struct callback notify;
-    notify.func = (void (*)(void*))func;
-    notify.data = c;
-    arrayPush(c->notifies, &notify);
 }
 
 // Return value:
@@ -389,10 +382,11 @@ static int sendPacket(struct client *c, struct sendPacket *packet)
 
 void clientSendPacketList(struct client *c)
 {
-    struct sendPacket *packet = NULL;
-    struct conn *send_conn = NULL;
-    struct listNode *node = NULL, *node2 = NULL;
-    ssize_t ret = 0;
+    struct sendPacket *packet;
+    struct conn *send_conn;
+    struct listNode *node, *node2;
+    ssize_t ret;
+
     while (isClientNeedSend(c)) {
         node = listFirst(c->conns);
         send_conn = listNodeValue(node);
@@ -562,7 +556,6 @@ void workerProcessCron()
             app = AppTable[++i];
         }
 
-        clientsCron();
         if(worker_cron)
             worker_cron();
         processEvents(WorkerProcess->center, WHEATSERVER_CRON);
@@ -570,6 +563,7 @@ void workerProcessCron()
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
             WorkerProcess->alive = 0;
         }
+        clientsCron();
 
         if (Server.cron_time.tv_sec - WorkerProcess->refresh_time > refresh_seconds) {
             sendStatPacket(WorkerProcess);
