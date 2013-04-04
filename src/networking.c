@@ -40,7 +40,8 @@ int syncReadBulkFrom(int fd, struct slice *slice)
  * return 0 means EAGAIN */
 int writeBulkTo(int fd, struct slice *slice)
 {
-    ssize_t nwritten = 0;
+    ssize_t nwritten;
+
     nwritten = write(fd, slice->data, slice->len);
     if (nwritten == -1) {
         if (errno == EAGAIN) {
@@ -60,6 +61,7 @@ int writeBulkTo(int fd, struct slice *slice)
 int syncWriteBulkTo(int fd, struct slice *slice)
 {
     int totallen, ret;
+
     totallen = 0;
     while (totallen < slice->len) {
         ret = writeBulkTo(fd, slice);
