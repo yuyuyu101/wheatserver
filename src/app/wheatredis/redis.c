@@ -563,6 +563,7 @@ static void handleTimeout(struct redisUnit *unit)
     struct token *next_token;
     int ret;
     int isreadcommand;
+    size_t i;
 
     server = RedisServer;
     isreadcommand = isReadCommand(unit->outer_conn);
@@ -603,7 +604,6 @@ static void handleTimeout(struct redisUnit *unit)
     } else {
         // Write command will send request to all redis server and if have
         // timeout response we should judge whether send response to client
-        size_t i;
         for (i = unit->pos; i < unit->sended; i++) {
             instance = unit->sended_instances[i];
             instance->ntimeout++;
