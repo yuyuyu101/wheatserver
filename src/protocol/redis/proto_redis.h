@@ -9,6 +9,8 @@ struct slice *redisBodyNext(struct conn *c);
 void redisBodyStart(struct conn*c);
 void getRedisKey(struct conn *c, struct slice *out);
 int isReadCommand(struct conn*);
+size_t getRedisKeyStartPos(struct conn *c);
+size_t getRedisKeyEndPos(struct conn *c);
 
 
 #define str3icmp(m, c0, c1, c2)                                                             \
