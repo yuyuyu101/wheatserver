@@ -40,6 +40,10 @@ static int wheatCreateSocket(char *err, int domain)
         wheatSetError(err, "setsockopt SO_REUSEADDR: %s", strerror(errno));
         return NET_WRONG;
     }
+    if (setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) == -1) {
+        wheatSetError(err, "setsockopt SO_REUSEADDR: %s", strerror(errno));
+        return NET_WRONG;
+    }
     return s;
 }
 
