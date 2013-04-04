@@ -90,6 +90,7 @@
 // Learn from redis.c
 #define run_with_period(_ms_) \
     if ((_ms_ <= 1000/WHEAT_CRON_HZ) || !(Server.cron_loops%((_ms_)/(1000/WHEAT_CRON_HZ))))
+#define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
 
 
 /* This exists some drawbacks globalServer include server configuration

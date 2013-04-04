@@ -6,7 +6,6 @@
 
 struct workerProcess *WorkerProcess = NULL;
 
-#define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
 #define WHEAT_CLIENT_MAX      1000
 
 // Cache below stat field avoid too much query on StatItems

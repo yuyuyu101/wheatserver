@@ -61,6 +61,7 @@ static void restartConfigClient(struct client *client)
 struct configServer *configServerCreate(struct client *client, int use_redis)
 {
     struct configServer *config_server;
+
     config_server = wmalloc(sizeof(struct configServer));
     if (!config_server)
         return NULL;
@@ -154,6 +155,7 @@ static int sendCommand(struct configServer *config_server, const char *command,
     struct slice next;
     char packet[255];
     int ret;
+
     if (value != NULL && val_len != 0) {
         ret = snprintf(packet, sizeof(packet),
                 "*4\r\n$%lu\r\n%s\r\n$%lu\r\n%s\r\n$%lu\r\n%s\r\n$%lu\r\n%s\r\n",
@@ -383,6 +385,7 @@ static int getValFrom(wstr body, size_t *out)
     long long long_val;
     int len;
     wstr value;
+
     if (body[1] == '-')
         return WHEAT_WRONG;
     // Suppose the length of value must less than 9, and it couldn't
@@ -538,16 +541,16 @@ cleanup:
 int configFromFile(struct redisServer *server)
 {
     int pos, count, ret;
-    struct listIterator *iter = NULL;
+    struct listIterator *iter;
     struct redisInstance ins, *instance;
     struct configuration *conf;
-    wstr *frags = NULL;
+    wstr *frags;
+    struct listNode *node;
 
     conf = getConfiguration("redis-servers");
     if (!conf->target.ptr)
         return WHEAT_WRONG;
 
-    struct listNode *node = NULL;
     iter = listGetIterator(conf->target.ptr, START_HEAD);
     count = 0;
     pos = 0;
@@ -652,11 +655,12 @@ int isStartServe(struct redisServer *server)
 
 int handleConfig(struct redisServer *server, struct conn *c)
 {
-    struct configServer *config_server = server->config_server;
+    struct configServer *config_server;
     wstr body;
     struct slice *next;
     int ret;
 
+    config_server = server->config_server;
     if (c->client != config_server->config_client) {
         appendToPendingConn(c);
         return WHEAT_OK;

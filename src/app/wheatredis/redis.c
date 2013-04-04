@@ -96,6 +96,7 @@ static struct redisInstance *getInstance(struct redisServer *server, size_t idx,
 static int wakeupInstance(struct redisInstance *instance)
 {
     char name[255];
+
     instance->redis_client = buildConn(instance->ip, instance->port, RedisProtocol);
     if (!instance->redis_client)
         return WHEAT_WRONG;
@@ -127,8 +128,11 @@ int initInstance(struct redisInstance *instance, size_t pos, wstr ip,
 static struct redisUnit *getRedisUnit()
 {
     uint8_t *p;
-    size_t count = (RedisServer->nbackup) * sizeof(void*) * 2;
+    size_t count;
     struct redisUnit *unit;
+
+    count = (RedisServer->nbackup) * sizeof(void*) * 2;
+
     p = wmalloc(sizeof(*unit)+count);
     unit = (struct redisUnit*)p;
     unit->sended = 0;
@@ -338,14 +342,16 @@ static int handleClientRequests(struct conn *c)
 static int handleRedisResponse(struct conn *c)
 {
     struct listNode *node;
-    struct client *redis_client = c->client;
+    struct client *redis_client;
     struct redisInstance *instance;
     struct redisUnit *unit;
 
+    redis_client = c->client;
     instance = redis_client->client_data;
     node = listFirst(instance->wait_units);
     ASSERT(node && listNodeValue(node));
     unit = listNodeValue(node);
+
     if (!unit->wait_free) {
         // Means response to client isn't sent
         registerConnFree(unit->outer_conn, (void (*)(void*))finishConn, c);
@@ -368,8 +374,9 @@ static int handleRedisResponse(struct conn *c)
 int redisCall(struct conn *c, void *arg)
 {
     int ret;
-    struct redisServer *server = RedisServer;
+    struct redisServer *server;
 
+    server = RedisServer;
     if (server->is_serve) {
         if (isOuterClient(c->client))
             ret = handleClientRequests(c);
@@ -475,7 +482,7 @@ int redisAppInit(struct protocol *ptocol)
     ASSERT(ptocol);
     RedisProtocol = ptocol;
     struct configuration *config_source, *conf;
-    uint8_t *p = NULL;
+    uint8_t *p;
     struct redisServer *server;
     struct client *config_client;
     int ret;
@@ -555,9 +562,11 @@ static void handleTimeout(struct redisUnit *unit)
     struct redisInstance *instance;
     struct token *next_token;
     int ret;
-    int isreadcommand = isReadCommand(unit->outer_conn);
+    int isreadcommand;
 
     server = RedisServer;
+    isreadcommand = isReadCommand(unit->outer_conn);
+
     if (isreadcommand) {
         // Read command means we only send request to *one* redis server.
         // Now we should choose next server which keep this key to retry
@@ -617,15 +626,19 @@ static void handleTimeout(struct redisUnit *unit)
 
 void redisAppCron()
 {
-    struct redisServer *server = RedisServer;
-    struct redisInstance *instance = NULL;
+    struct redisServer *server;
+    struct redisInstance *instance;
     size_t i;
     struct listNode *node;
     struct redisUnit *unit;
     struct listIterator *iter;
-    long length = listLength(server->message_center);
-    long now_micro = Server.cron_time.tv_sec * 1000000 + Server.cron_time.tv_usec;
+    long length;
+    long now_micro;
     long micro_seconds;
+
+    server = RedisServer;
+    length = listLength(server->message_center);
+    now_micro = getMicroseconds(Server.cron_time);
 
     if (!server->is_serve) {
         // server is not starting, we can infer that user is choosing redis to
