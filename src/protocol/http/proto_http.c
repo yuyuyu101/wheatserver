@@ -366,7 +366,7 @@ int on_body(http_parser *parser, const char *at, size_t len)
     data = parser->data;
     body = &data->body;
     if (body->end_body == body->body + body->slice_len) {
-        if (enlargeHttpBody(&data->body) == -1);
+        if (enlargeHttpBody(&data->body) == -1)
             return 1;
         body = &data->body;
     }
