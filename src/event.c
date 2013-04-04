@@ -93,20 +93,28 @@ void deleteEvent(struct evcenter *center, int fd, int mask)
     delEvent(center, fd, mask);
 }
 
-int processEvents(struct evcenter *center, int timeout_seconds)
+int processEvents(struct evcenter *center, int timeout_millionseconds)
 {
     struct timeval tv;
-    tv.tv_usec = 0;
-    if (timeout_seconds > 0)
-        tv.tv_sec = timeout_seconds;
-    else
+    int j, processed, numevents, mask, fd, rfired;
+    struct event *event;
+
+    if (timeout_millionseconds > 0) {
+        tv.tv_sec = timeout_millionseconds / 1000;
+        tv.tv_usec = timeout_millionseconds % 1000;
+    }
+    else {
         tv.tv_sec = 0;
-    int j, processed = 0, numevents = eventWait(center, &tv);
+        tv.tv_usec = 0;
+    }
+
+    processed = 0;
+    numevents = eventWait(center, &tv);
     for (j = 0; j < numevents; j++) {
-        struct event *event = &center->events[center->fired_events[j].fd];
-        int mask = center->fired_events[j].mask;
-        int fd = center->fired_events[j].fd;
-        int rfired = 0;
+        event = &center->events[center->fired_events[j].fd];
+        mask = center->fired_events[j].mask;
+        fd = center->fired_events[j].fd;
+        rfired = 0;
 
         /* note the fe->mask & mask & ... code: maybe an already processed
          * event removed an element that fired and we still didn't
