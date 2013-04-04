@@ -71,6 +71,7 @@ void initGlobalServerConfig()
     Server.stat_refresh_seconds = WHEAT_STAT_REFRESH;
     Server.mbuf_size = WHEAT_MBUF_SIZE;
     Server.modules = createList();
+    Server.cron_loops = 0;
     Server.confs = createList();
     Server.stats = arrayCreate(sizeof(struct statItem), 20);
     initServerConfs(Server.confs);
@@ -302,7 +303,7 @@ void run()
         if (listLength(Server.signal_queue) == 0) {
         // processEvents will refresh worker status, so findTimeoutWorker
         // must follow processEvents in order to avoid incorrect timeout
-            processEvents(Server.master_center, WHEATSERVER_CRON);
+            processEvents(Server.master_center, WHEATSERVER_CRON_MILLLISECONDS);
             adjustWorkerNumber();
             findTimeoutWorker();
             if (!(cron_times % 10) && Server.verbose == WHEAT_DEBUG)

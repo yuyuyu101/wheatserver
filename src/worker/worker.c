@@ -558,7 +558,7 @@ void workerProcessCron()
 
         if(worker_cron)
             worker_cron();
-        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
+        processEvents(WorkerProcess->center, WHEATSERVER_CRON_MILLLISECONDS);
         if (WorkerProcess->ppid != getppid()) {
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");
             WorkerProcess->alive = 0;
@@ -584,7 +584,7 @@ void workerProcessCron()
     deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
     while (Server.cron_time.tv_sec - WorkerProcess->refresh_time < Server.graceful_timeout) {
-        processEvents(WorkerProcess->center, WHEATSERVER_CRON);
+        processEvents(WorkerProcess->center, WHEATSERVER_CRON_MILLLISECONDS);
         gettimeofday(&Server.cron_time, NULL);
     }
 }

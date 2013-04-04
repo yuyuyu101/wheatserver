@@ -40,22 +40,23 @@
 #include "worker/worker.h"
 
 /* Server Configuration */
-#define WHEAT_DEFAULT_ADDR            "127.0.0.1"
-#define WHEAT_SERVERPORT              10828
-#define WHEATSERVER_CONFIGLINE_MAX    1024
-#define WHEATSERVER_MAX_LOG_LEN       1024
-#define WHEATSERVER_MAX_NAMELEN       1024
-#define WHEATSERVER_PATH_LEN          1024
-#define WHEATSERVER_GRACEFUL_TIME     5
-#define WHEATSERVER_IDLE_TIME         1
-#define WHEATSERVER_TIMEOUT           30
-#define WHEAT_NOTFREE                 1
-#define WHEATSERVER_CRON              1
-#define WHEAT_PREALLOC_CLIENT_LIMIT   10000
-#define WHEAT_BUFLIMIT                (1024*1024*1024)
-#define WHEAT_ARGS_NO_LIMIT           -1
-#define WHEAT_MBUF_SIZE               (16*1024)
-#define WHEAT_PROTOCOL_DEFAULT        "Http"
+#define WHEAT_DEFAULT_ADDR              "127.0.0.1"
+#define WHEAT_SERVERPORT                10828
+#define WHEATSERVER_CONFIGLINE_MAX      1024
+#define WHEATSERVER_MAX_LOG_LEN         1024
+#define WHEATSERVER_MAX_NAMELEN         1024
+#define WHEATSERVER_PATH_LEN            1024
+#define WHEATSERVER_GRACEFUL_TIME       5
+#define WHEATSERVER_IDLE_TIME           1
+#define WHEATSERVER_TIMEOUT             30
+#define WHEAT_NOTFREE                   1
+#define WHEATSERVER_CRON_MILLLISECONDS  100
+#define WHEAT_PREALLOC_CLIENT_LIMIT     10000
+#define WHEAT_BUFLIMIT                  (1024*1024*1024)
+#define WHEAT_ARGS_NO_LIMIT             -1
+#define WHEAT_MBUF_SIZE                 (16*1024)
+#define WHEAT_PROTOCOL_DEFAULT          "Http"
+#define WHEAT_CRON_HZ                   10
 
 /* Statistic Configuration */
 #define WHEAT_STATS_PORT       10829
@@ -81,6 +82,15 @@
 
 #define VALIDATE_OK       0
 #define VALIDATE_WRONG    1
+
+
+/* Using the following macro you can run code inside workerProcessCron() with
+ * the specified period, specified in milliseconds.
+ * The actual resolution depends on WHEAT_WOKER_HZ. */
+// Learn from redis.c
+#define run_with_period(_ms_) \
+    if ((_ms_ <= 1000/WHEAT_CRON_HZ) || !(Server.cron_loops%((_ms_)/(1000/WHEAT_CRON_HZ))))
+
 
 /* This exists some drawbacks globalServer include server configuration
  * and master info */
@@ -109,6 +119,7 @@ struct globalServer {
     struct evcenter *master_center;
     int stat_fd;
     struct timeval cron_time;
+    long long cron_loops;
     pid_t pid;
     pid_t relaunch_pid;
     int pipe_readfd;
