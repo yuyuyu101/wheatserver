@@ -44,9 +44,14 @@ static struct statItem RedisStats[] = {
     {"Total timeout response", SUM_STAT, RAW, 0, 0},
 };
 
+static struct command RedisCommand[] = {
+    {"redis-addnode", 2, NULL},
+};
+
 static struct moduleAttr AppRedisAttr = {
     "WheatRedis", RedisStats, sizeof(RedisStats)/sizeof(struct statItem),
-    RedisConf, sizeof(RedisConf)/sizeof(struct configuration)
+    RedisConf, sizeof(RedisConf)/sizeof(struct configuration),
+    RedisCommand, sizeof(RedisCommand)/sizeof(struct command)
 };
 
 static long long *CurrentUnitCount = NULL;
