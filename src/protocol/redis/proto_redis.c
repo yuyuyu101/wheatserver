@@ -132,20 +132,20 @@ enum reqStage {
 
 // Redis protocol request format
 // *3\r\n$3\r\nset\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
-//                     |       |
-//                     |       |
-//                     |       |
-//           key_start_pos     |
+//                             |
+//                             |
+//                             |
+//                             |
 //                        key_end_pos(\r)
 struct redisProcData {
     int curr_arg_len;
     int curr_arg;
     int args;
     wstr key;
-    size_t key_start_pos;
+    wstr command;
     size_t key_end_pos;
     enum reqStage stage;
-    enum redisCommand command;
+    enum redisCommand command_type;
     int is_read;
 
     struct array *req_body;
@@ -590,8 +590,6 @@ static ssize_t redisReqParser(struct redisProcData *redis_data, struct slice *s)
                 if (ch == '$') {
                     redis_data->stage = REQ_GET_ARG_LEN;
                     pos++;
-                    if (redis_data->curr_arg == 1)
-                        redis_data->key_start_pos = pos;
                 } else {
                     goto redis_err;
                 }
@@ -643,12 +641,14 @@ static ssize_t redisReqParser(struct redisProcData *redis_data, struct slice *s)
                             redis_data->key);
                     if (command_type == REDIS_UNKNOWN)
                         goto redis_err;
-                    redis_data->command = command_type;
+                    redis_data->command_type = command_type;
                     if (command_type > REDIS_ZSCORE)
                         redis_data->is_read = 0;
                     else
                         redis_data->is_read = 1;
 
+                    // Now duplicate `key` to command
+                    redis_data->command = wstrDup(redis_data->key);
                     wstrClear(redis_data->key);
                 } else {
                     // redis_data->key is stand for key
@@ -716,9 +716,16 @@ void getRedisKey(struct conn *c, struct slice *out)
     sliceTo(out, (uint8_t *)redis_data->key, wstrlen(redis_data->key));
 }
 
-size_t getRedisKeyStartPos(struct conn *c)
+void getRedisCommand(struct conn *c, struct slice *out)
 {
-    return ((struct redisProcData *)c->protocol_data)->key_start_pos;
+    struct redisProcData *redis_data = c->protocol_data;
+    if (redis_data->command)
+        sliceTo(out, (uint8_t *)redis_data->command, wstrlen(redis_data->command));
+}
+
+int getRedisArgs(struct conn *c)
+{
+    return ((struct redisProcData *)c->protocol_data)->args;
 }
 
 size_t getRedisKeyEndPos(struct conn *c)
@@ -733,11 +740,11 @@ void *initRedisData()
         return NULL;
     memset(data, 0, sizeof(*data));
     data->stage = MES_START;
-    data->command = REDIS_UNKNOWN;
+    data->command_type = REDIS_UNKNOWN;
+    data->command = NULL;
     data->req_body = arrayCreate(sizeof(struct slice), 4);
     data->key = wstrEmpty();
     data->pos = 0;
-    data->key_start_pos = 0;
     data->key_end_pos = 0;
     return data;
 }
@@ -745,6 +752,8 @@ void *initRedisData()
 void freeRedisData(void *d)
 {
     struct redisProcData *data = d;
+    if (data->command)
+        wstrFree(data->command);
     wstrFree(data->key);
     arrayDealloc(data->req_body);
     wfree(d);
