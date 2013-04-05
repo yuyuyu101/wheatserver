@@ -356,3 +356,12 @@ int string2ll(const char *s, size_t slen, long long *value)
     }
     return WHEAT_OK;
 }
+
+size_t getIntLen(unsigned long i)
+{
+    size_t len = 1;
+    while (i /= 10) {
+        len++;
+    }
+    return len;
+}

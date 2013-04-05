@@ -22,6 +22,7 @@ int isRegFile(const char *path);
 int fromSameParentDir(wstr left, wstr right);
 int ll2string(char *s, size_t len, long long value);
 int string2ll(const char *s, size_t slen, long long *value);
+size_t getIntLen(unsigned long i);
 
 void setTimer(int milliseconds);
 
