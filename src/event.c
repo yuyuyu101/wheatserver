@@ -101,7 +101,7 @@ int processEvents(struct evcenter *center, int timeout_millionseconds)
 
     if (timeout_millionseconds > 0) {
         tv.tv_sec = timeout_millionseconds / 1000;
-        tv.tv_usec = timeout_millionseconds % 1000;
+        tv.tv_usec = (timeout_millionseconds % 1000) * 1000;
     }
     else {
         tv.tv_sec = 0;
