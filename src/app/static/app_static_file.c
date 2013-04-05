@@ -29,7 +29,9 @@ static struct configuration StaticConf[] = {
 };
 
 static struct moduleAttr AppStaticAttr = {
-    "static-file", NULL, 0, StaticConf, sizeof(StaticConf)/sizeof(struct configuration)
+    "static-file", NULL, 0,
+    StaticConf, sizeof(StaticConf)/sizeof(struct configuration),
+    NULL, 0
 };
 
 struct app AppStatic = {

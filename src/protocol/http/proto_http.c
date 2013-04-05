@@ -24,7 +24,8 @@ static struct configuration HttpConf[] = {
 };
 
 static struct moduleAttr ProtocolHttpAttr = {
-    "Http", NULL, 0, HttpConf, sizeof(HttpConf)/sizeof(struct configuration)
+    "Http", NULL, 0, HttpConf, sizeof(HttpConf)/sizeof(struct configuration),
+    NULL, 0
 };
 
 struct protocol ProtocolHttp = {

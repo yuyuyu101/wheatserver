@@ -88,7 +88,7 @@
  * the specified period, specified in milliseconds.
  * The actual resolution depends on WHEAT_WOKER_HZ. */
 // Learn from redis.c
-#define run_with_period(_ms_) \
+#define runWithPeriod(_ms_) \
     if ((_ms_ <= 1000/WHEAT_CRON_HZ) || !(Server.cron_loops%((_ms_)/(1000/WHEAT_CRON_HZ))))
 #define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
 
@@ -132,6 +132,7 @@ struct globalServer {
 
     struct list *modules;
     struct list *confs;
+    struct array *commands;
     struct array *stats;
 
     /* log */
@@ -177,12 +178,20 @@ struct configuration {
     enum printFormat format;
 };
 
+struct command {
+    char *command_name;
+    int args;
+    void (*command_func)(struct masterClient *);
+};
+
 struct moduleAttr {
     char *name;
     struct statItem *stats;
     size_t stat_size;
     struct configuration *confs;
     size_t conf_size;
+    struct command *commands;
+    size_t command_size;
 };
 
 struct workerProcess;

@@ -6,8 +6,25 @@
 
 struct globalServer Server;
 
+static struct command BuiltinCommands[] = {
+    {"statinput", WHEAT_ARGS_NO_LIMIT, statinputCommand},
+    {"config",    2, configCommand},
+    {"stat",      2, statCommand},
+};
+
+static void initServerCommands(struct array *commands)
+{
+    int i;
+    struct command *command;
+
+    for (i = 0; i < sizeof(BuiltinCommands)/sizeof(struct command); ++i) {
+        command = &BuiltinCommands[i];
+        arrayPush(commands, command);
+    }
+}
+
 static void collectModules(struct list *modules, struct array *stats,
-        struct list *confs)
+        struct list *confs, struct array *commands)
 {
     struct listNode *node;
     struct listIterator *iter;
@@ -44,6 +61,9 @@ static void collectModules(struct list *modules, struct array *stats,
         for (i = 0; i < module_attr->stat_size; ++i) {
             arrayPush(stats, &module_attr->stats[i]);
         }
+        for (i = 0; i < module_attr->command_size; ++i) {
+            arrayPush(commands, &module_attr->commands[i]);
+        }
     }
     freeListIterator(iter);
 }
@@ -74,9 +94,11 @@ void initGlobalServerConfig()
     Server.cron_loops = 0;
     Server.confs = createList();
     Server.stats = arrayCreate(sizeof(struct statItem), 20);
+    Server.commands = arrayCreate(sizeof(struct command), 10);
     initServerConfs(Server.confs);
     initServerStats(Server.stats);
-    collectModules(Server.modules, Server.stats, Server.confs);
+    initServerCommands(Server.commands);
+    collectModules(Server.modules, Server.stats, Server.confs, Server.commands);
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);
@@ -291,23 +313,23 @@ static void findTimeoutWorker()
 
 void run()
 {
-    static long cron_times = 1;
     int *sig;
     gettimeofday(&Server.cron_time, NULL);
     adjustWorkerNumber();
     while (1) {
-        cron_times++;
-
+        Server.cron_loops++;
         gettimeofday(&Server.cron_time, NULL);
         reapWorkers();
         if (listLength(Server.signal_queue) == 0) {
-        // processEvents will refresh worker status, so findTimeoutWorker
-        // must follow processEvents in order to avoid incorrect timeout
+            // processEvents will refresh worker status, so findTimeoutWorker
+            // must follow processEvents in order to avoid incorrect timeout
             processEvents(Server.master_center, WHEATSERVER_CRON_MILLLISECONDS);
             adjustWorkerNumber();
             findTimeoutWorker();
-            if (!(cron_times % 10) && Server.verbose == WHEAT_DEBUG)
-                logStat();
+            runWithPeriod(5000) {
+                if (Server.verbose == WHEAT_DEBUG)
+                    logStat();
+            }
         } else {
             struct listNode *node = listFirst(Server.signal_queue);
             sig = listNodeValue(node);
@@ -354,17 +376,23 @@ static void resetMasterClient(struct masterClient *c)
     c->argv = NULL;
 }
 
-static ssize_t processCommand(struct masterClient *c)
+static void processCommand(struct masterClient *c)
 {
-    if (!wstrCmpNocaseChars(c->argv[0], "statinput", 9)) {
-        statinputCommand(c);
-    } else if (c->argc == 2 && !wstrCmpNocaseChars(c->argv[0], "config", 6)) {
-        configCommand(c);
-    } else if(c->argc == 2 && !wstrCmpNocaseChars(c->argv[0], "stat", 4)) {
-        statCommand(c);
-    }
+    struct command *command, *commands;
+    int i;
 
-    return WHEAT_OK;
+    commands = arrayData(Server.commands);
+    for (i = 0; i < narray(Server.commands); ++i) {
+        command = &commands[i];
+
+        if (!wstrCmpNocaseChars(c->argv[0], command->command_name,
+                    strlen(command->command_name)) &&
+                (command->args == WHEAT_ARGS_NO_LIMIT || command->args == c->argc)) {
+            command->command_func(c);
+            return ;
+        }
+    }
+    wheatLog(WHEAT_WARNING, "Master received command unmatched:%s", c->argv[0]);
 }
 
 static void commandParse(struct evcenter *center, int fd, void *client_data, int mask)
@@ -414,15 +442,15 @@ static void buildConnection(struct evcenter *center, int fd, void *client_data, 
     int cport, cfd = wheatTcpAccept(Server.neterr, fd, ip, &cport);
     if (cfd == NET_WRONG) {
         wheatLog(WHEAT_WARNING, "Accepting client connection failed: %s", Server.neterr);
-            return;
+        return;
     }
     wheatLog(WHEAT_DEBUG, "Accepted worker %s:%d", ip, cport);
 
     if (wheatNonBlock(Server.neterr, cfd) == NET_WRONG) {
-            wheatLog(WHEAT_WARNING,
-                    "buildConnection: set nonblock %d failed: %s",
-                    fd, Server.neterr);
-            return ;
+        wheatLog(WHEAT_WARNING,
+                "buildConnection: set nonblock %d failed: %s",
+                fd, Server.neterr);
+        return ;
     }
     if (wheatTcpNoDelay(Server.neterr, cfd) == NET_WRONG) {
         wheatLog(WHEAT_WARNING,
@@ -550,11 +578,11 @@ int main(int argc, const char *argv[])
         int j = 1;
 
         if (strcmp(argv[1], "-v") == 0 ||
-            strcmp(argv[1], "--version") == 0) version();
+                strcmp(argv[1], "--version") == 0) version();
         if (strcmp(argv[1], "--help") == 0 ||
-            strcmp(argv[1], "-h") == 0) usage();
+                strcmp(argv[1], "-h") == 0) usage();
         if ((strcmp(argv[1], "--testconf") == 0 ||
-            strcmp(argv[1], "-t") == 0)) {
+                    strcmp(argv[1], "-t") == 0)) {
             if (argc != 3)
                 usage();
             test_conf = 1;

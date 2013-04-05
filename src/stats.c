@@ -271,13 +271,14 @@ void logStat()
 
 void statCommand(struct masterClient *c)
 {
+    struct listNode *node;
+    struct listIterator *iter;
+    struct workerProcess *worker;
     wstr format_stat = wstrEmpty();
+
     if (!wstrCmpNocaseChars(c->argv[1], "master", 6)) {
         format_stat = getStatFormat(Server.stats, format_stat);
     } else if (!wstrCmpNocaseChars(c->argv[1], "worker", 6)) {
-        struct listNode *node = NULL;
-        struct workerProcess *worker = NULL;
-        struct listIterator *iter;
         iter = listGetIterator(Server.workers, START_HEAD);
         while ((node = listNext(iter)) != NULL) {
             worker = listNodeValue(node);

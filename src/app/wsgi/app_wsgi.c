@@ -23,7 +23,8 @@ static struct configuration WsgiConf[] = {
 
 
 static struct moduleAttr AppWsgiAttr = {
-    "wsgi", NULL, 0, WsgiConf, sizeof(WsgiConf)/sizeof(struct configuration)
+    "wsgi", NULL, 0, WsgiConf, sizeof(WsgiConf)/sizeof(struct configuration),
+    NULL, 0
 };
 
 struct app AppWsgi = {

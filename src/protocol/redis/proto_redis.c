@@ -18,7 +18,7 @@ int initRedis();
 void deallocRedis();
 
 static struct moduleAttr ProtocolRedisAttr = {
-    "Redis", NULL, 0, NULL, 0
+    "Redis", NULL, 0, NULL, 0, NULL, 0
 };
 
 struct protocol ProtocolRedis = {
@@ -61,7 +61,6 @@ enum redisCommand {
     REDIS_ZREVRANK,
     REDIS_ZSCORE,
 
-    REDIS_PING,
     REDIS_DEL,                    /* redis commands - keys */
     REDIS_EXPIRE,
     REDIS_EXPIREAT,
@@ -173,9 +172,6 @@ static int redisCommandHandle(struct redisProcData *redis_data,
 
             break;
         case 4:
-            if (str4icmp(c, 'p', 'i', 'n', 'g'))
-                return REDIS_PING;
-
             if (str4icmp(c, 'p', 't', 't', 'l'))
                 return REDIS_PTTL;
 
