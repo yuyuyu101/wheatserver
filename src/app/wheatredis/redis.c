@@ -55,6 +55,7 @@ static long long *TotalTimeoutResponse = NULL;
 
 struct redisAppData {
     struct redisUnit *unit;
+    wstr header;
 };
 
 struct app AppRedis = {
@@ -204,41 +205,56 @@ static int sendRedisData(struct conn *outer_conn,
         struct redisInstance *instance, struct redisUnit *unit)
 {
     struct conn *send_conn;
-    struct slice *next, key, temp;
-    int is_deal, ret;
-    size_t pos, key_start_pos, key_end_pos;
-    wstr key_range;
+    struct slice *next, key, temp, command;
+    int ret, args;
+    size_t pos, key_end_pos, intercross, key_token_id;
+    struct redisAppData *redis_data;
 
-    getRedisKey(outer_conn, &key);
-    key_start_pos = getRedisKeyStartPos(outer_conn);
-    key_end_pos = getRedisKeyEndPos(outer_conn);
-    pos = is_deal = 0;
-    key_range = wstrNewLen(NULL, (int)key.len+16);
-    ret = snprintf(key_range, wstrfree(key_range), "%lu\r\n%s", key.len, key.data);
-    wstrupdatelen(key_range, ret);
-    redisBodyStart(outer_conn);
     send_conn = connGet(instance->redis_client);
+    redis_data = outer_conn->app_private_data;
+    getRedisKey(outer_conn, &key);
+    getRedisCommand(outer_conn, &command);
+    args = getRedisArgs(outer_conn);
+    key_end_pos = getRedisKeyEndPos(outer_conn);
+    pos = intercross = 0;
+    key_token_id = unit->first_token->pos;
+
+    redis_data->header = wstrNewLen(NULL, (int)key.len+(int)command.len+32);
+    ret = snprintf(redis_data->header, wstrfree(redis_data->header),
+            "*%d\r\n$%lu\r\n%s\r\n$%lu\r\n%lu%s", args,
+            command.len, command.data,
+            key.len+getIntLen(key_token_id), key_token_id, key.data);
+    wstrupdatelen(redis_data->header, ret);
+
+    sliceTo(&temp, (uint8_t*)redis_data->header, wstrlen(redis_data->header));
+    if (sendClientData(send_conn, &temp) == -1)
+        return WHEAT_WRONG;
+    redisBodyStart(outer_conn);
     while ((next = redisBodyNext(outer_conn)) != NULL) {
-//        if (!is_deal && pos + next->len > key_start_pos) {
-//            sliceTo(&temp, next->data, key_start_pos-pos);
-//            if (sendClientData(send_conn, &temp) == -1)
-//                return WHEAT_WRONG;
-//            sliceTo(&temp, (uint8_t*)key_range, wstrlen(key_range));
-//            if (sendClientData(send_conn, &temp) == -1)
-//                return WHEAT_WRONG;
-//            is_deal = 1;
-//        }
-//        if (is_deal == 1){
-//            if (pos + next->len > key_end_pos) {
-//                sliceTo(&temp, next->data+(key_end_pos-pos), pos+next->len-key_end_pos);
-//                if (sendClientData(send_conn, &temp) == -1)
-//                    return WHEAT_WRONG;
-//                is_deal = 2;
-//            }
-//            pos += next->len;
-//            continue;
-//        }
-//        pos += next->len;
+        pos += next->len;
+        if (pos < key_end_pos)
+            continue;
+        break;
+    }
+    if (!next) ASSERT(0);
+
+    //   Example of `next` `key_end_pos` `intercross`
+    //   *3\r\n$3\r\nget\r\n$3\r\nkey\r\n
+    //     |            |           |
+    //     |<---------->|           |
+    //     | intercross |           |
+    //     |            |           |
+    //     |      key_end_pos       |
+    //  next->data      |          pos
+    //     |            |           |
+    //     <------------------------>
+    //              next->len
+
+    intercross = next->len - (pos - key_end_pos);
+    sliceTo(&temp, next->data+intercross, next->len - intercross);
+    if (sendClientData(send_conn, &temp) == -1)
+        return WHEAT_WRONG;
+    while ((next = redisBodyNext(outer_conn)) != NULL) {
         if (sendClientData(send_conn, next) == -1)
             return WHEAT_WRONG;
     }
@@ -538,6 +554,7 @@ static void *redisAppDataInit(struct conn *c)
 
     data = wmalloc(sizeof(*data));
     data->unit = NULL;
+    data->header = NULL;
     return data;
 }
 
@@ -548,7 +565,9 @@ static void redisAppDataDeinit(void *data)
     redis_data = data;
     if (redis_data->unit)
         redis_data->unit->wait_free = 1;
-    wfree(data);
+    if (redis_data->header)
+        wstrFree(redis_data->header);
+    wfree(redis_data);
 }
 
 // If this unit is timeout, the instance which should be responsibility to
