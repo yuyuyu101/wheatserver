@@ -182,6 +182,7 @@ struct command {
     char *command_name;
     int args;
     void (*command_func)(struct masterClient *);
+    char *description;
 };
 
 struct moduleAttr {

@@ -6,10 +6,13 @@
 
 struct globalServer Server;
 
+static void helpCommand(struct masterClient *);
+
 static struct command BuiltinCommands[] = {
-    {"statinput", WHEAT_ARGS_NO_LIMIT, statinputCommand},
-    {"config",    2, configCommand},
-    {"stat",      2, statCommand},
+    {"help",      1, helpCommand,  "show commands descriptions"},
+    {"statinput", WHEAT_ARGS_NO_LIMIT, statinputCommand, "Intern use"},
+    {"config",    2, configCommand, "config [option name]\nOutput config value"},
+    {"stat",      2, statCommand,  "stat [master|worker]"}
 };
 
 static void initServerCommands(struct array *commands)
@@ -374,6 +377,23 @@ static void resetMasterClient(struct masterClient *c)
         wstrFreeSplit(c->argv, c->argc);
     c->argc = 0;
     c->argv = NULL;
+}
+
+static void helpCommand(struct masterClient *c)
+{
+    size_t len;
+    struct command *command, *commands;
+    int i;
+
+    commands = arrayData(Server.commands);
+    len = narray(Server.commands);
+    for (i = 0; i < len; i++) {
+        command = &commands[i];
+        replyMasterClient(c, command->command_name, strlen(command->command_name));
+        replyMasterClient(c, ":", 1);
+        replyMasterClient(c, command->description, strlen(command->description));
+        replyMasterClient(c, "\n", 1);
+    }
 }
 
 static void processCommand(struct masterClient *c)
