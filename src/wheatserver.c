@@ -215,7 +215,7 @@ void spawnWorker(char *worker_name)
     struct workerProcess *new_worker = wmalloc(sizeof(struct workerProcess));
     if (new_worker == NULL) {
         wheatLog(WHEAT_WARNING, "spawn new worker failed: %s", strerror(errno));
-        halt(1);
+        return ;
     }
 
 #ifdef WHEAT_DEBUG_WORKER
@@ -236,9 +236,42 @@ void spawnWorker(char *worker_name)
         initWorkerProcess(new_worker, worker_name);
         wheatLog(WHEAT_NOTICE, "new worker %s spawned %d",
                 WorkerProcess->worker->attr->name, getpid());
-        workerProcessCron();
+        workerProcessCron(NULL, NULL);
         wheatLog(WHEAT_NOTICE, "worker %s exit pid:%d",
                 WorkerProcess->worker->attr->name, getpid());
+        exit(0);
+    }
+}
+
+// Fake worker is used by command handler function and doing some works
+// may crash process or need individual space. It spawn worker as spawnWorker
+// doing, but fake worker don't listen and directly call `func`.
+// `func` mustn't block and run too long. Master process will not manage fake
+// worker.
+void spawnFakeWorker(void (*func)(void *), void *data)
+{
+    pid_t pid;
+    struct workerProcess *new_worker = wmalloc(sizeof(struct workerProcess));
+    if (new_worker == NULL) {
+        wheatLog(WHEAT_WARNING, "spawn new fake worker failed: %s",
+                strerror(errno));
+        return ;
+    }
+
+#ifdef WHEAT_DEBUG_WORKER
+    pid = 0;
+#else
+    pid = fork();
+#endif
+    if (pid != 0) {
+        return ;
+    } else {
+        WorkerProcess = new_worker;
+        initWorkerProcess(new_worker, Server.worker_type);
+        wheatLog(WHEAT_NOTICE, "new fake worker %s spawned %d",
+                WorkerProcess->worker->attr->name, getpid());
+        workerProcessCron(func, data);
+        wheatLog(WHEAT_NOTICE, "fake worker run func done");
         exit(0);
     }
 }

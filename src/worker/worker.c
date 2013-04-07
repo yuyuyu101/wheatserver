@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include "../wheatserver.h"
 #include "worker.h"
 
 struct workerProcess *WorkerProcess = NULL;
@@ -105,6 +106,7 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     struct configuration *conf;
     int i;
     struct protocol *p;
+    struct app **app_p, *app;
 
     if (Server.stat_fd != 0)
         close(Server.stat_fd);
@@ -151,6 +153,12 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
         halt(1);
     }
 
+    worker->apps = arrayCreate(sizeof(struct app*), 3);
+    if (!worker->apps) {
+        wheatLog(WHEAT_WARNING, "array create failed");
+        halt(1);
+    }
+
     StatTotalClient = getStatItemByName("Total client");
     gettimeofday(&Server.cron_time, NULL);
     if (worker->worker->setup)
@@ -163,6 +171,16 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     StatTotalRequest = getStatItemByName("Total request");
     StatFailedRequest = getStatItemByName("Total failed request");
     StatRunTime = getStatItemByName("Worker run time");
+
+    getAppsByProtocol(worker->apps, worker->protocol->attr->name);
+    for (i = 0; i < narray(worker->apps); i++) {
+        app_p = arrayIndex(worker->apps, i);
+        app = *app_p;
+        if (initApp(app) == WHEAT_WRONG) {
+            wheatLog(WHEAT_WARNING, "init app failed %s", app->attr->name);
+            halt(1);
+        }
+    }
 
     sendStatPacket(WorkerProcess);
 }
@@ -507,16 +525,6 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     c = createClient(cfd, ip, cport, WorkerProcess->protocol);
 }
 
-int initAppData(struct conn *c)
-{
-    if (c->app && c->app->initAppData) {
-        c->app_private_data = c->app->initAppData(c);
-        if (!c->app_private_data)
-            return WHEAT_WRONG;
-    }
-    return WHEAT_OK;
-}
-
 int sendClientFile(struct conn *c, int fd, off_t len)
 {
     int send = 0;
@@ -532,7 +540,11 @@ int sendClientData(struct conn *c, struct slice *s)
     return WorkerProcess->worker->sendData(c);
 }
 
-void workerProcessCron()
+// workerProcessCron is the cron of worker process, it must be called before
+// worker process initialized.
+//
+// `fake_func` is used by spawnFakeWorker and call it every cron.
+void workerProcessCron(void (*fake_func)(void *data), void *data)
 {
     static long long max_cron_interval = 0;
 
@@ -555,8 +567,10 @@ void workerProcessCron()
             app = AppTable[++i];
         }
 
-        if(worker_cron)
+        if (worker_cron)
             worker_cron();
+        if (fake_func)
+            fake_func(data);
         processEvents(WorkerProcess->center, WHEATSERVER_CRON_MILLLISECONDS);
         if (WorkerProcess->ppid != getppid()) {
             wheatLog(WHEAT_NOTICE, "parent change, worker shutdown");

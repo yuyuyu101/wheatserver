@@ -7,7 +7,9 @@
 
 #include <unistd.h>
 #include <setjmp.h>
-#include "../wheatserver.h"
+
+#include "../slice.h"
+#include "../wstr.h"
 #include "mbuf.h"
 #include "../slab.h"
 
@@ -16,6 +18,7 @@
 
 struct workerProcess {
     struct protocol *protocol;
+    struct array *apps;
     pid_t pid;
     pid_t ppid;
     int alive;
@@ -126,7 +129,7 @@ extern struct app *AppTable[];
 /* modify attention. Worker, Protocol, Applicantion interface */
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);
-void workerProcessCron();
+void workerProcessCron(void (*fake_func)(void *data), void *data);
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p);
 void freeClient(struct client *);
@@ -135,7 +138,6 @@ void tryFreeClient(struct client *c);
 void clientSendPacketList(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);
 struct client *buildConn(char *ip, int port, struct protocol *p);
-int initAppData(struct conn *);
 int sendClientData(struct conn *c, struct slice *s);
 struct conn *connGet(struct client *client);
 int isClientNeedSend(struct client *);

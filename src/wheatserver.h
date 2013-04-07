@@ -38,6 +38,8 @@
 #include "util.h"
 #include "version.h"
 #include "worker/worker.h"
+#include "protocol/protocol.h"
+#include "app/application.h"
 
 /* Server Configuration */
 #define WHEAT_DEFAULT_ADDR              "127.0.0.1"
@@ -211,6 +213,7 @@ void murderIdleWorkers();
 void killWorker(struct workerProcess *worker, int sig);
 void killAllWorkers(int sig);
 void spawnWorker(char *worker_name);
+void spawnFakeWorker(void (*func)(void *), void *data);
 void wakeUp();
 /* graceful means whether to wait worker
  * conncction completion */

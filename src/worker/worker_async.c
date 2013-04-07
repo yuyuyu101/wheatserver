@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "worker.h"
+#include "../wheatserver.h"
 
 int asyncSendData(struct conn *c); // pass `data` ownership to
 int asyncRecvData(struct client *c);
