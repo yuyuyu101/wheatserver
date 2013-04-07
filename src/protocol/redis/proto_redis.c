@@ -787,24 +787,27 @@ int isReadCommand(struct conn *c)
 
 int redisSpot(struct conn *c)
 {
-    int i = 2, ret;
-    if (!AppTable[i]->is_init) {
-        ret = AppTable[i]->initApp(c->client->protocol);
+    int ret;
+    struct app **app_p, *app;
+
+    app_p = arrayIndex(WorkerProcess->apps, 0);
+    app = *app_p;
+    if (!app->is_init) {
+        ret = initApp(app);
         if (ret == WHEAT_WRONG)
             return WHEAT_WRONG;
-        AppTable[i]->is_init = 1;
     }
-    c->app = AppTable[i];
+    c->app = app;
     ret = initAppData(c);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
-    ret = AppTable[i]->appCall(c, NULL);
+    ret = app->appCall(c, NULL);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "app failed, exited");
-        AppTable[i]->deallocApp();
-        AppTable[i]->is_init = 0;
+        app->deallocApp();
+        app->is_init = 0;
     }
     return ret;
 }
