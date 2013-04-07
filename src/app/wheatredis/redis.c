@@ -20,6 +20,7 @@ void redisAppDeinit();
 void redisAppCron();
 static void *redisAppDataInit(struct conn *c);
 static void redisAppDataDeinit(void *data);
+static void redisAddServerCommand(struct masterClient *c);
 
 static struct enumIdName RedisSources[] = {
     {0, "UseFile"}, {1, "UseRedis"}, {2, "RedisThenFile"},
@@ -45,7 +46,7 @@ static struct statItem RedisStats[] = {
 };
 
 static struct command RedisCommand[] = {
-    {"redis-addnode", 2, NULL},
+    {"redis-addnode", 3, redisAddServerCommand, "redis-addnode ip port"},
 };
 
 static struct moduleAttr AppRedisAttr = {
@@ -126,8 +127,10 @@ int initInstance(struct redisInstance *instance, size_t pos, wstr ip,
     instance->ntoken = 0;
     instance->reliability = 0;
     instance->wait_units = createList();
-    if (wakeupInstance(instance) == WHEAT_WRONG)
+    if (wakeupInstance(instance) == WHEAT_WRONG) {
+        wheatLog(WHEAT_WARNING, "initInstance connect failed: %s:%d", ip, port);
         return WHEAT_WRONG;
+    }
     return WHEAT_OK;
 }
 
@@ -478,6 +481,44 @@ void appendToPendingConn(struct conn *c)
     // and remove conn from `pending_conns` avoid incorrect access
     setClientFreeNotify(c->client, removePendingConn);
     appendToListTail(RedisServer->pending_conns, c);
+}
+
+static void redisAddServer(struct masterClient *c)
+{
+    int i;
+    wstr ip;
+    long long port;
+    size_t len;
+    struct redisInstance *instance, *instances;
+
+    ip = c->argv[1];
+    if (string2ll(c->argv[2], wstrlen(c->argv[2]), &port) == WHEAT_WRONG) {
+        wheatLog(WHEAT_WARNING, "parse port failed %d", port);
+        return ;
+    }
+
+    len = narray(RedisServer->instances);
+    instances = arrayData(RedisServer->instances);
+    for (i = 0; i < len; i++) {
+        instance = &instances[i];
+        if (!wstrCmp(instance->ip, ip) && port == instance->port) {
+            wheatLog(WHEAT_WARNING,
+                    "add redis server failed, %s:%d have already in WheatRedis",
+                    ip, port);
+            return;
+        }
+    }
+
+    if (hashAdd(RedisServer, ip, port, ++RedisServer->max_id)) {
+        wheatLog(WHEAT_WARNING, "add redis server failed %s:%d", ip, port);
+        --RedisServer->max_id;
+        return ;
+    }
+}
+
+static void redisAddServerCommand(struct masterClient *c)
+{
+    //spawnFakeWorker((void (*)(void *))redisAddServer, c);
 }
 
 // We should deal with some conditions about config_source:

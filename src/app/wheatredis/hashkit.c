@@ -32,7 +32,8 @@ int hashAdd(struct redisServer *server, wstr ip, int port, int id)
     size_t *sub_ntoken;
     int i;
 
-    initInstance(&add_instance, id, ip, port, DIRTY);
+    if (initInstance(&add_instance, id, ip, port, DIRTY) == WHEAT_WRONG)
+        return WHEAT_WRONG;
     arrayPush(server->instances, &add_instance);
 
     // `sub_ntoken`'s element is the amount of tokens every instance should
@@ -62,6 +63,7 @@ int hashAdd(struct redisServer *server, wstr ip, int port, int id)
         }
         if (token->instance_id != target_idx &&
                 sub_ntoken[token->instance_id]) {
+            wheatLog(WHEAT_DEBUG, "token: %d", token->pos);
             instance = arrayIndex(server->instances, token->instance_id);
             token->instance_id = target_idx;
             instance->ntoken--;

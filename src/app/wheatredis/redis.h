@@ -78,6 +78,7 @@ struct redisInstance {
 
 struct token *hashDispatch(struct redisServer *server, struct slice *key);
 int hashInit(struct redisServer *server);
+int hashAdd(struct redisServer *server, wstr ip, int port, int id);
 int initInstance(struct redisInstance *instance, size_t, wstr, int, int);
 struct client *connectConfigServer(char *option);
 void appendToPendingConn(struct conn *c);
