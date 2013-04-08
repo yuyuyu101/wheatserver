@@ -83,7 +83,6 @@ void initGlobalServerConfig()
     Server.worker_number = 2;
     Server.worker_type = NULL;
     Server.graceful_timeout = WHEATSERVER_GRACEFUL_TIME;
-    Server.idle_timeout = WHEATSERVER_IDLE_TIME;
     gettimeofday(&Server.cron_time, NULL);
     Server.daemon = 0;
     Server.pidfile = NULL;
@@ -305,7 +304,8 @@ void halt(int graceful)
         stopWorkers(graceful);
         wheatLog(WHEAT_NOTICE, "shutdown %s.", Server.master_name);
     } else {
-        wheatLog(WHEAT_NOTICE, "worker %s exit.", WorkerProcess->worker_name);
+        wheatLog(WHEAT_NOTICE, "worker %s exit.",
+                WorkerProcess->worker->attr->name);
     }
     if (Server.daemon) unlink(Server.pidfile);
     exit(graceful);

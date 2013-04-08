@@ -1,3 +1,5 @@
+// wstr, A C dynamic strings library, referenced from Redis
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -45,6 +47,8 @@ void wstrClear(wstr s)
     wstrupdatelen(s, 0);
 }
 
+// Enlarge two times of the length of total buffer needed if free space isn't
+// enough.
 wstr wstrMakeRoom(wstr s, size_t add_size)
 {
     struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));
@@ -259,6 +263,7 @@ int wstrIndex(wstr s, const char t)
     return (i != len) ? i : -1;
 }
 
+// Deprecated
 wstr wstrRemoveFreeSpace(wstr s)
 {
     struct wstrhd *sh = (void *)(s - sizeof(struct wstrhd));

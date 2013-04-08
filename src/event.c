@@ -1,3 +1,6 @@
+// A simple event-driven library learn from Redis. It support multi
+// event-notify API and easy to extend more platforms.
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.

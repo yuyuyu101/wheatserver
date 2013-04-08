@@ -1,9 +1,10 @@
+// Low level network IO wrapper for use
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "networking.h"
-
 
 /* return -1 means `fd` occurs error or closed, it should be closed
  * return 0 means EAGAIN */

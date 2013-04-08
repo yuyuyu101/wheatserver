@@ -1,3 +1,6 @@
+// Statistic module - implementation of send statistic packet and revevant
+// utils
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -36,6 +39,7 @@ struct statItem *getStatItemByName(const char *name)
     return NULL;
 }
 
+// Push StatItems to stats.
 void initServerStats(struct array *stats)
 {
     struct statItem *stat;
@@ -79,6 +83,10 @@ static wstr defaultStatCommand(struct workerProcess *worker_process)
     return out;
 }
 
+// We only send statistic fields not equal to zero(changed).
+// Statistic packet format:
+// "\r\rSTATINPUT\nfield\nvalue\nfield\nvalue\nfield\nvalue$"
+// "\r\r" is the start indicator and "$" is end indicator
 void sendStatPacket(struct workerProcess *worker_process)
 {
     char buf[WHEAT_STAT_PACKET_MAX];
@@ -138,6 +146,7 @@ void sendStatPacket(struct workerProcess *worker_process)
 
 /* ========== Master Statistic Area ========== */
 
+// Parse statistic packet from worker, apply changes to `Server` variable
 static ssize_t parseStat(struct masterClient *client,
         struct workerProcess **owner)
 {

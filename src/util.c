@@ -1,3 +1,5 @@
+// Functions used to wrap necessary call
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -7,8 +9,6 @@
 #include <limits.h>
 
 #include "wheatserver.h"
-
-struct dictType wstrDictType;
 
 void nonBlockCloseOnExecPipe(int *fd0, int *fd1)
 {
@@ -29,6 +29,11 @@ void nonBlockCloseOnExecPipe(int *fd0, int *fd1)
     *fd1 = full_pipe[1];
 }
 
+//=======================================================================
+//-------------------------- wstrDictType -------------------------------
+//=======================================================================
+
+struct dictType wstrDictType;
 
 unsigned int dictWstrHash(const void *key) {
     return dictGenHashFunction((unsigned char*)key, wstrlen((char*)key));
@@ -61,6 +66,10 @@ struct dictType wstrDictType = {
     dictWstrDestructor,         /* key destructor */
     dictWstrDestructor,         /* val destructor */
 };
+
+//=======================================================================
+//-------------------------- sliceDictType ------------------------------
+//=======================================================================
 
 unsigned int dictSliceHash(const void *key) {
     const struct slice *s = key;
@@ -121,12 +130,24 @@ struct dictType intDictType = {
 };
 
 
+//=======================================================================
+//---------------------- OS relevant functions --------------------------
+//=======================================================================
+
+// Daemonize flow:
+// 1. fork and exit parent process
+// 2. set child process as session leader
+// 3. fork again and exit child process(reserved grandchild process)
+// 4. if `dump_core` is false, change current work directory into '/'
+// 5. clear file mode creation mask(umask(0))
+// 6. redirect stdin, stdout and stderr to "/dev/null"
 int daemonize(int dump_core)
 {
     int status;
     pid_t pid, sid;
     int fd;
 
+    // Step 1
     pid = fork();
     switch (pid) {
         case -1:
@@ -141,7 +162,7 @@ int daemonize(int dump_core)
             _exit(0);
     }
 
-    /* 1st child continues and becomes the session leader */
+    // Step 2: 1st child continues and becomes the session leader
 
     sid = setsid();
     if (sid < 0) {
@@ -149,6 +170,7 @@ int daemonize(int dump_core)
         return WHEAT_WRONG;
     }
 
+    // Step 3: fork again
     pid = fork();
     switch (pid) {
         case -1:
@@ -163,9 +185,8 @@ int daemonize(int dump_core)
             _exit(0);
     }
 
-    /* 2nd child continues */
+    // Step 4: change working directory
 
-    /* change working directory */
     if (dump_core == 0) {
         status = chdir("/");
         if (status < 0) {
@@ -174,10 +195,11 @@ int daemonize(int dump_core)
         }
     }
 
-    /* clear file mode creation mask */
+    // Step 5: clear file mode creation mask
+
     umask(0);
 
-    /* redirect stdin, stdout and stderr to "/dev/null" */
+    // Step 6: redirect stdin, stdout and stderr to "/dev/null"
 
     fd = open("/dev/null", O_RDWR);
     if (fd < 0) {
@@ -217,6 +239,7 @@ int daemonize(int dump_core)
     return WHEAT_OK;
 }
 
+// write pid of current process into `Server.pidfile`
 void createPidFile()
 {
     /* Try to write the pid file in a best-effort way. */
@@ -239,6 +262,9 @@ void setTimer(int milliseconds)
     setitimer(ITIMER_REAL, &it, NULL);
 }
 
+// get modify time and file size by file description specified by `fd`,
+// put file size into `len`, put modify time into `m_time`
+// return WHEAT_WRONG if `fd` is invalid value, WHEAT_OK otherwise
 int getFileSizeAndMtime(int fd, off_t *len, time_t *m_time)
 {
     ASSERT(fd > 0);
@@ -251,6 +277,7 @@ int getFileSizeAndMtime(int fd, off_t *len, time_t *m_time)
     return WHEAT_OK;
 }
 
+// Check file reprensented by `path` is a regular file
 int isRegFile(const char *path)
 {
     ASSERT(path);
@@ -267,6 +294,10 @@ int fromSameParentDir(wstr parent, wstr child)
         return 0;
     return memcmp(parent, child, wstrlen(parent)) == 0;
 }
+
+//=======================================================================
+//-------------------------- string utils -------------------------------
+//=======================================================================
 
 int ll2string(char *s, size_t len, long long value)
 {
@@ -290,9 +321,9 @@ int ll2string(char *s, size_t len, long long value)
     return l;
 }
 
-/* Convert a string into a long long. Returns 1 if the string could be parsed
- * into a (non-overflowing) long long, 0 otherwise. The value will be set to
- * the parsed value when appropriate. */
+// Convert a string into a long long. Returns WHEAT_OK if the string could be
+// parsed into a (non-overflowing) long long, WHEAT_WRONG otherwise. The value
+// will be set to the parsed value when appropriate.
 int string2ll(const char *s, size_t slen, long long *value)
 {
     const char *p = s;
@@ -357,6 +388,13 @@ int string2ll(const char *s, size_t slen, long long *value)
     return WHEAT_OK;
 }
 
+// Example:
+//     size_t len = getIntLen(1234);
+//     assert(len == 4)
+//     size_t len = getIntLen(1);
+//     assert(len == 1)
+//     size_t len = getIntLen(0);
+//     assert(len == 1)
 size_t getIntLen(unsigned long i)
 {
     size_t len = 1;

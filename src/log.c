@@ -1,3 +1,5 @@
+// Implementation of log messages handler
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -30,6 +32,9 @@ void logRedirect()
     }
 }
 
+// Now, logging will open file and flush it to disk if logfile is file, close
+// it finally. It may slower process jobs and not effective.
+// TODO: Open file and keep file description. Export flush policy to users.
 void wheatLogRaw(int level, const char *msg)
 {
     const char *c = ".-* #";
@@ -62,6 +67,11 @@ void wheatLogRaw(int level, const char *msg)
     if (fp != stdout) fclose(fp);
 }
 
+// `level`: different log level setting will decide whether log message or not.
+// * WHEAT_DEBUG
+// * WHEAT_VERBOSE
+// * WHEAT_NOTICE
+// * WHEAT_WARNING
 void wheatLog(int level, const char *fmt, ...)
 {
     va_list ap;

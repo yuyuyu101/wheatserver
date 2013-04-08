@@ -20,11 +20,11 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "array.h"
 #include "dict.h"
 #include "list.h"
-#include "wstr.h"
 #include "slice.h"
-#include "array.h"
+#include "wstr.h"
 
 #include "debug.h"
 #include "event.h"
@@ -41,7 +41,7 @@
 #include "protocol/protocol.h"
 #include "app/application.h"
 
-/* Server Configuration */
+// Server Configuration
 #define WHEAT_DEFAULT_ADDR              "127.0.0.1"
 #define WHEAT_SERVERPORT                10828
 #define WHEATSERVER_CONFIGLINE_MAX      1024
@@ -55,12 +55,12 @@
 #define WHEATSERVER_CRON_MILLLISECONDS  100
 #define WHEAT_PREALLOC_CLIENT_LIMIT     10000
 #define WHEAT_BUFLIMIT                  (1024*1024*1024)
-#define WHEAT_ARGS_NO_LIMIT             -1
+#define WHEAT_ARGS_NO_LIMIT             (-1)
 #define WHEAT_MBUF_SIZE                 (16*1024)
 #define WHEAT_PROTOCOL_DEFAULT          "Http"
 #define WHEAT_CRON_HZ                   10
 
-/* Statistic Configuration */
+// Statistic Configuration
 #define WHEAT_STATS_PORT       10829
 #define WHEAT_STATS_ADDR       "127.0.0.1"
 #define WHEAT_STAT_REFRESH     10
@@ -68,23 +68,23 @@
 #define WHEAT_DEFAULT_WORKER   "SyncWorker"
 #define WHEAT_ASTERISK         "*"
 #define WHEAT_PREALLOC_CLIENT  100
-#define WHEAT_MAX_BUFFER_SIZE  4*1024*1024
-#define WHEAT_MAX_FILE_LIMIT   16*1024*1024
+#define WHEAT_MAX_BUFFER_SIZE  (4*1024*1024)
+#define WHEAT_MAX_FILE_LIMIT   (16*1024*1024)
 #define WHEAT_STR_NULL         "NULL"
 
-/* Command Format */
+// Command Format
 #define WHEAT_START_SPLIT     "\r\r"
 
-/* Log levels */
+// Log levels
 #define WHEAT_DEBUG       0
 #define WHEAT_VERBOSE     1
 #define WHEAT_NOTICE      2
 #define WHEAT_WARNING     4
 #define WHEAT_LOG_RAW     8
 
+// Config validator return values
 #define VALIDATE_OK       0
 #define VALIDATE_WRONG    1
-
 
 /* Using the following macro you can run code inside workerProcessCron() with
  * the specified period, specified in milliseconds.
@@ -95,28 +95,39 @@
 #define getMicroseconds(time) (time.tv_sec*1000000+time.tv_usec)
 
 
-/* This exists some drawbacks globalServer include server configuration
- * and master info */
+// globalServer is only one for Wheatserver instance.
+//
+// `worker_type`: Worker module name
+// `graceful_timeout`: interval for worker process exit gracefully
+// `worker_time`: interval for worker process timeout trigger
+// `pipe_readfd`, `pipe_writefd`: used to wake up master process, it's relevant
+// for signal handler
+// `workers`: alive worker process list
+// `master_clients`: clients connect to master process(statistic listen)
+// `signal_queue`: signal waiting queue
+// `modules`: aggregation of modules including worker, protocol, application
+// `confs`: the collection of configuration items in modules
+// `commands`: the collection of command items in modules
+// `stats`: the collection of statistic items in modules
 struct globalServer {
-    char *bind_addr;                             //bind-addr, *
-    int port;                                    //port, 10828
-    int worker_number;                           //worker-number, 2
-    char *worker_type;                           //worker-type, SyncWorker
+    char *bind_addr;
+    int port;
+    int worker_number;
+    char *worker_type;
     char configfile_path[WHEATSERVER_PATH_LEN];
     struct hookCenter *hook_center;
     int graceful_timeout;
-    int idle_timeout;
-    int daemon;                                  //daemon, off
-    char *pidfile;                               //pidfile, NULL
-    int max_buffer_size;                         //max-buffer-size, 0
-    int worker_timeout;                          //timeout-seconds, 30
+    int daemon;
+    char *pidfile;
+    int max_buffer_size;
+    int worker_timeout;
 
-    char *stat_addr;                             //stat-bind-addr, 127.0.0.1
-    int stat_port;                               //stat-port, 10829
-    int stat_refresh_seconds;                    //stat-refresh-time, 10
+    char *stat_addr;
+    int stat_port;
+    int stat_refresh_seconds;
     char *stat_file;
 
-    /* status */
+    // status
     char master_name[WHEATSERVER_MAX_NAMELEN];
     int ipfd;
     struct evcenter *master_center;
@@ -137,12 +148,11 @@ struct globalServer {
     struct array *commands;
     struct array *stats;
 
-    /* log */
-    char *logfile;                               //logfile, stdout
-    int verbose;                                 //logfile-level, NOTICE
+    // log
+    char *logfile;
+    int verbose;
 
-    /* err buf */
-    char *exit_reason;
+    // error
     char neterr[NET_ERR_LEN];
 };
 
@@ -167,6 +177,8 @@ enum printFormat {
     LIST_FORMAT
 };
 
+// `target` is the actual field to store config value. You can use int, pointer
+// or enum type as your config type. Directly store right field.
 struct configuration {
     char *name;
     int args;               // -1 means no limit on args
@@ -203,11 +215,11 @@ extern struct globalServer Server;
 
 void initServer();
 
-/* restart */
+// ============ Worker Process Restart =============
 void reload();
 void reexec();
 
-/* worker manage */
+// ============ Worker Process Management ==========
 void adjustWorkerNumber();
 void murderIdleWorkers();
 void killWorker(struct workerProcess *worker, int sig);
@@ -215,33 +227,34 @@ void killAllWorkers(int sig);
 void spawnWorker(char *worker_name);
 void spawnFakeWorker(void (*func)(void *), void *data);
 void wakeUp();
-/* graceful means whether to wait worker
- * conncction completion */
+// graceful means whether to wait worker
+// conncction completion
 void stopWorkers(int graceful);
 void halt(int exitcode);
 
-/* configuration */
+// ============== Configuration ====================
 void loadConfigFile(const char *filename, char *options, int test);
 void fillServerConfig();
 void printServerConfig();
 struct configuration *getConfiguration(const char *name);
 void configCommand(struct masterClient *);
 
-/* log */
-void wheatLogRaw(int level, const char *msg);
-void wheatLog(int level, const char *fmt, ...);
-
-struct masterClient *createMasterClient(int fd);
-void freeMasterClient(struct masterClient *c);
-void logRedirect();
-
-/* Configuration */
+// ============== Configuration validator ==========
 void initServerConfs(struct list *confs);
 int stringValidator(struct configuration *conf, const char *key, const char *val);
 int unsignedIntValidator(struct configuration *conf, const char *key, const char *val);
 int enumValidator(struct configuration *conf, const char *key, const char *val);
 int boolValidator(struct configuration *conf, const char *key, const char *val);
 int listValidator(struct configuration *conf, const char *key, const char *val);
+
+// =================== Log =========================
+void wheatLogRaw(int level, const char *msg);
+void wheatLog(int level, const char *fmt, ...);
+
+// ============ Master Client Operation ============
+struct masterClient *createMasterClient(int fd);
+void freeMasterClient(struct masterClient *c);
+void logRedirect();
 
 
 #define WHEAT_WRONG -1

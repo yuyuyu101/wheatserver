@@ -1,3 +1,5 @@
+// config.c support parsing config file and apply config to settings
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -14,11 +16,14 @@ static struct enumIdName Workers[] = {
     {0, "SyncWorker"}, {1, "AsyncWorker"}
 };
 
-// configTable is immutable after worker setuped in *Worker Process*
+// configTable is immutable after worker setuped in *Worker Process*, and it
+// only used for master process and general settings. Applicant, protocol and
+// worker module can't add own config to `configTable`.
+//
 // Attention: If modify configTable, three places should be attention to.
 // 1. initGlobalServerConfig() in wheatserver.c
 // 2. wheatserver.conf
-// 3. fillServerConfig() below
+// 3. fillServerConfig() (see below)
 struct configuration configTable[] = {
     //  name   |    args   |      validator      |      default       |
     //  helper |    flags
@@ -58,6 +63,11 @@ struct configuration configTable[] = {
         (void *)WHEAT_BUFLIMIT, INT_FORMAT},
 };
 
+// fillServerConfig is used to fill configTable values to global variable
+// `Server`.
+// But implement is ugly and difficult to modify by newer. It's need refactor
+// priorly.
+// TODO: change fillServerConfig implement or remove it.
 void fillServerConfig()
 {
     struct configuration *conf = &configTable[1];
@@ -95,6 +105,9 @@ void fillServerConfig()
 
 /* ========== Configuration Validator/Print Area ========== */
 
+// There is a trick to handle. When STRING_FORMAT config using wstr type to
+// store, but compiled init value is constant string. We should check it
+// constant string or wstr type by `helper` filed.
 int stringValidator(struct configuration *conf, const char *key, const char *val)
 {
     ASSERT(val);
@@ -110,6 +123,7 @@ int stringValidator(struct configuration *conf, const char *key, const char *val
     return VALIDATE_OK;
 }
 
+// Do nothing special but free list
 int listValidator(struct configuration *conf, const char *key, const char *val)
 {
     ASSERT(val);
@@ -121,6 +135,8 @@ int listValidator(struct configuration *conf, const char *key, const char *val)
     return VALIDATE_OK;
 }
 
+// Check config val is a unsigned integer and use `helper` field to limit its
+// upper bound.
 int unsignedIntValidator(struct configuration *conf, const char *key, const char *val)
 {
     ASSERT(val);
@@ -177,7 +193,7 @@ int boolValidator(struct configuration *conf, const char *key, const char *val)
     return VALIDATE_OK;
 }
 
-
+// It used by WheatServer frameworker but module programmers
 static void extraValidator()
 {
     ASSERT(Server.stat_refresh_seconds < Server.worker_timeout);
@@ -200,6 +216,10 @@ void initServerConfs(struct list *confs)
     }
 }
 
+// Consider to return actual value from union structure and reduce module
+// programmer's job.
+//
+// TODO: Modify getConfiguration return type
 struct configuration *getConfiguration(const char *name)
 {
     struct listNode *node;
@@ -219,6 +239,7 @@ struct configuration *getConfiguration(const char *name)
     return NULL;
 }
 
+// Parse config string to list structure
 static struct list *handleList(wstr *lines, int *i, int count)
 {
     int pos = *i + 1;
@@ -259,6 +280,13 @@ handle_error:
     return l;
 }
 
+// `config`: Multi lines from config file and command line. They are seperate
+// by "\n".
+//
+// Seperate lines and iterate each line to check somethings listed below:
+// 1. correspond config field
+// 2. correct config value type and constraints
+// 3. Validate by validator functions
 void applyConfig(wstr config)
 {
     int count, args;
@@ -356,32 +384,7 @@ void loadConfigFile(const char *filename, char *options, int test)
     wstrFree(config);
 }
 
-void statConfigByName(const char *n, char *result, int len)
-{
-    wstr name = wstrNew(n);
-
-    if (!wstrCmpChars(name, "port", 4)) {
-        snprintf(result, len, "%d", Server.port);
-    } else if (!wstrCmpChars(name, "bind-addr", 9)) {
-        snprintf(result, len, "%s", Server.bind_addr);
-    } else if (!wstrCmpChars(name, "logfile", 7)) {
-        snprintf(result, len, "%s", Server.logfile);
-    } else if (!wstrCmpChars(name, "logfile-level", 13)) {
-        if (Server.verbose == WHEAT_DEBUG)
-            snprintf(result, len, "DEBUG");
-        else if (Server.verbose == WHEAT_VERBOSE)
-            snprintf(result, len, "VERBOSE");
-        else if (Server.verbose == WHEAT_NOTICE)
-            snprintf(result, len, "NOTICE");
-        else if (Server.verbose == WHEAT_WARNING)
-            snprintf(result, len, "WARNING");
-        else
-            snprintf(result, len, "UNKNOWN");
-    } else
-        snprintf(result, len, "UNKNOWN");
-    wstrFree(name);
-}
-
+// Return strings constructed by config and formatting its value by type
 static ssize_t constructConfigFormat(struct configuration *conf, char *buf, size_t len)
 {
     int ret = 0, pos = 0;
@@ -433,6 +436,7 @@ void configCommand(struct masterClient *c)
     replyMasterClient(c, buf, len);
 }
 
+// Used by debug and displayed under DEBUG mode
 void printServerConfig(int test)
 {
     struct configuration *conf;

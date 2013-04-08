@@ -1,3 +1,5 @@
+// Worker process base module
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -9,13 +11,12 @@ struct workerProcess *WorkerProcess = NULL;
 
 #define WHEAT_CLIENT_MAX      1000
 
+// ========= Statistic Cache ===============
 // Cache below stat field avoid too much query on StatItems
-// --------- Statistic Cache --------------
 static struct statItem *StatBufferSize = NULL;
 static struct statItem *StatTotalRequest = NULL;
 static struct statItem *StatFailedRequest = NULL;
 static struct statItem *StatRunTime = NULL;
-//-----------------------------------------
 
 enum packetType {
     SLICE = 1,
@@ -45,8 +46,11 @@ static struct list *FreeClients = NULL;
 static struct list *Clients = NULL;
 static struct statItem *StatTotalClient = NULL;
 
-static void acceptClient(struct evcenter *center, int fd, void *data, int mask);
+// Static fucntion declaretion
 static void handleRequest(struct evcenter *center, int fd, void *data, int mask);
+static void connDealloc(struct conn *c);
+static void freeSendPacket(struct sendPacket *p);
+static void callbackCall(void *data);
 
 struct worker *spotWorker(char *worker_name)
 {
@@ -58,6 +62,10 @@ struct worker *spotWorker(char *worker_name)
     }
     return NULL;
 }
+
+// ==================================================================
+// ======================= Client Implemation =======================
+// ==================================================================
 
 static void clientsCron()
 {
@@ -87,188 +95,6 @@ static void clientsCron()
         if (!listLength(c->conns))
             msgClean(c->req_buf);
     }
-}
-
-static struct list *createAndFillPool()
-{
-    int i;
-    struct list *l = createList();
-    ASSERT(l);
-    for (i = 0; i < 120; ++i) {
-        struct client *c = wmalloc(sizeof(*c));
-        appendToListTail(l, c);
-    }
-    return l;
-}
-
-void initWorkerProcess(struct workerProcess *worker, char *worker_name)
-{
-    struct configuration *conf;
-    int i;
-    struct protocol *p;
-    struct app **app_p, *app;
-
-    if (Server.stat_fd != 0)
-        close(Server.stat_fd);
-    setProctitle(worker_name);
-    worker->pid = getpid();
-    worker->ppid = getppid();
-    worker->alive = 1;
-    worker->start_time = Server.cron_time;
-    worker->worker_name = worker_name;
-    worker->worker = spotWorker(worker_name);
-    worker->master_stat_fd = 0;
-    ASSERT(worker->worker);
-    worker->stats = NULL;
-    initWorkerSignals();
-    worker->center = eventcenterInit(WHEAT_CLIENT_MAX);
-    if (!worker->center) {
-        wheatLog(WHEAT_WARNING, "eventcenter_init failed");
-        halt(1);
-    }
-    if (createEvent(worker->center, Server.ipfd, EVENT_READABLE, acceptClient,  NULL) == WHEAT_WRONG)
-    {
-        wheatLog(WHEAT_WARNING, "createEvent failed");
-        halt(1);
-    }
-
-    // It may nonblock after fork???
-    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-        halt(1);
-    }
-    conf = getConfiguration("protocol");
-    for (i = 0; i < 2; ++i) {
-        p = ProtocolTable[i];
-        if (!strcasecmp(conf->target.ptr, p->attr->name)) {
-            if (p->initProtocol() == WHEAT_WRONG) {
-                wheatLog(WHEAT_WARNING, "init protocol failed");
-                halt(1);
-            }
-            worker->protocol = p;
-        }
-    }
-    if (!worker->protocol) {
-        wheatLog(WHEAT_WARNING, "find protocol %s failed", conf->target.ptr);
-        halt(1);
-    }
-
-    worker->apps = arrayCreate(sizeof(struct app*), 3);
-    if (!worker->apps) {
-        wheatLog(WHEAT_WARNING, "array create failed");
-        halt(1);
-    }
-
-    StatTotalClient = getStatItemByName("Total client");
-    gettimeofday(&Server.cron_time, NULL);
-    if (worker->worker->setup)
-        worker->worker->setup();
-    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
-
-    FreeClients = createAndFillPool();
-    Clients = createList();
-    StatBufferSize = getStatItemByName("Max buffer size");
-    StatTotalRequest = getStatItemByName("Total request");
-    StatFailedRequest = getStatItemByName("Total failed request");
-    StatRunTime = getStatItemByName("Worker run time");
-
-    getAppsByProtocol(worker->apps, worker->protocol->attr->name);
-    for (i = 0; i < narray(worker->apps); i++) {
-        app_p = arrayIndex(worker->apps, i);
-        app = *app_p;
-        if (initApp(app) == WHEAT_WRONG) {
-            wheatLog(WHEAT_WARNING, "init app failed %s", app->attr->name);
-            halt(1);
-        }
-    }
-
-    sendStatPacket(WorkerProcess);
-}
-
-void freeWorkerProcess(void *w)
-{
-    struct workerProcess *worker = w;
-    if (worker->stats)
-        wfree(worker->stats);
-    wfree(worker);
-}
-
-static void freeSendPacket(struct sendPacket *p)
-{
-    wfree(p);
-}
-
-static void callbackCall(void *data)
-{
-    struct callback *c = data;
-    c->func(c->data);
-}
-
-struct conn *connGet(struct client *client)
-{
-    if (client->pending) {
-        ASSERT(client->pending->client);
-        return client->pending;
-    }
-    struct conn *c = wmalloc(sizeof(*c));
-    c->client = client;
-    c->protocol_data = client->protocol->initProtocolData();
-    c->app = c->app_private_data = NULL;
-    appendToListTail(client->conns, c);
-    c->ready_send = 0;
-    c->send_queue = createList();
-    listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
-    c->cleanup = arrayCreate(sizeof(struct callback), 2);
-    return c;
-}
-
-static void connDealloc(struct conn *c)
-{
-    if (c->protocol_data)
-        c->client->protocol->freeProtocolData(c->protocol_data);
-    if (c->app_private_data)
-        c->app->freeAppData(c->app_private_data);
-    arrayEach(c->cleanup, callbackCall);
-    arrayDealloc(c->cleanup);
-    freeList(c->send_queue);
-    wfree(c);
-}
-
-void finishConn(struct conn *c)
-{
-    c->ready_send = 1;
-    clientSendPacketList(c->client);
-}
-
-void registerConnFree(struct conn *conn, void (*clean)(void*), void *data)
-{
-    struct callback cleanup;
-    cleanup.func = clean;
-    cleanup.data = data;
-    arrayPush(conn->cleanup, &cleanup);
-}
-
-static void appendFileToSendQueue(struct conn *conn, int fd, off_t off, size_t len)
-{
-    struct sendPacket *packet = wmalloc(sizeof(*packet));
-    if (!packet)
-        setClientUnvalid(conn->client);
-    packet->type = FILE_DESCRIPTION;
-    packet->target.file.fd = fd;
-    packet->target.file.off = off;
-    packet->target.file.len = len;
-
-    appendToListTail(conn->send_queue, packet);
-}
-
-static void appendSliceToSendQueue(struct conn *conn, struct slice *s)
-{
-    struct sendPacket *packet = wmalloc(sizeof(*packet));
-    if (!packet)
-        setClientUnvalid(conn->client);
-    packet->type = SLICE;
-    sliceTo(&packet->target.slice, s->data, s->len);
-    appendToListTail(conn->send_queue, packet);
 }
 
 struct client *createClient(int fd, char *ip, int port, struct protocol *p)
@@ -352,6 +178,105 @@ int isClientNeedSend(struct client *c)
     return 0;
 }
 
+static struct list *createAndFillPool()
+{
+    int i;
+    struct list *l = createList();
+    ASSERT(l);
+    for (i = 0; i < 120; ++i) {
+        struct client *c = wmalloc(sizeof(*c));
+        appendToListTail(l, c);
+    }
+    return l;
+}
+
+// ==================================================================
+// ========================= Conn Implemation =======================
+// ==================================================================
+
+struct conn *connGet(struct client *client)
+{
+    if (client->pending) {
+        ASSERT(client->pending->client);
+        return client->pending;
+    }
+    struct conn *c = wmalloc(sizeof(*c));
+    c->client = client;
+    c->protocol_data = client->protocol->initProtocolData();
+    c->app = c->app_private_data = NULL;
+    appendToListTail(client->conns, c);
+    c->ready_send = 0;
+    c->send_queue = createList();
+    listSetFree(c->send_queue, (void(*)(void*))freeSendPacket);
+    c->cleanup = arrayCreate(sizeof(struct callback), 2);
+    return c;
+}
+
+static void connDealloc(struct conn *c)
+{
+    if (c->protocol_data)
+        c->client->protocol->freeProtocolData(c->protocol_data);
+    if (c->app_private_data)
+        c->app->freeAppData(c->app_private_data);
+    arrayEach(c->cleanup, callbackCall);
+    arrayDealloc(c->cleanup);
+    freeList(c->send_queue);
+    wfree(c);
+}
+
+void finishConn(struct conn *c)
+{
+    c->ready_send = 1;
+    clientSendPacketList(c->client);
+}
+
+void registerConnFree(struct conn *conn, void (*clean)(void*), void *data)
+{
+    struct callback cleanup;
+    cleanup.func = clean;
+    cleanup.data = data;
+    arrayPush(conn->cleanup, &cleanup);
+}
+
+// ==================================================================
+// ================== Worker Process IO Support =====================
+// ==================================================================
+
+static void freeSendPacket(struct sendPacket *p)
+{
+    wfree(p);
+}
+
+static void callbackCall(void *data)
+{
+    struct callback *c = data;
+    c->func(c->data);
+}
+
+static void appendFileToSendQueue(struct conn *conn, int fd, off_t off,
+        size_t len)
+{
+    struct sendPacket *packet = wmalloc(sizeof(*packet));
+    if (!packet)
+        setClientUnvalid(conn->client);
+    packet->type = FILE_DESCRIPTION;
+    packet->target.file.fd = fd;
+    packet->target.file.off = off;
+    packet->target.file.len = len;
+
+    appendToListTail(conn->send_queue, packet);
+}
+
+static void appendSliceToSendQueue(struct conn *conn, struct slice *s)
+{
+    struct sendPacket *packet = wmalloc(sizeof(*packet));
+    if (!packet)
+        setClientUnvalid(conn->client);
+    packet->type = SLICE;
+    sliceTo(&packet->target.slice, s->data, s->len);
+    appendToListTail(conn->send_queue, packet);
+}
+
 // Return value:
 // 0: send packet completely
 // 1: send packet incompletely
@@ -425,6 +350,25 @@ void clientSendPacketList(struct client *c)
             removeListNode(c->conns, node);
     }
 }
+
+int sendClientFile(struct conn *c, int fd, off_t len)
+{
+    int send = 0;
+    appendFileToSendQueue(c, fd, send, len-send);
+    return WorkerProcess->worker->sendData(c);
+}
+
+int sendClientData(struct conn *c, struct slice *s)
+{
+    if (!s->len)
+        return WHEAT_OK;
+    appendSliceToSendQueue(c, s);
+    return WorkerProcess->worker->sendData(c);
+}
+
+// ==================================================================
+// ============= Worker Process Connection Functions ================
+// ==================================================================
 
 struct client *buildConn(char *ip, int port, struct protocol *p)
 {
@@ -525,19 +469,99 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     c = createClient(cfd, ip, cport, WorkerProcess->protocol);
 }
 
-int sendClientFile(struct conn *c, int fd, off_t len)
+// ==================================================================
+// ================== Worker Process Implemation ====================
+// ==================================================================
+
+void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
-    int send = 0;
-    appendFileToSendQueue(c, fd, send, len-send);
-    return WorkerProcess->worker->sendData(c);
+    struct configuration *conf;
+    int i;
+    struct protocol *p;
+    struct app **app_p, *app;
+
+    if (Server.stat_fd != 0)
+        close(Server.stat_fd);
+    setProctitle(worker_name);
+    worker->pid = getpid();
+    worker->ppid = getppid();
+    worker->alive = 1;
+    worker->start_time = Server.cron_time;
+    worker->worker = spotWorker(worker_name);
+    worker->master_stat_fd = 0;
+    ASSERT(worker->worker);
+    worker->stats = NULL;
+    initWorkerSignals();
+    worker->center = eventcenterInit(WHEAT_CLIENT_MAX);
+    if (!worker->center) {
+        wheatLog(WHEAT_WARNING, "eventcenter_init failed");
+        halt(1);
+    }
+    if (createEvent(worker->center, Server.ipfd, EVENT_READABLE, acceptClient,  NULL) == WHEAT_WRONG)
+    {
+        wheatLog(WHEAT_WARNING, "createEvent failed");
+        halt(1);
+    }
+
+    // It may nonblock after fork???
+    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
+        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
+        halt(1);
+    }
+    conf = getConfiguration("protocol");
+    for (i = 0; i < 2; ++i) {
+        p = ProtocolTable[i];
+        if (!strcasecmp(conf->target.ptr, p->attr->name)) {
+            if (p->initProtocol() == WHEAT_WRONG) {
+                wheatLog(WHEAT_WARNING, "init protocol failed");
+                halt(1);
+            }
+            worker->protocol = p;
+        }
+    }
+    if (!worker->protocol) {
+        wheatLog(WHEAT_WARNING, "find protocol %s failed", conf->target.ptr);
+        halt(1);
+    }
+
+    worker->apps = arrayCreate(sizeof(struct app*), 3);
+    if (!worker->apps) {
+        wheatLog(WHEAT_WARNING, "array create failed");
+        halt(1);
+    }
+
+    StatTotalClient = getStatItemByName("Total client");
+    gettimeofday(&Server.cron_time, NULL);
+    if (worker->worker->setup)
+        worker->worker->setup();
+    WorkerProcess->refresh_time = Server.cron_time.tv_sec;
+
+    FreeClients = createAndFillPool();
+    Clients = createList();
+    StatBufferSize = getStatItemByName("Max buffer size");
+    StatTotalRequest = getStatItemByName("Total request");
+    StatFailedRequest = getStatItemByName("Total failed request");
+    StatRunTime = getStatItemByName("Worker run time");
+
+    getAppsByProtocol(worker->apps, worker->protocol->attr->name);
+    for (i = 0; i < narray(worker->apps); i++) {
+        app_p = arrayIndex(worker->apps, i);
+        app = *app_p;
+        if (initApp(app) == WHEAT_WRONG) {
+            wheatLog(WHEAT_WARNING, "init app failed %s", app->attr->name);
+            halt(1);
+        }
+    }
+
+    sendStatPacket(WorkerProcess);
 }
 
-int sendClientData(struct conn *c, struct slice *s)
+void freeWorkerProcess(void *w)
 {
-    if (!s->len)
-        return WHEAT_OK;
-    appendSliceToSendQueue(c, s);
-    return WorkerProcess->worker->sendData(c);
+    struct workerProcess *worker = w;
+    if (worker->stats)
+        wfree(worker->stats);
+    wfree(worker);
 }
 
 // workerProcessCron is the cron of worker process, it must be called before

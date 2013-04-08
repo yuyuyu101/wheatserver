@@ -1,3 +1,5 @@
+// Http protocol module implemetation
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -17,6 +19,7 @@
 #define CHUNKED              "Chunked"
 #define HTTP_CONTINUE        "HTTP/1.1 100 Continue\r\n\r\n"
 
+// Http protocol API
 const wstr httpGetPath(struct conn *c);
 const wstr httpGetQueryString(struct conn *c);
 const struct slice *httpGetBodyNext(struct conn *c);

@@ -1,3 +1,5 @@
+// Implementation of the portable APIs on different platforms
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -5,6 +7,9 @@
 #ifndef WHEATSERVER_PORTABLE_H
 #define WHEATSERVER_PORTABLE_H
 
+// portable for sendfile(2), support BSD and linux.
+// return the length of data sent or -1 means error occurred, return 0 if
+// outer_fd is non-blocking means EAGAIN errno.
 ssize_t portable_sendfile(int out_fd, int in_fd, off_t, off_t len);
 
 /* Check if we can use setproctitle().

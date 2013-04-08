@@ -1,3 +1,5 @@
+// Hash table implemetation
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -12,6 +14,36 @@
 #define DICT_FORCE_RESIZE_RATIO 5
 
 #include <stdint.h>
+
+// Key, value ownership:
+// If `keyDup` in `type` field in struct dict is specified, dict will duplicate
+// the key. If `keyDup` is empty, caller must guarantee the live of key.
+// Like `keyDup`, `valDup` is the same.
+//
+// In general, you could create dictType like wstrDictType: don't set `keyDup`
+// and `valDup`, but set `keyDestructor` and `valDestructor`. In this way, you
+// can pass ownership to dict and needn't to free it. And it reduce unnecessary
+// allocation and release operates.
+//
+// Performance:
+// You should be cautious of insert much key and value pairs to dict. If you
+// are sensitive to performance, try to call dictExpand prepared. It will
+// expand slots in dict.
+//
+// Traversing hash table example:
+//     struct dict *d = dictCreate(&wstrDictType);
+//     ...
+//     dictAdd(key, value);
+//     dictAdd(key, value);
+//     ...
+//     struct dictIterator *iter = dictGetIterator(d);
+//     struct dictEntry *entry;
+//     while ((entry = dictNext(iter)) != NULL) {
+//         key = dictGetKey(entry);
+//         value = dictGetVal(entry);
+//         ...
+//     }
+//     dictReleaseIterator(iter);
 
 struct dictEntry {
     void *key;
@@ -32,6 +64,11 @@ struct dictType {
     void (*valDestructor)(void *obj);
 };
 
+// This is our hash table structure.
+// `size`: the slots for hash
+// `sizemask`: the upper bound for `size`, using for getting slot within `size`
+// `used`: the number of entries.
+// `type`: the methods for operate key and value
 struct dict {
     struct dictEntry **table;
     unsigned long size;
@@ -86,27 +123,37 @@ struct dictIterator {
 #define dictSlots(d) ((d)->size)
 #define dictSize(d) ((d)->used)
 
-/* Base Dict API */
+// Base Dict API
 struct dict *dictCreate(struct dictType*);
-int dictExpand(struct dict *d, unsigned long size);
 int dictAdd(struct dict *d, void *key, void *val);
-struct dictEntry *dictAddRaw(struct dict *d, void *key);
 int dictReplace(struct dict *d, void *key, void *val, int *replace);
-struct dictEntry *dictReplaceRaw(struct dict *d, void *key);
 int dictDelete(struct dict *d, const void *key);
+// dictDeleteNoFree is used if you don't want to free key and value when
+// `keyDestructor` and `valDestructor` is set.
 int dictDeleteNoFree(struct dict *d, const void *key);
-void dictRelease(struct dict *d);
 struct dictEntry * dictFind(struct dict *d, const void *key);
 void *dictFetchValue(struct dict *d, const void *key);
+void dictRelease(struct dict *d);
+
+// Iterator operators
 struct dictIterator *dictGetIterator(struct dict *d);
 struct dictEntry *dictNext(struct dictIterator *iter);
 void dictReleaseIterator(struct dictIterator *iter);
+
+// Low level API
+int dictExpand(struct dict *d, unsigned long size);
+struct dictEntry *dictAddRaw(struct dict *d, void *key);
+struct dictEntry *dictReplaceRaw(struct dict *d, void *key);
+void dictClear(struct dict *d);
+
+// Debug use, it may crash affecting the whole application
 void dictPrintStats(struct dict *d);
 void dictPrint(struct dict *d);
+
+// Hash function, using them for customize key, value pair
 unsigned int dictGenHashFunction(const void *key, int len);
 unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len);
-void dictClear(struct dict *d);
-void dictSetHashFunctionSeed(unsigned int initval);
 unsigned int dictGetHashFunctionSeed(void);
+void dictSetHashFunctionSeed(unsigned int initval);
 
 #endif

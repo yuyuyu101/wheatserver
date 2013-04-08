@@ -1,3 +1,5 @@
+// A string implementation of no payload
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -6,6 +8,20 @@
 #define WHEATSERVER_SLICES_H
 
 #include <stdint.h>
+
+// Learn from LevelDB, using slice in Wheatserver everywhere(Like it very much).
+//
+// Typical case:
+// 1.
+//     char buf[1024];
+//     struct slice slice;
+//     sliceTo(&slice, buf, 1024);
+//     readBulkFrom(fd, &slice);
+// 2.
+//     char packet[4096];
+//     ...
+//     struct slice field, value;
+//     parsePacket(packet, &field, &value);
 
 struct slice {
     uint8_t *data;

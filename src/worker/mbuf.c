@@ -1,3 +1,5 @@
+// mbuf structure implemetation
+//
 // Copyright (c) 2013 The Wheatserver Author. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
@@ -14,25 +16,16 @@
 
 #define WHEAT_MBUF_MAGIC       0x19920828
 
-/*
- * mbuf header is at the tail end of the mbuf. This enables us to catch
- * buffer overrun early by asserting on the magic value during get or
- * put operations
- *
- *   <------------- mbuf_chunk_size ------------->
- *   +-------------------------------------------+
- *   |       mbuf data          |  mbuf header   |
- *   |     (mbuf_offset)        | (struct mbuf)  |
- *   +-------------------------------------------+
- *   ^           ^        ^     ^^
- *   |           |        |     ||
- *   \           |        |     |\
- *   mbuf->start \        |     | mbuf->end (one byte past valid bound)
- *                mbuf->protect_pos\
- *                        \      mbuf
- *                        mbuf->write_pos (one byte past valid byte)
- *
- */
+// msghdr as a management unit to manage multi mbuf.
+//
+//   mbuf_size
+//   <------>
+//   +------+  +------+  +------+  +------+  +------+
+//   | mbuf |->| mbuf |->| mbuf |->| mbuf |->| mbuf |
+//   +------+  +------+  +------+  +------+  +------+
+//      |         |                             |
+//      |       last_read                       |
+//  protected                                last_write
 
 struct msghdr {
     struct mbuf *last_write;
@@ -43,6 +36,23 @@ struct msghdr {
     uint8_t is_set_writted_after_put;
     uint8_t is_set_readed_after_read;
 };
+
+// mbuf header is at the tail end of the mbuf. This enables us to catch
+// buffer overrun early by asserting on the magic value during get or
+// put operations
+//
+//   <------------- mbuf_chunk_size ------------->
+//   +-------------------------------------------+
+//   |       mbuf data          |  mbuf header   |
+//   |     (mbuf_offset)        | (struct mbuf)  |
+//   +-------------------------------------------+
+//   ^           ^        ^     ^^
+//   |           |        |     ||
+//   \           |        |     |\
+//   mbuf->start \        |     | mbuf->end (one byte past valid bound)
+//                mbuf->protect_pos\
+//                        \      mbuf
+//                        mbuf->write_pos (one byte past valid byte)
 
 struct mbuf {
     uint32_t magic;
