@@ -613,6 +613,7 @@ void usage() {
     fprintf(stderr,"       ./wheatserver - (read config from stdin)\n");
     fprintf(stderr,"       ./wheatserver -v or --version\n");
     fprintf(stderr,"       ./wheatserver -h or --help\n");
+    fprintf(stderr,"       ./wheatserver -m or --module\n");
     fprintf(stderr,"Examples:\n");
     fprintf(stderr,"       ./wheatserver (run the server with default conf)\n");
     fprintf(stderr,"       ./wheatserver /etc/redis/10828.conf\n");
@@ -621,19 +622,40 @@ void usage() {
     exit(1);
 }
 
+void showModules() {
+    struct moduleAttr *attr;
+    struct listNode *node;
+    struct listIterator *iter;
+
+    fprintf(stderr,"Wheatserver modules list:\n");
+    iter = listGetIterator(Server.modules, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        attr = listNodeValue(node);
+        fprintf(stderr,"       %s\n", attr->name);
+    }
+    freeListIterator(iter);
+
+    exit(1);
+}
+
 int main(int argc, const char *argv[])
 {
-    int test_conf = 0;
-    initGlobalServerConfig();
+    int test_conf, j;
+    wstr options;
 
-    wstr options = wstrEmpty();
+    test_conf = 0;
+    options = wstrEmpty();
+    initGlobalServerConfig();
     if (argc >= 2) {
-        int j = 1;
+        j = 1;
 
         if (strcmp(argv[1], "-v") == 0 ||
                 strcmp(argv[1], "--version") == 0) version();
         if (strcmp(argv[1], "--help") == 0 ||
                 strcmp(argv[1], "-h") == 0) usage();
+        if (strcmp(argv[1], "-m") == 0 ||
+                strcmp(argv[1], "--module") == 0)
+            showModules();
         if ((strcmp(argv[1], "--testconf") == 0 ||
                     strcmp(argv[1], "-t") == 0)) {
             if (argc != 3)
