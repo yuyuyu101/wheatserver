@@ -10,6 +10,8 @@ great performance under async model.
 
 Now supporting WSGI, Static file distribute and Redis distribute.
 
+[中文文档](http://www.wzxue.com/wheatserver-2/)
+
 Feature
 ===========
 
@@ -148,6 +150,13 @@ application = get_wsgi_application()
 </pre>
 
 -shell> ./wheatserver --app-project-path /Users/abcd/signup/ --app-module-name wsgi --app-name application
+
+Admin management
+===========
+
+shell > client/client.py
+
+enter `help` to get command list and description
 
 Signals for controlling
 ===========
