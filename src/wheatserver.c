@@ -12,7 +12,8 @@ static struct command BuiltinCommands[] = {
     {"help",      1, helpCommand,  "show commands descriptions"},
     {"statinput", WHEAT_ARGS_NO_LIMIT, statinputCommand, "Intern use"},
     {"config",    2, configCommand, "config [option name]\nOutput config value"},
-    {"stat",      2, statCommand,  "stat [master|worker]"}
+    {"stat",      2, statCommand,  "stat [master|worker]"},
+    {"reload",    1, reload, "reload wheatserver"},
 };
 
 static void initServerCommands(struct array *commands)
