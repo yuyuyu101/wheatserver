@@ -26,11 +26,19 @@ remove and add. You can construct your own worker, application server and
 other.
 
 * Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
-information from wheatserver. 
+information from wheatserver.
 
 * Reload: If you change config file and apply it without restart wheatserver.
 Only you need to do is 'kill -s sighup PID' let wheatserver reload file and
 reset workers.
+
+* Manage: Administrator can get information of running wheatserver by command
+  interface which can be accessed via client/client.py. You can get more info by
+  enter 'help' with running it.
+
+* Module extend: Module can define own statistic information, command(accessed
+  by Wheatserver client) and configuration in simple way. All module defines can
+  utilize Wheatserver's admin tools.
 
 * Simple: Try to hide complexity logical processing and provide simple
 interfaces to developer.
