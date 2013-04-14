@@ -38,33 +38,51 @@
           <span class="credits right">Hosted on GitHub Pages &mdash; Theme by <a href="http://twitter.com/#!/michigangraham">mattgraham</a></span>
         </div>
 
-        <h1>wheatserver(Alpha)</h1>
+        <h1>Wheatserver(Alpha)</h1>
 
-<p>Full stack sync/asyc(wait) IO Web Framework, like the very lightweight of
-<a href="http://projects.unbit.it/uwsgi/">uWSGI</a>.</p>
+<p>Full stack sync/asyc(wait) IO Application Framework, help you build your own
+application server.</p>
+
+<p>You can use Wheatserver to develop web server, application proxy server and
+db proxy server etc. You will enjoy using sync programming model to have
+great performance under async model.</p>
+
+<p>Now supporting WSGI, Static file distribute and Redis distribute.</p>
+
+<p><a href="http://www.wzxue.com/wheatserver-2/">中文文档</a></p>
 
 <h1>Feature</h1>
 
-<p>Fast: Full C implemented, and discards any module unnecessary.</p>
-
-<p>Pluggable: Worker type, protocol implement and application server all can be
+<ul>
+<li><p>Fast: Full C implemented, and discards any module unnecessary and try to
+avoid to copy data.</p></li>
+<li><p>Low memory: Keep low memory and take actions to let multi worker processes
+share read-only memory.</p></li>
+<li><p>Pluggable: Worker type, protocol implement and application server all can be
 remove and add. You can construct your own worker, application server and
-other.</p>
-
-<p>Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
-information from wheatserver. </p>
-
-<p>Reload: If you change config file and apply it without restart wheatserver.
+other.</p></li>
+<li><p>Statistic: You can use 'kill -s sigusr1 PID' command or tool to get statistic 
+information from wheatserver.</p></li>
+<li><p>Reload: If you change config file and apply it without restart wheatserver.
 Only you need to do is 'kill -s sighup PID' let wheatserver reload file and
-reset workers.</p>
-
-<p>Implemented:</p>
-
+reset workers.</p></li>
+<li><p>Manage: Administrator can get information of running wheatserver by command
+interface which can be accessed via client/client.py. You can get more info by
+enter 'help' with running it.</p></li>
+<li><p>Module extend: Module can define own statistic information, command(accessed
+by Wheatserver client) and configuration in simple way. All module defines can
+utilize Wheatserver's admin tools.</p></li>
+<li><p>Simple: Try to hide complexity logical processing and provide simple
+interfaces to developer.</p></li>
+<li><p>Implemented:</p></li>
+</ul><blockquote>
 <p>Workers: Sync Worker and Async Worker</p>
 
-<p>Protocol: Http 1.0 and Http 1.1</p>
+<p>Protocol: Http 1.0 and Http 1.1, Redis protocol</p>
 
-<p>Application Server: WSGI support and static file support both under Http</p>
+<p>Application Server: WSGI support and static file support both under Http,
+Redis-cluster app support under Redis protocol</p>
+</blockquote>
 
 <h1>Build</h1>
 
@@ -86,9 +104,11 @@ reset workers.</p>
 
 <h1>Config</h1>
 
+<p><em>Attention</em>: you must specify needed options under your choosing <code>protocol</code></p>
+
 <p>See <a href="https://github.com/yuyuyu101/wheatserver/blob/master/wheatserver.conf">wheatserver.conf</a></p>
 
-<h1>Example(Sample)</h1>
+<h1>WSGI Example(Sample)</h1>
 
 <pre>
 #sample.py which is in the wheatserver/src
@@ -104,7 +124,7 @@ def simple_app(environ, start_response):
 
 <p>-./wheatserver --app-project-name sample --app-name simple_app</p>
 
-<h1>Example(Django)</h1>
+<h1>WSGI Example(Django)</h1>
 
 <p>-My Django Project Directory:</p>
 
@@ -166,6 +186,12 @@ application = get_wsgi_application()
 </pre>
 
 <p>-shell&gt; ./wheatserver --app-project-path /Users/abcd/signup/ --app-module-name wsgi --app-name application</p>
+
+<h1>Admin management</h1>
+
+<p>shell &gt; client/client.py</p>
+
+<p>enter <code>help</code> to get command list and description</p>
 
 <h1>Signals for controlling</h1>
 
