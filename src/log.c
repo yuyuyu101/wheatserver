@@ -6,6 +6,8 @@
 
 #include "wheatserver.h"
 
+#define WHEAT_MAX_LOGFILE    (100*1024*1024)
+
 // TODO: When reload config file if specify logfile is stdout,
 // now code can't redirect back to stdout.
 void logRedirect()
@@ -37,18 +39,31 @@ void logRedirect()
 // TODO: Open file and keep file description. Export flush policy to users.
 void wheatLogRaw(int level, const char *msg)
 {
-    const char *c = ".-* #";
+    static char *c = ".-* #";
     FILE *fp;
     char buf[64];
+    off_t len;
     int rawmode = (level & WHEAT_LOG_RAW);
 
     level &= 0xff; /* clear flags */
     if (level < Server.verbose) return;
 
-    if (Server.logfile == NULL || !strcasecmp(Server.logfile, "stdout"))
+    if (Server.logfile == NULL || !strcasecmp(Server.logfile, "stdout")) {
         fp = stdout;
-    else
+    } else {
         fp = fopen(Server.logfile, "a");
+        if (getFileSizeAndMtime(fileno(fp), &len, NULL)) {
+            if (len > WHEAT_MAX_LOGFILE) {
+                char newname[WHEATSERVER_PATH_LEN];
+                time_t now;
+                fclose(fp);
+                now = time(NULL);
+                snprintf(newname, sizeof(newname), "%s.%s", Server.logfile, ctime(&now));
+                rename(Server.logfile, newname);
+                fp = fopen(Server.logfile, "a");
+            }
+        }
+    }
     if (!fp) return;
 
     if (rawmode) {
