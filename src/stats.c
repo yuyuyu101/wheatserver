@@ -21,6 +21,7 @@ static struct statItem StatItems[] = {
     {"Max buffer size", MAX_STAT, RAW, 0, 0},
     {"Worker run time", SUM_STAT, MICORSECONDS_TIME, 0, 0},
     {"Max worker cron interval", ASSIGN_STAT, RAW, 0, 0},
+    {"Max memory usage", MAX_STAT, RAW, 0, 0},
 };
 
 struct statItem *getStatItemByName(const char *name)

@@ -9,6 +9,7 @@
 
 #include <unistd.h>
 #include <setjmp.h>
+#include <time.h>
 
 #include "../slice.h"
 #include "../wstr.h"

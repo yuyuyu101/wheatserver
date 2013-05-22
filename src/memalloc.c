@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <stdint.h>
 
 #ifdef DEBUG
 #include <stdio.h>
@@ -24,12 +25,17 @@ void allocPrint()
     }
 }
 #else
-#define STAT_ALLOC(size)
+#define STAT_ALLOC(size) do { \
+    if (size&(sizeof(long)-1)) size += sizeof(long)-(size&(sizeof(long)-1)); \
+}while(0)
 #endif
+
+static uint64_t MemorySize = 0;
 
 void *wmalloc(size_t size)
 {
     STAT_ALLOC(size);
+    MemorySize += size;
     void *p = malloc(size);
     return p;
 }
@@ -37,6 +43,7 @@ void *wmalloc(size_t size)
 void *wrealloc(void *old, size_t size)
 {
     STAT_ALLOC(size);
+    MemorySize += size;
     void *p = realloc(old, size);
     return p;
 }
