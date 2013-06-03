@@ -28,6 +28,8 @@ static struct configuration StaticConf[] = {
         NULL,                   INT_FORMAT},
     {"allowed-extension", 2, stringValidator,      {.ptr=WHEAT_ASTERISK},
         (void *)WHEAT_NOTFREE,  STRING_FORMAT},
+    {"directory-index",   2, stringValidator,      {.ptr=NULL},
+        NULL,                   STRING_FORMAT},
 };
 
 static struct moduleAttr AppStaticAttr = {
@@ -44,6 +46,7 @@ struct app AppStatic = {
 static unsigned int MaxFileSize = WHEAT_MAX_BUFFER_SIZE;
 static struct dict *AllowExtensions = NULL;
 static wstr IfModifiedSince = NULL;
+static struct list *DirectoryIndex = NULL;
 
 struct contenttype {
     const char *extension;
@@ -233,6 +236,7 @@ int staticFileCall(struct conn *c, void *arg)
     off_t len;
     time_t m_time;
     int ret;
+    struct stat stat;
 
     static_data = c->app_private_data;
     static_data->fd = open(path, O_RDONLY);
@@ -241,9 +245,34 @@ int staticFileCall(struct conn *c, void *arg)
         wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
         goto failed404;
     }
-    if (isRegFile(path) == WHEAT_WRONG) {
-        wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
+
+    ret = lstat(path, &stat);
+    if (ret == -1)
         goto failed404;
+
+    if (!S_ISREG(stat.st_mode)) {
+        close(static_data->fd);
+        static_data->fd = -1;
+        if (S_ISDIR(stat.st_mode) && DirectoryIndex) {
+            struct listNode *node;
+            struct listIterator *iter;
+            wstr last;
+            char append_path[255];
+            iter = listGetIterator(DirectoryIndex, START_HEAD);
+            while ((node = listNext(iter)) != NULL) {
+                last = listNodeValue(node);
+                snprintf(append_path, 255, "%s/%s", path, last);
+                static_data->fd = open(append_path, O_RDONLY);
+
+                if (static_data->fd  != -1) {
+                    break;
+                }
+            }
+        }
+        if (static_data->fd == -1) {
+            wheatLog(WHEAT_VERBOSE, "open file failed: %s", strerror(errno));
+            goto failed404;
+        }
     }
     if (AllowExtensions && static_data->extension &&
             !dictFetchValue(AllowExtensions, static_data->extension)) {
@@ -306,17 +335,18 @@ failed:
 
 int initStaticFile(struct protocol *p)
 {
+    int args, i, ret;
+    wstr extensions, indexes;
     struct configuration *conf = getConfiguration("file-maxsize");
     MaxFileSize = conf->target.val;
 
     conf = getConfiguration("allowed-extension");
-    wstr extensions = wstrNew(conf->target.ptr);
+    extensions = wstrNew(conf->target.ptr);
     if (wstrIndex(extensions, '*') != -1) {
         AllowExtensions = NULL;
     } else {
         AllowExtensions = dictCreate(&wstrDictType);
 
-        int args, i, ret;
         wstr *argvs = wstrNewSplit(extensions, ",", 1, &args);
         if (!argvs) {
             wheatLog(WHEAT_WARNING, "init Static File failed");
@@ -332,6 +362,29 @@ int initStaticFile(struct protocol *p)
         wstrFreeSplit(argvs, args);
     }
     wstrFree(extensions);
+
+    conf = getConfiguration("directory-index");
+    if (conf->target.ptr) {
+        indexes = wstrNew(conf->target.ptr);
+        DirectoryIndex = createList();
+        listSetFree(DirectoryIndex, (void (*)(void*))wstrFree);
+        wstr *argvs = wstrNewSplit(indexes, ",", 1, &args);
+        if (!argvs) {
+            wheatLog(WHEAT_WARNING, "split failed");
+            return WHEAT_WRONG;
+        }
+
+        for (i = 0; i < args; ++i) {
+            appendToListTail(DirectoryIndex, wstrNew(argvs[i]));
+            if (ret == DICT_WRONG)
+                break;
+        }
+
+        wstrFreeSplit(argvs, args);
+    } else {
+        DirectoryIndex = NULL;
+    }
+
     IfModifiedSince = wstrNew(IF_MODIFIED_SINCE);
     return WHEAT_OK;
 }
@@ -340,6 +393,8 @@ void deallocStaticFile()
 {
     if (AllowExtensions)
         dictRelease(AllowExtensions);
+    if (DirectoryIndex)
+        freeList(DirectoryIndex);
     MaxFileSize = 0;
     wstrFree(IfModifiedSince);
 }
