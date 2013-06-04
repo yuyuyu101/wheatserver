@@ -52,6 +52,20 @@ interfaces to developer.
 > Application Server: WSGI support and static file support both under Http,
 > Redis-cluster app support under Redis protocol
 
+TODO Feature
+===========
+
+* Web Dashboard aimed to replace with CLI interactive
+* Add SystemTap Toolkit support to monitor the status of application and for
+  ease of Ops
+* Refactor ugly code such as configuration definition and replace with more clear
+  definition.
+* Provide Static Module with `fd`(file description) cache like Nginx
+* Provide with multi IP address binding
+* Add corotine worker support
+
+If anyone is interested in Wheatserver and join us, feel free to mail me!
+
 Build
 ===========
 
