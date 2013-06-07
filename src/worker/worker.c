@@ -466,8 +466,8 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
 {
     struct configuration *conf;
     int i;
-    struct protocol *p;
-    struct app **app_p, *app;
+    struct app *app;
+    struct moduleAttr *module;
 
     if (Server.stat_fd != 0)
         close(Server.stat_fd);
@@ -497,27 +497,21 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
         wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
         halt(1);
     }
+
+    module = NULL;
     conf = getConfiguration("protocol");
-    for (i = 0; i < 2; ++i) {
-        p = ProtocolTable[i];
-        if (!strcasecmp(conf->target.ptr, p->attr->name)) {
-            if (p->initProtocol() == WHEAT_WRONG) {
-                wheatLog(WHEAT_WARNING, "init protocol failed");
-                halt(1);
-            }
-            worker->protocol = p;
+    if (conf->target.ptr) {
+        module = getModule(PROTOCOL, conf->target.ptr);
+        if (module && getProtocol(module)->initProtocol() == WHEAT_WRONG) {
+            wheatLog(WHEAT_WARNING, "init protocol failed");
+            halt(1);
         }
     }
-    if (!worker->protocol) {
+    if (!module) {
         wheatLog(WHEAT_WARNING, "find protocol %s failed", conf->target.ptr);
         halt(1);
     }
-
-    worker->apps = arrayCreate(sizeof(struct app*), 3);
-    if (!worker->apps) {
-        wheatLog(WHEAT_WARNING, "array create failed");
-        halt(1);
-    }
+    worker->protocol = getProtocol(module);
 
     StatTotalClient = getStatItemByName("Total client");
     gettimeofday(&Server.cron_time, NULL);
@@ -532,12 +526,17 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     StatFailedRequest = getStatItemByName("Total failed request");
     StatRunTime = getStatItemByName("Worker run time");
 
-    getAppsByProtocol(worker->apps, worker->protocol->attr->name);
+    worker->apps = arrayCreate(sizeof(struct app*), 3);
+    if (!worker->apps) {
+        wheatLog(WHEAT_WARNING, "array create failed");
+        halt(1);
+    }
+
+    getAppsByProtocol(worker->apps, worker->protocol);
     for (i = 0; i < narray(worker->apps); i++) {
-        app_p = arrayIndex(worker->apps, i);
-        app = *app_p;
-        if (initApp(app) == WHEAT_WRONG) {
-            wheatLog(WHEAT_WARNING, "init app failed %s", app->attr->name);
+        app = *(struct app**)arrayIndex(worker->apps, i);
+        if (app->initApp(worker->protocol) == WHEAT_WRONG) {
+            wheatLog(WHEAT_WARNING, "init app failed %s", getModuleName(APP, app));
             halt(1);
         }
     }
@@ -553,6 +552,13 @@ void freeWorkerProcess(void *w)
     wfree(worker);
 }
 
+static inline void appCronRun(void *t)
+{
+    struct app **app = t;
+    if ((*app)->appCron)
+        (*app)->appCron();
+}
+
 // workerProcessCron is the cron of worker process, it must be called before
 // worker process initialized.
 //
@@ -563,22 +569,13 @@ void workerProcessCron(void (*fake_func)(void *data), void *data)
 
     struct timeval nowval;
     long long interval;
-    int i;
-    struct app *app;
     int refresh_seconds;
     void (*worker_cron)();
 
     refresh_seconds = Server.stat_refresh_seconds;
     worker_cron = WorkerProcess->worker->cron;
     while (WorkerProcess->alive) {
-        i = 0;
-        app = AppTable[0];
-        while (app) {
-            if (app->is_init && app->appCron) {
-                app->appCron();
-            }
-            app = AppTable[++i];
-        }
+        arrayEach(WorkerProcess->apps, appCronRun);
 
         if (worker_cron)
             worker_cron();

@@ -37,7 +37,7 @@ static struct app AppStatic = {
     deallocStaticFile, initStaticFileData, freeStaticFileData, 0
 };
 
-static struct moduleAttr AppStaticAttr = {
+struct moduleAttr AppStaticAttr = {
     "static-file", APP, {.app=&AppStatic}, NULL, 0,
     StaticConf, sizeof(StaticConf)/sizeof(struct configuration),
     NULL, 0

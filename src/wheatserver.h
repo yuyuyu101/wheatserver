@@ -212,6 +212,7 @@ struct moduleAttr {
         struct app *app;
         struct worker *worker;
         struct protocol *protocol;
+        void *p;
     } module;
     struct statItem *stats;
     size_t stat_size;
@@ -272,5 +273,32 @@ void logRedirect();
 
 #define WHEAT_WRONG -1
 #define WHEAT_OK 0
+
+// ============== Module Get Operation =============
+#define getProtocol(m) (m->module.protocol)
+#define getWorker(m) (m->module.worker)
+#define getApp(m) (m->module.app)
+
+struct moduleAttr *getModule(enum moduleType type, const char *name);
+const char *getModuleName(enum moduleType type, void *t);
+void getAppsByProtocol(struct array *apps, struct protocol *p);
+
+static inline struct worker *spotWorker(const char *name)
+{
+    struct moduleAttr *_module_attr = getModule(WORKER, name);
+    return _module_attr->module.worker;
+}
+
+static inline struct protocol *spotProtocol(const char *name)
+{
+    struct moduleAttr *_module_attr = getModule(PROTOCOL, name);
+    return _module_attr->module.protocol;
+}
+
+static inline struct app *spotApp(const char *name)
+{
+    struct moduleAttr *_module_attr = getModule(APP, name);
+    return _module_attr->module.app;
+}
 
 #endif

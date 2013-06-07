@@ -235,9 +235,6 @@ struct client {
 
 #define WHEAT_WORKERS    2
 extern struct workerProcess *WorkerProcess;
-extern struct worker *WorkerTable[];
-extern struct protocol *ProtocolTable[];
-extern struct app *AppTable[];
 
 void initWorkerProcess(struct workerProcess *worker, char *worker_name);
 void freeWorkerProcess(void *worker);

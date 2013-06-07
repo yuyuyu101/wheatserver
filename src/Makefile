@@ -4,7 +4,7 @@ CORE_SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c \
 			   networking.c util.c register.c stats.c event.c setproctitle.c \
 			   slice.c debug.c portable.c memalloc.c array.c \
 			   app/application.c protocol/protocol.c worker/mbuf.c \
-			   worker/worker.c
+			   worker/worker.c modules.c
 include Module.mk
 
 SOURCES += $(CORE_SOURCES)
@@ -16,15 +16,15 @@ SERVER_OBJECTS += wheatserver.o
 WORKER_OBJECTS += $(OBJECTS)
 WORKER_OBJECTS += wheatworker.o
 DEBUG ?= 0
-ifeq (DEBUG,1)
+#ifeq (DEBUG,1)
 CFLAGS += -O0 -Wall -g $(EXTRA)
-else
-CFLAGS += -O3 -Wall $(EXTRA)
-endif
+#else
+#CFLAGS += -O3 -Wall $(EXTRA)
+#endif
 
 TESTS = test_wstr test_list test_dict test_slice test_mbuf test_array
 
-all: wheatserver wheatworker
+all: build_module_table wheatserver wheatworker
 
 wheatworker.o: wheatserver.c wheatserver.h
 	$(CC) $(CFLAGS) -c $< -o $@ -DWHEAT_DEBUG_WORKER

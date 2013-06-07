@@ -27,15 +27,74 @@ static void initServerCommands(struct array *commands)
     }
 }
 
-static void collectModules(struct list *modules, struct array *stats,
+const char *getModuleName(enum moduleType type, void *t)
+{
+    struct listNode *node;
+    struct listIterator *iter;
+    struct moduleAttr *module_attr;
+
+    iter = listGetIterator(Server.modules, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        module_attr = listNodeValue(node);
+        if (type == module_attr->type && t == module_attr->module.p) {
+            freeListIterator(iter);
+            return module_attr->name;
+        }
+    }
+    freeListIterator(iter);
+    return NULL;
+}
+
+void getAppsByProtocol(struct array *apps, struct protocol *p)
+{
+    struct listNode *node;
+    struct listIterator *iter;
+    struct moduleAttr *module_attr;
+    const char *protocol_name;
+    struct app *app;
+
+    protocol_name = getModuleName(PROTOCOL, p);
+    iter = listGetIterator(Server.modules, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        module_attr = listNodeValue(node);
+        app = getApp(module_attr);
+        if (APP == module_attr->type &&
+                !strcasecmp(protocol_name, app->proto_belong)) {
+            arrayPush(apps, &app);
+        }
+    }
+    freeListIterator(iter);
+}
+
+struct moduleAttr *getModule(enum moduleType type, const char *name)
+{
+    struct listNode *node;
+    struct listIterator *iter;
+    struct moduleAttr *module_attr;
+
+    iter = listGetIterator(Server.modules, START_HEAD);
+    while ((node = listNext(iter)) != NULL) {
+        module_attr = listNodeValue(node);
+        if (type == module_attr->type && !strcasecmp(name, module_attr->name)) {
+            freeListIterator(iter);
+            return module_attr;
+        }
+    }
+    freeListIterator(iter);
+    return NULL;
+}
+
+static void collectModules(struct array *stats,
         struct list *confs, struct array *commands)
 {
     struct listNode *node;
     struct listIterator *iter;
     struct moduleAttr *module_attr;
+    struct list *modules;
     int i;
 
     i = 0;
+    modules = Server.modules;
     while (ModuleTable[i]) {
         appendToListTail(modules, ModuleTable[i]);
         i++;
@@ -86,7 +145,7 @@ void initGlobalServerConfig()
     initServerConfs(Server.confs);
     initServerStats(Server.stats);
     initServerCommands(Server.commands);
-    collectModules(Server.modules, Server.stats, Server.confs, Server.commands);
+    collectModules(Server.stats, Server.confs, Server.commands);
     initHookCenter();
     Server.workers = createList();
     listSetFree(Server.workers, freeWorkerProcess);

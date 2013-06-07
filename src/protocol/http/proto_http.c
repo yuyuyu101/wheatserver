@@ -752,34 +752,37 @@ void sendResponse500(struct conn *c)
 
 int httpSpot(struct conn *c)
 {
-    int i = 0, ret;
+    struct app *app;
+    int ret;
     struct httpData *http_data = c->protocol_data;
     wstr path = NULL;
     if (StaticPathHandler.abs_path && fromSameParentDir(StaticPathHandler.static_dir, http_data->path)) {
         path = wstrNew(StaticPathHandler.root);
         path = wstrCat(path, http_data->path);
-        i = 1;
+        app = spotApp("static-file");
+    } else {
+        app = spotApp("wsgi");
     }
-    if (!AppTable[i]->is_init) {
-        ret = AppTable[i]->initApp(c->client->protocol);
+    if (app->is_init) {
+        ret = app->initApp(c->client->protocol);
         if (ret == WHEAT_WRONG) {
             wstrFree(path);
             return ret;
         }
-        AppTable[i]->is_init = 1;
+        app->is_init = 1;
     }
-    c->app = AppTable[i];
+    c->app = app;
     ret = initAppData(c);
     if (ret == WHEAT_WRONG) {
         wstrFree(path);
         wheatLog(WHEAT_WARNING, "init app data failed");
         return WHEAT_WRONG;
     }
-    ret = AppTable[i]->appCall(c, path);
+    ret = app->appCall(c, path);
     if (ret == WHEAT_WRONG) {
         wheatLog(WHEAT_WARNING, "app failed, exited");
-        AppTable[i]->deallocApp();
-        AppTable[i]->is_init = 0;
+        app->deallocApp();
+        app->is_init = 0;
     }
     logAccess(c);
     wstrFree(path);
