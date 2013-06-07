@@ -87,7 +87,6 @@ struct conn;
 // parsed data useful can store to it.
 // `initProtocol`: used to setup protocol module
 struct protocol {
-    struct moduleAttr *attr;
     int (*spotAppAndCall)(struct conn *);
     int (*parser)(struct conn *conn, struct slice *s, size_t *nparsed);
     void *(*initProtocolData)();
@@ -105,7 +104,6 @@ struct protocol {
 // `sendData`: implemente way to support send data in client buffer
 // `recvData`: implemente way to support receive data into client buffer
 struct worker {
-    struct moduleAttr *attr;
     void (*setup)();
     void (*cron)();
     /* Send data in buffer which `buf` points
@@ -137,7 +135,6 @@ struct worker {
 //  `is_init`: indicate whether application initialized, because it may get
 //  WHEAT_WRONG calling `appCall`.
 struct app {
-    struct moduleAttr *attr;
     char *proto_belong;
     void (*appCron)();
     int (*appCall)(struct conn *, void *arg);

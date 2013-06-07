@@ -25,14 +25,15 @@ static struct configuration HttpConf[] = {
         NULL,                   STRING_FORMAT},
 };
 
-static struct moduleAttr ProtocolHttpAttr = {
-    "Http", NULL, 0, HttpConf, sizeof(HttpConf)/sizeof(struct configuration),
-    NULL, 0
+struct protocol ProtocolHttp = {
+    httpSpot, parseHttp, initHttpData, freeHttpData,
+        initHttp, deallocHttp
 };
 
-struct protocol ProtocolHttp = {
-    &ProtocolHttpAttr, httpSpot, parseHttp, initHttpData, freeHttpData,
-        initHttp, deallocHttp
+struct moduleAttr ProtocolHttpAttr = {
+    "Http", PROTOCOL, {.protocol=&ProtocolHttp}, NULL, 0,
+    HttpConf, sizeof(HttpConf)/sizeof(struct configuration),
+    NULL, 0
 };
 
 struct staticHandler {

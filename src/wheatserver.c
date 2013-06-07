@@ -33,27 +33,12 @@ static void collectModules(struct list *modules, struct array *stats,
     struct listNode *node;
     struct listIterator *iter;
     struct moduleAttr *module_attr;
-    struct app **app;
-    struct protocol **protocol;
-    struct worker **worker;
     int i;
 
-    app = &AppTable[0];
-    while (*app) {
-        appendToListTail(modules, (*app)->attr);
-        app++;
-    }
-
-    protocol = &ProtocolTable[0];
-    while (*protocol) {
-        appendToListTail(modules, (*protocol)->attr);
-        protocol++;
-    }
-
-    worker = &WorkerTable[0];
-    while (*worker) {
-        appendToListTail(modules, (*worker)->attr);
-        worker++;
+    i = 0;
+    while (ModuleTable[i]) {
+        appendToListTail(modules, ModuleTable[i]);
+        i++;
     }
 
     iter = listGetIterator(modules, START_HEAD);
@@ -234,11 +219,9 @@ void spawnWorker(char *worker_name)
     } else {
         WorkerProcess = new_worker;
         initWorkerProcess(new_worker, worker_name);
-        wheatLog(WHEAT_NOTICE, "new worker %s spawned %d",
-                WorkerProcess->worker->attr->name, getpid());
+        wheatLog(WHEAT_NOTICE, "new worker spawned %d", getpid());
         workerProcessCron(NULL, NULL);
-        wheatLog(WHEAT_NOTICE, "worker %s exit pid:%d",
-                WorkerProcess->worker->attr->name, getpid());
+        wheatLog(WHEAT_NOTICE, "worker exit pid:%d", getpid());
         exit(0);
     }
 }
@@ -268,8 +251,7 @@ void spawnFakeWorker(void (*func)(void *), void *data)
     } else {
         WorkerProcess = new_worker;
         initWorkerProcess(new_worker, Server.worker_type);
-        wheatLog(WHEAT_NOTICE, "new fake worker %s spawned %d",
-                WorkerProcess->worker->attr->name, getpid());
+        wheatLog(WHEAT_NOTICE, "new fake worker spawned %d", getpid());
         workerProcessCron(func, data);
         wheatLog(WHEAT_NOTICE, "fake worker run func done");
         exit(0);
@@ -305,8 +287,7 @@ void halt(int graceful)
         stopWorkers(graceful);
         wheatLog(WHEAT_NOTICE, "shutdown %s.", Server.master_name);
     } else {
-        wheatLog(WHEAT_NOTICE, "worker %s exit.",
-                WorkerProcess->worker->attr->name);
+        wheatLog(WHEAT_NOTICE, "worker %d exit.", getpid());
     }
     if (Server.daemon) unlink(Server.pidfile);
     exit(graceful);

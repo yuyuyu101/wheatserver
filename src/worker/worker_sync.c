@@ -9,13 +9,12 @@
 int syncSendData(struct conn *c); // pass `data` ownership to
 int syncRecvData(struct client *c);
 
-static struct moduleAttr SyncWorkerAttr = {
-    "SyncWorker", NULL, 0, NULL, 0
+static struct worker SyncWorker = {
+    NULL, NULL, syncSendData, syncRecvData
 };
 
-struct worker SyncWorker = {
-    &SyncWorkerAttr, NULL, NULL, syncSendData,
-    syncRecvData
+struct moduleAttr SyncWorkerAttr = {
+    "SyncWorker", WORKER, {.worker=&SyncWorker},  NULL, 0, NULL, 0
 };
 
 int syncSendData(struct conn *c)

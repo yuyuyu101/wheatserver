@@ -12,6 +12,5 @@
 
 int initAppData(struct conn *);
 int initApp(struct app *);
-void getAppsByProtocol(struct array *apps, char *protocol_name);
 
 #endif

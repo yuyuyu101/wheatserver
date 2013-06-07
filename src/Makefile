@@ -1,35 +1,25 @@
 CC=cc
 
-APP_SOURCES = app/application.c \
-			  app/wsgi/app_wsgi.c app/wsgi/wsgiwrapper.c app/wsgi/wsgiinput.c \
-			  app/static/app_static_file.c app/wheatredis/redis.c \
-			  app/wheatredis/md5.c app/wheatredis/hashkit.c \
-			  app/wheatredis/redis_config.c
-PROTO_SOURCES =  protocol/protocol.c \
-				 protocol/http/http_parser.c protocol/http/proto_http.c \
-				 protocol/redis/proto_redis.c
-WORKER_SOURCES = worker/worker_async.c worker/worker_sync.c worker/worker.c \
-				 worker/mbuf.c
-SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c networking.c \
-		  util.c register.c stats.c event.c setproctitle.c slice.c debug.c \
-		  portable.c memalloc.c array.c
-SOURCES += $(APP_SOURCES)
-SOURCES += $(PROTO_SOURCES)
-SOURCES += $(WORKER_SOURCES)
+CORE_SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c \
+			   networking.c util.c register.c stats.c event.c setproctitle.c \
+			   slice.c debug.c portable.c memalloc.c array.c \
+			   app/application.c protocol/protocol.c worker/mbuf.c \
+			   worker/worker.c
+include Module.mk
+
+SOURCES += $(CORE_SOURCES)
+SOURCES += $(MODULE_SOURCES)
 
 OBJECTS = $(SOURCES:.c=.o)
 SERVER_OBJECTS += $(OBJECTS)
 SERVER_OBJECTS += wheatserver.o
 WORKER_OBJECTS += $(OBJECTS)
 WORKER_OBJECTS += wheatworker.o
-PYTHON_VERSION = $(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_version()")
-LIBS += -lpython$(PYTHON_VERSION)
-PYTHON_FLAGS = -I$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_inc()")
 DEBUG ?= 0
 ifeq (DEBUG,1)
-CFLAGS = -O0 -Wall -g $(EXTRA)
+CFLAGS += -O0 -Wall -g $(EXTRA)
 else
-CFLAGS = -O3 -Wall $(EXTRA)
+CFLAGS += -O3 -Wall $(EXTRA)
 endif
 
 TESTS = test_wstr test_list test_dict test_slice test_mbuf test_array
@@ -38,11 +28,6 @@ all: wheatserver wheatworker
 
 wheatworker.o: wheatserver.c wheatserver.h
 	$(CC) $(CFLAGS) -c $< -o $@ -DWHEAT_DEBUG_WORKER
-
-%wsgi.o: %wsgi.c
-	$(CC) $(CFLAGS) $(PYTHON_FLAGS) -c $< -o $@
-wsgi%.o: wsgi%.c
-	$(CC) $(CFLAGS) $(PYTHON_FLAGS) -c $< -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@

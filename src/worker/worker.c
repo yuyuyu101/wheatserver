@@ -52,17 +52,6 @@ static void connDealloc(struct conn *c);
 static void freeSendPacket(struct sendPacket *p);
 static void callbackCall(void *data);
 
-struct worker *spotWorker(char *worker_name)
-{
-    int i;
-    for (i = 0; i < WHEAT_WORKERS; i++) {
-        if (strcmp(WorkerTable[i]->attr->name, worker_name) == 0) {
-            return WorkerTable[i];
-        }
-    }
-    return NULL;
-}
-
 // ==================================================================
 // ======================= Client Implemation =======================
 // ==================================================================

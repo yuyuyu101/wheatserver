@@ -32,15 +32,15 @@ static struct configuration StaticConf[] = {
         NULL,                   STRING_FORMAT},
 };
 
-static struct moduleAttr AppStaticAttr = {
-    "static-file", NULL, 0,
-    StaticConf, sizeof(StaticConf)/sizeof(struct configuration),
-    NULL, 0
+static struct app AppStatic = {
+    "Http", NULL, staticFileCall, initStaticFile,
+    deallocStaticFile, initStaticFileData, freeStaticFileData, 0
 };
 
-struct app AppStatic = {
-    &AppStaticAttr, "Http", NULL, staticFileCall, initStaticFile,
-    deallocStaticFile, initStaticFileData, freeStaticFileData, 0
+static struct moduleAttr AppStaticAttr = {
+    "static-file", APP, {.app=&AppStatic}, NULL, 0,
+    StaticConf, sizeof(StaticConf)/sizeof(struct configuration),
+    NULL, 0
 };
 
 static unsigned int MaxFileSize = WHEAT_MAX_BUFFER_SIZE;

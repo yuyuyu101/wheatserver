@@ -23,14 +23,15 @@ static struct configuration WsgiConf[] = {
         NULL,                   STRING_FORMAT},
 };
 
-static struct moduleAttr AppWsgiAttr = {
-    "wsgi", NULL, 0, WsgiConf, sizeof(WsgiConf)/sizeof(struct configuration),
-    NULL, 0
+static struct app AppWsgi = {
+    "Http", NULL, wsgiCall, initWsgi, deallocWsgi,
+        initWsgiAppData, freeWsgiAppData, 0
 };
 
-struct app AppWsgi = {
-    &AppWsgiAttr, "Http", NULL, wsgiCall, initWsgi, deallocWsgi,
-        initWsgiAppData, freeWsgiAppData, 0
+struct moduleAttr AppWsgiAttr = {
+    "wsgi", APP, {.app=&AppWsgi}, NULL, 0, WsgiConf,
+    sizeof(WsgiConf)/sizeof(struct configuration),
+    NULL, 0
 };
 
 static PyObject *pApp = NULL;

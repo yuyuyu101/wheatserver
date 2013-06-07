@@ -25,15 +25,3 @@ int initAppData(struct conn *c)
     }
     return WHEAT_OK;
 }
-
-void getAppsByProtocol(struct array *apps, char *protocol_name)
-{
-    struct app **app;
-
-    app = &AppTable[0];
-    while (*app) {
-        if (!strcasecmp(protocol_name, (*app)->proto_belong))
-            arrayPush(apps, app);
-        app++;
-    }
-}

@@ -9,13 +9,13 @@
 int asyncSendData(struct conn *c); // pass `data` ownership to
 int asyncRecvData(struct client *c);
 
-static struct moduleAttr AsyncWorkerAttr = {
-    "AsyncWorker", NULL, 0, NULL, 0
+static struct worker AsyncWorker = {
+    NULL, NULL, asyncSendData,
+    asyncRecvData
 };
 
-struct worker AsyncWorker = {
-    &AsyncWorkerAttr, NULL, NULL, asyncSendData,
-    asyncRecvData
+struct moduleAttr AsyncWorkerAttr = {
+    "AsyncWorker", WORKER, {.worker=&AsyncWorker}, NULL, 0, NULL, 0
 };
 
 static void sendReplyToClient(struct evcenter *center, int fd, void *data, int mask)

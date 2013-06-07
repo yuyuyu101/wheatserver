@@ -19,13 +19,13 @@ void freeRedisData(void *d);
 int initRedis();
 void deallocRedis();
 
-static struct moduleAttr ProtocolRedisAttr = {
-    "Redis", NULL, 0, NULL, 0, NULL, 0
+static struct protocol ProtocolRedis = {
+    redisSpot, parseRedis, initRedisData, freeRedisData,
+        initRedis, deallocRedis,
 };
 
-struct protocol ProtocolRedis = {
-    &ProtocolRedisAttr, redisSpot, parseRedis, initRedisData, freeRedisData,
-        initRedis, deallocRedis,
+struct moduleAttr ProtocolRedisAttr = {
+    "Redis", PROTOCOL, {.protocol=&ProtocolRedis}, NULL, 0, NULL, 0, NULL, 0
 };
 
 static wstr RedisHashTag = NULL;

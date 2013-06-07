@@ -51,12 +51,6 @@ static struct command RedisCommand[] = {
     {"redis-addnode", 3, redisAddServerCommand, "redis-addnode ip port"},
 };
 
-static struct moduleAttr AppRedisAttr = {
-    "WheatRedis", RedisStats, sizeof(RedisStats)/sizeof(struct statItem),
-    RedisConf, sizeof(RedisConf)/sizeof(struct configuration),
-    RedisCommand, sizeof(RedisCommand)/sizeof(struct command)
-};
-
 static long long *CurrentUnitCount = NULL;
 static long long *TotalUnitCount = NULL;
 static long long *TotalTimeoutResponse = NULL;
@@ -66,9 +60,16 @@ struct redisAppData {
     wstr header;
 };
 
-struct app AppRedis = {
-    &AppRedisAttr, "Redis", redisAppCron, redisCall,
+static struct app AppRedis = {
+    "Redis", redisAppCron, redisCall,
     redisAppInit, redisAppDeinit, redisAppDataInit, redisAppDataDeinit, 0
+};
+
+struct moduleAttr AppRedisAttr = {
+    "WheatRedis", APP, {.app=&AppRedis},
+    RedisStats, sizeof(RedisStats)/sizeof(struct statItem),
+    RedisConf, sizeof(RedisConf)/sizeof(struct configuration),
+    RedisCommand, sizeof(RedisCommand)/sizeof(struct command)
 };
 
 // TODO:

@@ -55,6 +55,8 @@ interfaces to developer.
 TODO Feature
 ===========
 
+* Change module form and make it separating Wheatserver with module(doing)
+* Make Wheatserver statistic component more flexible and add alarm
 * Web Dashboard aimed to replace with CLI interactive
 * Add SystemTap Toolkit support to monitor the status of application and for
   ease of Ops

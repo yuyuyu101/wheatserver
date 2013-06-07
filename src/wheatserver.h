@@ -199,8 +199,20 @@ struct command {
     char *description;
 };
 
+enum moduleType {
+    APP,
+    PROTOCOL,
+    WORKER,
+};
+
 struct moduleAttr {
     char *name;
+    enum moduleType type;
+    union {
+        struct app *app;
+        struct worker *worker;
+        struct protocol *protocol;
+    } module;
     struct statItem *stats;
     size_t stat_size;
     struct configuration *confs;
@@ -212,6 +224,7 @@ struct moduleAttr {
 struct workerProcess;
 
 extern struct globalServer Server;
+extern struct moduleAttr *ModuleTable[];
 
 void initServer();
 
