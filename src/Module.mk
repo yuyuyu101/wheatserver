@@ -42,6 +42,3 @@ ASYNC_WORKER_MODULE = worker/worker_async.c
 
 MODULE_SOURCES += $(ASYNC_WORKER_MODULE)
 MODULE_ATTRS += AsyncWorkerAttr
-
-build_module_table:
-	python build_module_table.py "$(MODULE_ATTRS)"

@@ -16,11 +16,11 @@ SERVER_OBJECTS += wheatserver.o
 WORKER_OBJECTS += $(OBJECTS)
 WORKER_OBJECTS += wheatworker.o
 DEBUG ?= 0
-#ifeq (DEBUG,1)
+ifeq ($(DEBUG),1)
 CFLAGS += -O0 -Wall -g $(EXTRA)
-#else
-#CFLAGS += -O3 -Wall $(EXTRA)
-#endif
+else
+CFLAGS += -O3 -Wall $(EXTRA)
+endif
 
 TESTS = test_wstr test_list test_dict test_slice test_mbuf test_array
 
@@ -32,12 +32,14 @@ wheatworker.o: wheatserver.c wheatserver.h
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 ################
-
 wheatserver: $(SERVER_OBJECTS)
 	$(CC) $(CFLAGS) -o wheatserver $(SERVER_OBJECTS) $(LIBS)
 
 wheatworker: $(WORKER_OBJECTS)
 	$(CC) $(CFLAGS) -o wheatworker $(WORKER_OBJECTS) $(LIBS)
+
+build_module_table:
+	python build_module_table.py "$(MODULE_ATTRS)"
 
 ###########
 test: $(TESTS)
