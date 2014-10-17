@@ -5,10 +5,12 @@ CORE_SOURCES = config.c net.c log.c wstr.c list.c dict.c hook.c sig.c \
 			   slice.c debug.c portable.c memalloc.c array.c \
 			   app/application.c protocol/protocol.c worker/mbuf.c \
 			   worker/worker.c modules.c
+
 include Module.mk
 
 SOURCES += $(CORE_SOURCES)
 SOURCES += $(MODULE_SOURCES)
+SOURCES += $(REAL_EXPORTS)
 
 OBJECTS = $(SOURCES:.c=.o)
 SERVER_OBJECTS += $(OBJECTS)

@@ -5,6 +5,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "../protocol.h"
+#include "../str_macro.h"
 #include "proto_redis.h"
 
 #define CR                  (uint8_t)13

@@ -3,7 +3,7 @@ PYTHON_VERSION = $(shell python -c "import distutils.sysconfig;print distutils.s
 MODULE_ATTRS += AppWsgiAttr
 
 CFLAGS += -I$(shell python -c "import distutils.sysconfig;print distutils.sysconfig.get_python_inc()")
-LIBS += -lpython$(PYTHON_VERSION)
+LIBS += -lpython$(PYTHON_VERSION) -lramcloud
 MODULE_SOURCES += $(WSGI_APP_MODULE)
 
 ################################ Module Separtor ###############################
@@ -20,10 +20,22 @@ MODULE_SOURCES += $(REDIS_APP_MODULE)
 MODULE_ATTRS += AppRedisAttr
 
 ################################ Module Separtor ###############################
+RAMCLOUD_APP_MODULE = app/ramcloud/app_ramcloud.c
+
+MODULE_SOURCES += $(RAMCLOUD_APP_MODULE)
+MODULE_ATTRS += AppRamcloudAttr
+
+################################ Module Separtor ###############################
 HTTP_PROTOCOL_MODULE = protocol/http/http_parser.c protocol/http/proto_http.c
 
 MODULE_SOURCES += $(HTTP_PROTOCOL_MODULE)
 MODULE_ATTRS += ProtocolHttpAttr
+
+################################ Module Separtor ###############################
+MEMCACHE_PROTOCOL_MODULE = protocol/memcache/proto_memcache.c
+
+MODULE_SOURCES += $(MEMCACHE_PROTOCOL_MODULE)
+MODULE_ATTRS += ProtocolMemcacheAttr
 
 ################################ Module Separtor ###############################
 REDIS_PROTOCOL_MODULE = protocol/redis/proto_redis.c
