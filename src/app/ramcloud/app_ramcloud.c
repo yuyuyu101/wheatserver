@@ -12,6 +12,7 @@
 #define VALUE "VALUE"
 #define END "END"
 #define CRLF "\r\n"
+#define FLAG_SIZE sizeof(uint16_t)
 
 int callRamcloud(struct conn *, void *);
 int initRamcloud(struct protocol *);
@@ -71,7 +72,7 @@ static void buildRetrievalResponse(struct ramcloudData *d, int cas)
     char val_len[64];
     ASSERT(!d->retrieval_response);
     // Estimate value avoid realloc
-    d->retrieval_response = wstrNewLen(NULL, d->retrieval_len+narray(d->retrievals_vals)*16);
+    d->retrieval_response = wstrNewLen(NULL, d->retrieval_len+narray(d->retrievals_vals)*64);
     for (; i < narray(d->retrievals_vals); ++i) {
         struct slice *val = arrayIndex(d->retrievals_vals, i);
         struct slice *key = arrayIndex(d->retrievals_keys, i);
@@ -100,18 +101,18 @@ static void buildRetrievalResponse(struct ramcloudData *d, int cas)
 
 static void ramcloudRead(void *item, void *data)
 {
-    wstr *i = item;
+    wstr i = *(wstr*)item;
     struct ramcloudData *d = data;
     uint32_t actual_len;
     uint64_t version;
     uint64_t len = RAMCLOUD_DEFAULT_VALUE_LEN;
 
-    wheatLog(WHEAT_DEBUG, "%s read key %s", __func__, *i);
+    wheatLog(WHEAT_DEBUG, "%s read key %s", __func__, i);
     wstr val = wstrNewLen(NULL, len);
-    Status s = rc_read(global.client, table_id, *i, wstrlen(*i), NULL, &version, val, len, &actual_len);
+    Status s = rc_read(global.client, table_id, i, wstrlen(i), NULL, &version, val, len, &actual_len);
     if (s != STATUS_OK) {
         if (s != STATUS_OBJECT_DOESNT_EXIST) {
-            wheatLog(WHEAT_WARNING, " failed to read %s: %s", *i, statusToString(s));
+            wheatLog(WHEAT_WARNING, " failed to read %s: %s", i, statusToString(s));
         }
         wstrFree(val);
         return ;
@@ -119,18 +120,17 @@ static void ramcloudRead(void *item, void *data)
 
     while (actual_len > len) {
         wstrFree(val);
-        val = wstrNewLen(NULL, actual_len);
         len = actual_len;
+        val = wstrNewLen(NULL, actual_len);
         if (val == NULL) {
             wheatLog(WHEAT_WARNING, " failed to alloc memory");
-            wstrFree(val);
             return ;
         }
 
-        s = rc_read(global.client, table_id, *i, wstrlen(*i), NULL, &version, val, len, &actual_len);
+        s = rc_read(global.client, table_id, i, wstrlen(i), NULL, &version, val, len, &actual_len);
         if (s != STATUS_OK) {
             if (s != STATUS_OBJECT_DOESNT_EXIST) {
-                wheatLog(WHEAT_WARNING, " failed to read %s: %s", *i, statusToString(s));
+                wheatLog(WHEAT_WARNING, " failed to read %s: %s", i, statusToString(s));
             }
             wstrFree(val);
             return ;
@@ -139,12 +139,12 @@ static void ramcloudRead(void *item, void *data)
 
     d->retrieval_len += actual_len;
     arrayPush(d->retrievals, val);
-    struct slice ss = {(uint8_t*)(*i), wstrlen(*i)};
+    struct slice ss = {(uint8_t*)(i), wstrlen(i)};
     arrayPush(d->retrievals_keys, &ss);
     ss.data = (uint8_t*)val;
-    ss.len = actual_len - sizeof(uint16_t);
+    ss.len = actual_len - FLAG_SIZE;
     arrayPush(d->retrievals_vals, &ss);
-    arrayPush(d->retrievals_flags, &val[actual_len-sizeof(uint16_t)]);
+    arrayPush(d->retrievals_flags, &val[actual_len-FLAG_SIZE]);
     arrayPush(d->retrievals_versions, &version);
 }
 
@@ -171,12 +171,13 @@ static void ramcloudSet(struct ramcloudData *d, wstr key, struct array *vals, ui
     uint64_t version;
     int i = 0;
     struct slice *slice;
-    wstr val = wstrNewLen(NULL, vlen);
+    wstr val = wstrNewLen(NULL, vlen+sizeof(flag));
     while (i < narray(vals)) {
         slice = arrayIndex(vals, i);
         val = wstrCatLen(val, (char*)slice->data, slice->len);
+        ++i;
     }
-    val = wstrCatLen(val, (char*)&flag, sizeof(flag));
+    val = wstrCatLen(val, (char*)&flag, FLAG_SIZE);
 
     Status s = rc_write(global.client, table_id, key, wstrlen(key), val, wstrlen(val),
                         rule, &version);
@@ -229,6 +230,7 @@ static void ramcloudAppend(struct ramcloudData *d, wstr key, struct array *vals,
     uint32_t actual_len;
     uint64_t version;
     uint64_t len = RAMCLOUD_DEFAULT_VALUE_LEN;
+    uint16_t flag;
 
 again:
     wheatLog(WHEAT_DEBUG, "%s read key %s", __func__, key);
@@ -249,12 +251,11 @@ again:
 
     while (actual_len > len) {
         wstrFree(origin_val);
-        origin_val = wstrNewLen(NULL, actual_len);
         len = actual_len;
+        origin_val = wstrNewLen(NULL, actual_len);
         if (origin_val == NULL) {
             d->storage_response = 5;
             wheatLog(WHEAT_WARNING, " failed to alloc memory");
-            wstrFree(origin_val);
             return ;
         }
 
@@ -271,11 +272,14 @@ again:
         }
     }
 
-
-    if (append)
+    if (append) {
         val = origin_val;
-    else
+        flag = *((uint16_t*)&val[actual_len-FLAG_SIZE]);
+        // reduce flag size
+        wstrupdatelen(origin_val, actual_len-FLAG_SIZE);
+    } else {
         val = wstrNewLen(NULL, actual_len);
+    }
 
     int i = 0;
     while (i < narray(vals)) {
@@ -283,9 +287,12 @@ again:
         slice = arrayIndex(vals, i);
         val = wstrCatLen(val, (char*)slice->data, slice->len);
         len += slice->len;
+        ++i;
     }
 
-    if (!append) {
+    if (append) {
+        val = wstrCatLen(val, (char*)&flag, FLAG_SIZE);
+    } else {
         val = wstrCatLen(val, origin_val, wstrlen(origin_val));
         wstrFree(origin_val);
     }
@@ -312,7 +319,7 @@ int callRamcloud(struct conn *c, void *arg)
 {
     enum memcacheCommand command = getMemcacheCommand(c->protocol_data);
     struct RejectRules rule;
-    struct ramcloudData *d = c->protocol_data;
+    struct ramcloudData *d = c->app_private_data;
     memset(&rule, 0, sizeof(rule));
     switch (command) {
         case REQ_MC_GET:
@@ -320,7 +327,7 @@ int callRamcloud(struct conn *c, void *arg)
             d->retrievals = arrayCreate(sizeof(wstr), 1);
             d->retrievals_keys = arrayCreate(sizeof(struct slice), 1);
             d->retrievals_vals = arrayCreate(sizeof(struct slice), 1);
-            d->retrievals_flags = arrayCreate(sizeof(uint16_t), 1);
+            d->retrievals_flags = arrayCreate(FLAG_SIZE, 1);
             d->retrievals_versions = arrayCreate(sizeof(uint64_t), 1);
             arrayEach2(getMemcacheKeys(c->protocol_data), ramcloudRead, d);
             buildRetrievalResponse(d, command == REQ_MC_GETS ? 1 : 0);

@@ -336,7 +336,8 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
                     goto error;
                 }
 
-                arrayPush(r->keys, r->key);
+                r->key = wstrCatLen(r->key, (char*)&s->data[r->token_pos], pos - r->token_pos);
+                arrayPush(r->keys, &r->key);
                 r->key = wstrNewLen(NULL, 64);
 
                 r->token_pos = -1;
@@ -547,6 +548,7 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
             case 'n':
                 if (memcache_storage(r) || memcache_arithmetic(r) || memcache_delete(r)) {
                     state = SW_NOREPLY;
+                    r->noreply_banner = wstrNewLen(NULL, 8);
                     r->token_pos = pos;
                 } else {
                     goto error;
@@ -651,6 +653,7 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
     }
 
 done:
+    pos++;
     r->stage = state;
     wheatLog(WHEAT_DEBUG, "parsed successfully type %d state %d", r->type, r->stage);
     return pos;
@@ -695,6 +698,11 @@ void *initMemcacheData()
     return data;
 }
 
+static void freeKey(void *k)
+{
+    wstrFree(*(wstr*)k);
+}
+
 void freeMemcacheData(void *d)
 {
     struct memcacheProcData *data = d;
@@ -703,7 +711,7 @@ void freeMemcacheData(void *d)
     if (data->key)
         wstrFree(data->key);
     if (data->keys) {
-        arrayEach(data->keys, (void(*)(void *))wstrFree);
+        arrayEach(data->keys, freeKey);
         arrayDealloc(data->keys);
     }
     if (data->vals)
@@ -762,8 +770,10 @@ struct array *getMemcacheKeys(void *data)
 wstr getMemcacheKey(void *data)
 {
     struct memcacheProcData *d = data;
-    return d->key;
-
+    if (narray(d->keys))
+        return *(wstr*)arrayTop(d->keys);
+    else
+        return d->key;
 }
 
 uint64_t getMemcacheCas(void *data)
