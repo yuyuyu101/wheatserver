@@ -46,7 +46,7 @@ struct ramcloudGlobal {
     struct rc_client *client;
 } global;
 
-const char *Responses[] = {
+const char Responses[][20] = {
     "STORED\r\n",
     "NOT_STORED\r\n",
     "EXISTS\r\n",
@@ -69,28 +69,30 @@ struct ramcloudData {
 static void buildRetrievalResponse(struct ramcloudData *d, int cas)
 {
     int i = 0;
-    char val_len[64];
+    char buf[64];
     ASSERT(!d->retrieval_response);
     // Estimate value avoid realloc
     d->retrieval_response = wstrNewLen(NULL, d->retrieval_len+narray(d->retrievals_vals)*64);
     for (; i < narray(d->retrievals_vals); ++i) {
         struct slice *val = arrayIndex(d->retrievals_vals, i);
         struct slice *key = arrayIndex(d->retrievals_keys, i);
-        struct slice *flag = arrayIndex(d->retrievals_flags, i);
+        uint16_t *flag = arrayIndex(d->retrievals_flags, i);
         uint64_t *v = arrayIndex(d->retrievals_versions, i);
         d->retrieval_response = wstrCatLen(d->retrieval_response, VALUE, 5);
         d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
         d->retrieval_response = wstrCatLen(d->retrieval_response, (char*)key->data, key->len);
         d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
-        d->retrieval_response = wstrCatLen(d->retrieval_response, (char*)flag->data, flag->len);
+        int l = sprintf(buf, "%d", *flag);
+        d->retrieval_response = wstrCatLen(d->retrieval_response, buf, l);
         d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
-        int l = sprintf(val_len, "%ld", val->len);
-        d->retrieval_response = wstrCatLen(d->retrieval_response, val_len, l);
+        l = sprintf(buf, "%ld", val->len);
+        d->retrieval_response = wstrCatLen(d->retrieval_response, buf, l);
         d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
         if (cas) {
             d->retrieval_response = wstrCatLen(d->retrieval_response, (char*)v, sizeof(*v));
             d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
         }
+        d->retrieval_response = wstrCatLen(d->retrieval_response, CRLF, 2);
         d->retrieval_response = wstrCatLen(d->retrieval_response, (char*)val->data, val->len);
         d->retrieval_response = wstrCatLen(d->retrieval_response, CRLF, 2);
     }
@@ -138,7 +140,7 @@ static void ramcloudRead(void *item, void *data)
     }
 
     d->retrieval_len += actual_len;
-    arrayPush(d->retrievals, val);
+    arrayPush(d->retrievals, &val);
     struct slice ss = {(uint8_t*)(i), wstrlen(i)};
     arrayPush(d->retrievals_keys, &ss);
     ss.data = (uint8_t*)val;
@@ -189,8 +191,8 @@ static void ramcloudSet(struct ramcloudData *d, wstr key, struct array *vals, ui
                 d->storage_response = 2;
             else if (s == STATUS_OBJECT_DOESNT_EXIST)
                 d->storage_response = 3;
-        } else if ((rule->doesntExist && s == STATUS_OBJECT_EXISTS) ||
-                   (rule->exists && s == STATUS_OBJECT_DOESNT_EXIST) ){
+        } else if ((rule->doesntExist && s == STATUS_OBJECT_DOESNT_EXIST) ||
+                   (rule->exists && s == STATUS_OBJECT_EXISTS)) {
             d->storage_response = 1;
         } else {
             wheatLog(WHEAT_WARNING, "%s failed to set %s: %s", __func__, key, statusToString(s));
@@ -430,11 +432,16 @@ void *initRamcloudData(struct conn *c)
     return data;
 }
 
+static void freeValue(void *k)
+{
+    wstrFree(*(wstr*)k);
+}
+
 void freeRamcloudData(void *data)
 {
     struct ramcloudData *d = data;
     if (d->retrievals) {
-        arrayEach(d->retrievals, (void(*)(void *))wstrFree);
+        arrayEach(d->retrievals, freeValue);
         arrayDealloc(d->retrievals);
     }
     if (d->retrievals_keys)

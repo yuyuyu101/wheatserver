@@ -19,9 +19,12 @@
  */
 #define MEMCACHE_MAX_KEY_LENGTH 250
 #define MEMCACHE_FINISHED(r)   (((r)->stage) == SW_ALMOST_DONE)
+#define ERROR "ERROR\r\n"
 
 #define CR                  (uint8_t)13
 #define LF                  (uint8_t)10
+
+// TODO: Support expire field
 
 int spotMemcache(struct conn *c);
 int parseMemcache(struct conn *c, struct slice *slice, size_t *);
@@ -348,7 +351,11 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
                 } else if (memcache_arithmetic(r)) {
                     state = SW_SPACES_BEFORE_NUM;
                 } else if (memcache_delete(r)) {
-                    state = SW_RUNTO_CRLF;
+                    // whether exist delay time
+                    if (ch == ' ')
+                        state = SW_SPACES_BEFORE_NUM;
+                    else
+                        state = SW_RUNTO_CRLF;
                 } else if (memcache_retrieval(r)) {
                     state = SW_SPACES_BEFORE_KEYS;
                 } else {
@@ -673,6 +680,7 @@ int parseMemcache(struct conn *c, struct slice *slice, size_t *out)
     nparsed = memcacheParseReq(memcache_data, slice);
 
     if (nparsed == -1) {
+        sendMemcacheResponse(c, ERROR, sizeof(ERROR));
         return WHEAT_WRONG;
     }
     if (out) *out = nparsed;
@@ -752,6 +760,7 @@ int spotMemcache(struct conn *c)
         app->deallocApp();
         app->is_init = 0;
     }
+    finishConn(c);
     return ret;
 }
 
