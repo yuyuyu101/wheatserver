@@ -32,6 +32,6 @@ uint64_t getMemcacheNum(void *data);
 uint64_t getMemcacheValLen(void *data);
 uint64_t getMemcacheFlag(void *data);
 struct array *getMemcacheVal(void *data);
-int sendMemcacheResponse(struct conn *c, const char *data, uint64_t len);
+int sendMemcacheResponse(struct conn *c, struct slice *s);
 
 #endif

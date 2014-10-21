@@ -19,7 +19,7 @@
  */
 #define MEMCACHE_MAX_KEY_LENGTH 250
 #define MEMCACHE_FINISHED(r)   (((r)->stage) == SW_ALMOST_DONE)
-#define ERROR "ERROR\r\n"
+#define ERROR "CLIENT_ERROR bad request\r\n"
 
 #define CR                  (uint8_t)13
 #define LF                  (uint8_t)10
@@ -634,6 +634,7 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
             switch (ch) {
             case LF:
                 /* req_end <- p */
+                pos++;
                 goto done;
 
             default:
@@ -660,7 +661,6 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
     }
 
 done:
-    pos++;
     r->stage = state;
     wheatLog(WHEAT_DEBUG, "parsed successfully type %d state %d", r->type, r->stage);
     return pos;
@@ -680,7 +680,10 @@ int parseMemcache(struct conn *c, struct slice *slice, size_t *out)
     nparsed = memcacheParseReq(memcache_data, slice);
 
     if (nparsed == -1) {
-        sendMemcacheResponse(c, ERROR, sizeof(ERROR));
+        struct slice s;
+        s.data = (uint8_t*)ERROR;
+        s.len = sizeof(ERROR) - 1;
+        sendMemcacheResponse(c, &s);
         return WHEAT_WRONG;
     }
     if (out) *out = nparsed;
@@ -815,8 +818,13 @@ struct array *getMemcacheVal(void *data)
     return d->vals;
 }
 
-int sendMemcacheResponse(struct conn *c, const char *data, uint64_t len)
+int sendMemcacheResponse(struct conn *c, struct slice *s)
 {
-    struct slice s = {(uint8_t *)data, len};
-    return sendClientData(c, &s);
+    struct memcacheProcData *d = c->protocol_data;
+    if (d->noreply) {
+        wheatLog(WHEAT_DEBUG, "%s noreply flag set", __func__);
+        return 0;
+    }
+    wheatLog(WHEAT_DEBUG, "send data %s len %lld", s->data, s->len);
+    return sendClientData(c, s);
 }

@@ -14,6 +14,14 @@
 #define CRLF "\r\n"
 #define FLAG_SIZE sizeof(uint16_t)
 
+#define STORED    "STORED\r\n"
+#define NOT_STORED    "NOT_STORED\r\n"
+#define EXISTS    "EXISTS\r\n"
+#define NOT_FOUND    "NOT_FOUND\r\n"
+#define DELETED    "DELETED\r\n"
+#define SERVER_ERROR    "SERVER_ERROR BUG\r\n"
+#define CLIENT_ERROR    "CLIENT_ERROR INVALID ARGUMENT\r\n"
+
 int callRamcloud(struct conn *, void *);
 int initRamcloud(struct protocol *);
 void deallocRamcloud();
@@ -46,22 +54,13 @@ struct ramcloudGlobal {
     struct rc_client *client;
 } global;
 
-const char Responses[][20] = {
-    "STORED\r\n",
-    "NOT_STORED\r\n",
-    "EXISTS\r\n",
-    "NOT_FOUND\r\n",
-    "DELETED\r\n",
-    "SERVER_ERROR BUG\r\n"
-};
-
 struct ramcloudData {
     struct array *retrievals;
     struct array *retrievals_keys;
     struct array *retrievals_vals;
     struct array *retrievals_flags;
     struct array *retrievals_versions;
-    int storage_response;
+    struct slice storage_response;
     wstr retrieval_response;
     uint64_t retrieval_len;
 };
@@ -87,10 +86,10 @@ static void buildRetrievalResponse(struct ramcloudData *d, int cas)
         d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
         l = sprintf(buf, "%ld", val->len);
         d->retrieval_response = wstrCatLen(d->retrieval_response, buf, l);
-        d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
         if (cas) {
-            d->retrieval_response = wstrCatLen(d->retrieval_response, (char*)v, sizeof(*v));
             d->retrieval_response = wstrCatLen(d->retrieval_response, " ", 1);
+            l = sprintf(buf, "%llu", *v);
+            d->retrieval_response = wstrCatLen(d->retrieval_response, buf, l);
         }
         d->retrieval_response = wstrCatLen(d->retrieval_response, CRLF, 2);
         d->retrieval_response = wstrCatLen(d->retrieval_response, (char*)val->data, val->len);
@@ -157,13 +156,13 @@ static void ramcloudDelete(struct ramcloudData* d, wstr key, struct RejectRules 
     Status s = rc_remove(global.client, table_id, key, wstrlen(key), rule, &version);
     if (s != STATUS_OK) {
         if (s == STATUS_OBJECT_DOESNT_EXIST) {
-            d->storage_response = 3;
+            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
         } else {
             wheatLog(WHEAT_WARNING, "%s failed to remove %s: %s", __func__, key, statusToString(s));
-            d->storage_response = 5;
+            sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
         }
     } else {
-        d->storage_response = 4;
+        sliceTo(&d->storage_response, (uint8_t*)DELETED, sizeof(DELETED)-1);
     }
 }
 
@@ -188,51 +187,103 @@ static void ramcloudSet(struct ramcloudData *d, wstr key, struct array *vals, ui
         // cas command
         if (rule->versionNeGiven) {
             if (s == STATUS_WRONG_VERSION)
-                d->storage_response = 2;
+                sliceTo(&d->storage_response, (uint8_t*)EXISTS, sizeof(EXISTS)-1);
             else if (s == STATUS_OBJECT_DOESNT_EXIST)
-                d->storage_response = 3;
+                sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
         } else if ((rule->doesntExist && s == STATUS_OBJECT_DOESNT_EXIST) ||
                    (rule->exists && s == STATUS_OBJECT_EXISTS)) {
-            d->storage_response = 1;
+            sliceTo(&d->storage_response, (uint8_t*)NOT_STORED, sizeof(NOT_STORED)-1);
         } else {
             wheatLog(WHEAT_WARNING, "%s failed to set %s: %s", __func__, key, statusToString(s));
-            d->storage_response = 5;
+            sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
         }
     } else {
-        d->storage_response = 0;
+        sliceTo(&d->storage_response, (uint8_t*)STORED, sizeof(STORED)-1);
     }
 }
 
 static void ramcloudIncr(struct ramcloudData *d, wstr key, uint64_t num, int positive)
 {
-    wheatLog(WHEAT_DEBUG, "%s incr key %s %ld", __func__, key, num);
     if (num > INT64_MAX) {
         wheatLog(WHEAT_WARNING, "%s num %ld can't larger than %ld", __func__, num, INT64_MAX);
+        sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
         return ;
     }
-    int64_t n;
-    char new_value[64];
-    Status s = rc_incrementInt64(global.client, table_id, key, wstrlen(key),
-                                 positive ? (int64_t)num : (~num+1), NULL, NULL, &n);
+
+    uint32_t actual_len;
+    uint64_t version;
+    wstr origin_val = wstrNewLen(NULL, sizeof(num)+FLAG_SIZE);
+
+again:
+    wheatLog(WHEAT_DEBUG, "%s incr key %s %ld", __func__, key, num);
+    Status s = rc_read(global.client, table_id, key, wstrlen(key), NULL, &version, origin_val, sizeof(num)+FLAG_SIZE, &actual_len);
     if (s != STATUS_OK) {
-        if (s == STATUS_OBJECT_DOESNT_EXIST) {
-            d->storage_response = 3;
+        if (s != STATUS_OBJECT_DOESNT_EXIST) {
+            wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
+            sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
         } else {
-            d->storage_response = 5;
-            wheatLog(WHEAT_WARNING, "%s failed to incr %s: %s", __func__, key, statusToString(s));
+            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
         }
+        wstrFree(origin_val);
+        return ;
+    }
+
+    if (actual_len > sizeof(num)+FLAG_SIZE) {
+        wstrFree(origin_val);
+        sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
+        return ;
+    }
+
+    char new_value[sizeof(num)+FLAG_SIZE];
+    memcpy(new_value, origin_val, sizeof(num));
+    new_value[sizeof(num)] = '\0';
+    long long n = atoll(new_value);
+    if (n == 0) {
+        sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
+        wstrFree(origin_val);
+        return ;
+    }
+    if (positive) {
+        n += num;
     } else {
-        int l = sprintf(new_value, "%lld\r\n", n);
+        if (num > n)
+            n = 0;
+        else
+            n -= num;
+    }
+    memcpy(&new_value+sizeof(num), &origin_val[sizeof(num)], FLAG_SIZE);
+    struct RejectRules rule;
+    memset(&rule, 0, sizeof(rule));
+    rule.doesntExist = 1;
+    rule.versionNeGiven = 1;
+    rule.givenVersion = version;
+    s = rc_write(global.client, table_id, key, wstrlen(key), new_value, sizeof(num)+FLAG_SIZE,
+                 &rule, &version);
+    if (s != STATUS_OK) {
+        if (s == STATUS_WRONG_VERSION) {
+            goto again;
+        }
+
+        wstrFree(origin_val);
+        if (s == STATUS_OBJECT_DOESNT_EXIST) {
+            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
+            return ;
+        }
+        sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
+        wheatLog(WHEAT_WARNING, "%s failed to incr %s: %s", __func__, key, statusToString(s));
+        return ;
+    } else {
+        int l = sprintf(new_value, "%llu\r\n", n);
         d->retrieval_response = wstrNewLen(new_value, l);
     }
+    wstrFree(origin_val);
 }
 
-static void ramcloudAppend(struct ramcloudData *d, wstr key, struct array *vals, int append)
+static void ramcloudAppend(struct ramcloudData *d, wstr key, struct array *vals, uint32_t vlen, uint16_t flag, int append)
 {
     uint32_t actual_len;
     uint64_t version;
     uint64_t len = RAMCLOUD_DEFAULT_VALUE_LEN;
-    uint16_t flag;
 
 again:
     wheatLog(WHEAT_DEBUG, "%s read key %s", __func__, key);
@@ -243,9 +294,9 @@ again:
     if (s != STATUS_OK) {
         if (s != STATUS_OBJECT_DOESNT_EXIST) {
             wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
-            d->storage_response = 5;
+            sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
         } else {
-            d->storage_response = 3;
+            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
         }
         wstrFree(origin_val);
         return ;
@@ -256,7 +307,7 @@ again:
         len = actual_len;
         origin_val = wstrNewLen(NULL, actual_len);
         if (origin_val == NULL) {
-            d->storage_response = 5;
+            sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
             wheatLog(WHEAT_WARNING, " failed to alloc memory");
             return ;
         }
@@ -265,22 +316,21 @@ again:
         if (s != STATUS_OK) {
             if (s != STATUS_OBJECT_DOESNT_EXIST) {
                 wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
-                d->storage_response = 5;
+                sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
             } else {
-                d->storage_response = 3;
+                sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
             }
             wstrFree(origin_val);
             return ;
         }
     }
 
+    wstrupdatelen(origin_val, actual_len-FLAG_SIZE);
     if (append) {
         val = origin_val;
-        flag = *((uint16_t*)&val[actual_len-FLAG_SIZE]);
         // reduce flag size
-        wstrupdatelen(origin_val, actual_len-FLAG_SIZE);
     } else {
-        val = wstrNewLen(NULL, actual_len);
+        val = wstrNewLen(NULL, vlen);
     }
 
     int i = 0;
@@ -292,29 +342,33 @@ again:
         ++i;
     }
 
-    if (append) {
-        val = wstrCatLen(val, (char*)&flag, FLAG_SIZE);
-    } else {
+    if (!append) {
         val = wstrCatLen(val, origin_val, wstrlen(origin_val));
         wstrFree(origin_val);
     }
+    val = wstrCatLen(val, (char*)&flag, FLAG_SIZE);
 
     struct RejectRules rule;
-    rule.exists = 1;
+    memset(&rule, 0, sizeof(rule));
+    rule.doesntExist = 1;
     rule.versionNeGiven = 1;
     rule.givenVersion = version;
     s = rc_write(global.client, table_id, key, wstrlen(key), val, wstrlen(val),
                         &rule, NULL);
     wstrFree(val);
     if (s != STATUS_OK) {
-        if ((s == STATUS_OBJECT_DOESNT_EXIST) || (s == STATUS_WRONG_VERSION)) {
+        if (s == STATUS_OBJECT_DOESNT_EXIST) {
+            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
+            return ;
+        } else if (s == STATUS_WRONG_VERSION) {
             goto again;
         }
+
         wheatLog(WHEAT_WARNING, " failed to write %s: %s", key, statusToString(s));
-        d->storage_response = 5;
+        sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
         return ;
     }
-    d->storage_response = 0;
+    sliceTo(&d->storage_response, (uint8_t*)STORED, sizeof(STORED)-1);
 }
 
 int callRamcloud(struct conn *c, void *arg)
@@ -333,6 +387,7 @@ int callRamcloud(struct conn *c, void *arg)
             d->retrievals_versions = arrayCreate(sizeof(uint64_t), 1);
             arrayEach2(getMemcacheKeys(c->protocol_data), ramcloudRead, d);
             buildRetrievalResponse(d, command == REQ_MC_GETS ? 1 : 0);
+            sliceTo(&d->storage_response, (uint8_t*)d->retrieval_response, wstrlen(d->retrieval_response));
             break;
 
         case REQ_MC_DELETE:
@@ -374,21 +429,22 @@ int callRamcloud(struct conn *c, void *arg)
             break;
 
         case REQ_MC_APPEND:
-            ramcloudAppend(d, getMemcacheKey(c->protocol_data), getMemcacheVal(c->protocol_data), 1);
+            ramcloudAppend(d, getMemcacheKey(c->protocol_data), getMemcacheVal(c->protocol_data),
+                           getMemcacheValLen(c->protocol_data), getMemcacheFlag(c->protocol_data), 1);
             break;
 
         case REQ_MC_PREPEND:
-            ramcloudAppend(d, getMemcacheKey(c->protocol_data), getMemcacheVal(c->protocol_data), 0);
+            ramcloudAppend(d, getMemcacheKey(c->protocol_data), getMemcacheVal(c->protocol_data),
+                           getMemcacheValLen(c->protocol_data), getMemcacheFlag(c->protocol_data), 0);
             break;
 
         default:
             ASSERT(0);
     }
-    if (d->storage_response != -1) {
-        return sendMemcacheResponse(c, Responses[d->storage_response], sizeof(Responses[d->storage_response]));
-    } else {
-        return sendMemcacheResponse(c, d->retrieval_response, wstrlen(d->retrieval_response));
-    }
+
+    sendMemcacheResponse(c, &d->storage_response);
+
+    return WHEAT_OK;
 }
 
 int initRamcloud(struct protocol *p)
@@ -428,7 +484,6 @@ void *initRamcloudData(struct conn *c)
     if (!data)
         return NULL;
     memset(data, 0, sizeof(*data));
-    data->storage_response = -1;
     return data;
 }
 
