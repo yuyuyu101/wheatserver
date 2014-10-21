@@ -162,10 +162,16 @@ def test_memcache_basic_response():
                                                     len(value+avalue+avalue),
                                                     avalue+value+avalue, GET_END))
 
+    c.send_cmd("decr %s %s\r\n" % (key, 1))
+    c.expect_result("CLIENT_ERROR INVALID ARGUMENT\r\n")
+
     c.send_cmd("delete %s\r\n" % key)
     c.expect_result(DELETED)
 
     c.send_cmd("delete %s\r\n" % key)
+    c.expect_result(NOT_FOUND)
+
+    c.send_cmd("decr %s %s\r\n" % (key, 1))
     c.expect_result(NOT_FOUND)
 
     value = 100
@@ -174,6 +180,8 @@ def test_memcache_basic_response():
     c.send_cmd("incr %s %s noreply\r\n" % (key, 2))
     c.send_cmd("decr %s %s\r\n" % (key, 1))
     c.expect_result("%s\r\n" % 101)
+    c.send_cmd("decr %s %s\r\n" % (key, 102))
+    c.expect_result("%s\r\n" % 0)
 
     c.send_cmd("delete %s\r\n" % key)
     c.expect_result(DELETED)

@@ -210,13 +210,15 @@ static void ramcloudIncr(struct ramcloudData *d, wstr key, uint64_t num, int pos
         return ;
     }
 
+    static int max_len = 100;
+    char value[max_len];
     uint32_t actual_len;
     uint64_t version;
-    wstr origin_val = wstrNewLen(NULL, sizeof(num)+FLAG_SIZE);
+    uint16_t flag;
 
 again:
     wheatLog(WHEAT_DEBUG, "%s incr key %s %ld", __func__, key, num);
-    Status s = rc_read(global.client, table_id, key, wstrlen(key), NULL, &version, origin_val, sizeof(num)+FLAG_SIZE, &actual_len);
+    Status s = rc_read(global.client, table_id, key, wstrlen(key), NULL, &version, value, max_len, &actual_len);
     if (s != STATUS_OK) {
         if (s != STATUS_OBJECT_DOESNT_EXIST) {
             wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
@@ -224,23 +226,19 @@ again:
         } else {
             sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
         }
-        wstrFree(origin_val);
         return ;
     }
 
-    if (actual_len > sizeof(num)+FLAG_SIZE) {
-        wstrFree(origin_val);
+    if (actual_len > max_len) {
         sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
         return ;
     }
 
-    char new_value[sizeof(num)+FLAG_SIZE];
-    memcpy(new_value, origin_val, sizeof(num));
-    new_value[sizeof(num)] = '\0';
-    long long n = atoll(new_value);
+    flag = *(uint16_t*)&value[actual_len-FLAG_SIZE];
+    value[actual_len-FLAG_SIZE] = '\0';
+    long long n = atoll(value);
     if (n == 0) {
         sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
-        wstrFree(origin_val);
         return ;
     }
     if (positive) {
@@ -251,20 +249,20 @@ again:
         else
             n -= num;
     }
-    memcpy(&new_value+sizeof(num), &origin_val[sizeof(num)], FLAG_SIZE);
+    int l = sprintf(value, "%llu", n);
+    memcpy(&value[l], &flag, FLAG_SIZE);
     struct RejectRules rule;
     memset(&rule, 0, sizeof(rule));
     rule.doesntExist = 1;
     rule.versionNeGiven = 1;
     rule.givenVersion = version;
-    s = rc_write(global.client, table_id, key, wstrlen(key), new_value, sizeof(num)+FLAG_SIZE,
+    s = rc_write(global.client, table_id, key, wstrlen(key), value, l+FLAG_SIZE,
                  &rule, &version);
     if (s != STATUS_OK) {
         if (s == STATUS_WRONG_VERSION) {
             goto again;
         }
 
-        wstrFree(origin_val);
         if (s == STATUS_OBJECT_DOESNT_EXIST) {
             sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
             return ;
@@ -273,10 +271,10 @@ again:
         wheatLog(WHEAT_WARNING, "%s failed to incr %s: %s", __func__, key, statusToString(s));
         return ;
     } else {
-        int l = sprintf(new_value, "%llu\r\n", n);
-        d->retrieval_response = wstrNewLen(new_value, l);
+        l = sprintf(value, "%llu\r\n", n);
+        d->retrieval_response = wstrNewLen(value, l);
+        sliceTo(&d->storage_response, (uint8_t*)d->retrieval_response, wstrlen(d->retrieval_response));
     }
-    wstrFree(origin_val);
 }
 
 static void ramcloudAppend(struct ramcloudData *d, wstr key, struct array *vals, uint32_t vlen, uint16_t flag, int append)
