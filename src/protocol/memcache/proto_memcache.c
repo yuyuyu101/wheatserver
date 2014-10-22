@@ -202,7 +202,7 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
                 if (wstrlen(r->command)) {
                     r->command = wstrCatLen(r->command, (char *)&s->data[r->token_pos], pos);
                     command_len = wstrlen(r->command);
-                    m = (char*)&r->command;
+                    m = (char*)r->command;
                 } else {
                     command_len = pos - r->token_pos;
                     m = (char*)&s->data[r->token_pos];
@@ -308,6 +308,7 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
                     break;
 
                 case UNKNOWN:
+                    wheatLog(WHEAT_DEBUG, "Unknow command %s", m);
                     goto error;
 
                 default:
@@ -506,13 +507,16 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
 
         case SW_VAL:
             if (r->vlen_left) {
-                left = (s->len - pos) >= r->vlen ? (r->vlen) : (s->len-pos);
+                left = (s->len - pos) >= r->vlen_left ? (r->vlen_left) : (s->len-pos);
                 val_s.len = left;
                 val_s.data = &s->data[pos];
                 arrayPush(r->vals, &val_s);
                 r->vlen_left -= left;
                 pos += left;
+                pos--;
+                break;
             }
+
             switch (s->data[pos]) {
             case CR:
                 state = SW_ALMOST_DONE;
@@ -666,7 +670,7 @@ done:
     return pos;
 
 error:
-    wheatLog(WHEAT_DEBUG, "parsed failed type %d state %d: %s", r->type, r->stage,
+    wheatLog(WHEAT_NOTICE, "parsed failed type %d state %d: %s", r->type, state,
              s->data);
     return -1;
 }
