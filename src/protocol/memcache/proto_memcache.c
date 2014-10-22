@@ -18,7 +18,7 @@
  * control characters or whitespace.
  */
 #define MEMCACHE_MAX_KEY_LENGTH 250
-#define MEMCACHE_FINISHED(r)   (((r)->stage) == SW_ALMOST_DONE)
+#define MEMCACHE_FINISHED(r)   (((r)->stage) == SW_DONE)
 #define ERROR "CLIENT_ERROR bad request\r\n"
 
 #define CR                  (uint8_t)13
@@ -65,6 +65,7 @@ enum reqStage {
     SW_NOREPLY,
     SW_AFTER_NOREPLY,
     SW_ALMOST_DONE,
+    SW_DONE,
     SW_SENTINEL
 };
 
@@ -639,6 +640,7 @@ static ssize_t memcacheParseReq(struct memcacheProcData *r, struct slice *s)
             case LF:
                 /* req_end <- p */
                 pos++;
+                state = SW_DONE;
                 goto done;
 
             default:

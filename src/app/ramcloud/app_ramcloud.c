@@ -238,8 +238,10 @@ again:
     value[actual_len-FLAG_SIZE] = '\0';
     long long n = atoll(value);
     if (n == 0) {
-        sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
-        return ;
+        if (value[0] != '0') {
+            sliceTo(&d->storage_response, (uint8_t*)CLIENT_ERROR, sizeof(CLIENT_ERROR)-1);
+            return ;
+        }
     }
     if (positive) {
         n += num;
@@ -294,7 +296,7 @@ again:
             wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
             sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
         } else {
-            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
+            sliceTo(&d->storage_response, (uint8_t*)NOT_STORED, sizeof(NOT_STORED)-1);
         }
         wstrFree(origin_val);
         return ;
@@ -316,7 +318,7 @@ again:
                 wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
                 sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
             } else {
-                sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
+                sliceTo(&d->storage_response, (uint8_t*)NOT_STORED, sizeof(NOT_STORED)-1);
             }
             wstrFree(origin_val);
             return ;
@@ -356,7 +358,7 @@ again:
     wstrFree(val);
     if (s != STATUS_OK) {
         if (s == STATUS_OBJECT_DOESNT_EXIST) {
-            sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
+            sliceTo(&d->storage_response, (uint8_t*)NOT_STORED, sizeof(NOT_STORED)-1);
             return ;
         } else if (s == STATUS_WRONG_VERSION) {
             goto again;
@@ -464,6 +466,8 @@ int initRamcloud(struct protocol *p)
         wheatLog(WHEAT_WARNING, "%s connect to %s: %s", __func__, locator, statusToString(s));
         goto err;
     }
+    rc_createTable(global.client, "1234", 1);
+    rc_getTableId(global.client, "1234", &table_id);
 
     return WHEAT_OK;
 

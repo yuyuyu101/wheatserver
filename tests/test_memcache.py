@@ -1,6 +1,7 @@
 import collections
 import random
 import socket
+import time
 
 from wheatserver_test import WheatServer, PROJECT_PATH, server_socket
 import memcache
@@ -190,7 +191,7 @@ def test_memcache_basic_response():
 
 
 class MemcacheSynthetic(object):
-    def __ini__(self):
+    def __init__(self):
         self.data = collections.defaultdict(str)
         self.c = memcache.Client(["127.0.0.1:10828"])
         self.num_key = set()
@@ -203,86 +204,99 @@ class MemcacheSynthetic(object):
         return s
 
     def get(self):
-        k = ramdom.choice(self.data.keys())
-        assert(self.data[k] == self.c.get(k))
+        if not self.data:
+             return
+        k = random.choice(self.data.keys())
+        assert(str(self.data[k]) == str(self.c.get(k)))
 
     def set(self):
         k = self.get_str(random.randint(10, 100))
         if k not in self.data:
             if len(k) % 3 == 0:
                 v = random.randint(0, 1000000)
-                self.num_key.insert(k)
+                self.num_key.add(k)
             else:
                 v = self.get_str(random.randint(100, 4096))
-            break
+                if k in self.num_key:
+                    self.num_key.remove(k)
 
-        self.c.set(k, v)
-        self.data[k] = v
+        assert(self.c.set(k, v))
+        self.data[k] = str(v)
+
+    def delete(self):
+        if not self.data:
+            return
+        k = random.choice(self.data.keys())
+        assert(self.c.delete(k))
+        if k in self.num_key:
+            self.num_key.remove(k)
+        del self.data[k]
 
     def append(self):
-        if random.randint(0, 1):
-            k = ramdom.choice(self.data.keys())
-        else:
-            k = self.get_str(random.randint(10, 100))
+        if not self.data:
+            return
 
+        k = random.choice(self.data.keys())
         v = self.get_str(random.randint(100, 1024))
-        self.c.append(k, v)
-        self.data[k] += v
+        assert(self.c.append(k, v))
+        self.data[k] += str(v)
         if k in self.num_key:
             self.num_key.remove(k)
 
     def prepend(self):
-        if random.randint(0, 1):
-            k = ramdom.choice(self.data.keys())
-        else:
-            k = self.get_str(random.randint(10, 100))
+        if not self.data:
+            return
 
+        k = random.choice(self.data.keys())
         v = self.get_str(random.randint(100, 1024))
-
-        self.c.prepend(k, v)
-        self.data[k] = v + self.data[k]
+        assert(self.c.prepend(k, v))
+        self.data[k] = str(v) + str(self.data[k])
         if k in self.num_key:
             self.num_key.remove(k)
 
     def incr(self):
         if not self.num_key:
             return
-        k = ramdom.choice(self.num_key)
+        k = random.sample(self.num_key, 1)[0]
         v = random.randint(0, 1000000)
-        self.c.incr(k, n)
-        self.data[k] = int(self.data[k]) + n
+        self.data[k] = str(int(self.data[k]) + v)
+        assert(str(self.c.incr(k, v)) == self.data[k])
 
     def decr(self):
         if not self.num_key:
             return
-        k = ramdom.choice(self.num_key)
+        k = random.sample(self.num_key, 1)[0]
         v = random.randint(0, 1000000)
-        self.c.decr(k, n)
-        self.data[k] = int(self.data[k]) - n
-        if self.data[k] < 0:
-            self.data[k] = 0
+        self.data[k] = str(int(self.data[k]) - v)
+        if int(self.data[k]) < 0:
+            self.data[k] = "0"
+        assert(str(self.c.decr(k, v)) == self.data[k])
 
-    def add(self, k, v):
+    def add(self):
         while True:
             k = self.get_str(random.randint(10, 100))
             if k not in self.data:
                 if len(k) % 3 == 0:
                     v = random.randint(0, 1000000)
-                    self.num_key.insert(k)
+                    self.num_key.add(k)
                 else:
                     v = self.get_str(random.randint(100, 4096))
                 break
 
-        self.c.add(k, v)
-        self.data[k] = v
+        assert(self.c.add(k, v))
+        self.data[k] = str(v)
+        if k in self.num_key:
+            self.num_key.remove(k)
 
     def replace(self):
         if not self.data:
             return
-        k = ramdom.choice(self.data.keys())
+        k = random.choice(self.data.keys())
         v = self.get_str(random.randint(100, 4096))
-        self.c.replace(k, v)
-        self.data[k] = v
+        assert(self.c.replace(k, v))
+        self.data[k] = str(v)
+        if k in self.num_key:
+            self.num_key.remove(k)
 
     def run(self, num):
         while num:
@@ -295,16 +309,20 @@ class MemcacheSynthetic(object):
                 self.incr()
             elif n > 65:
                 self.decr()
-            elif n > 55:
+            elif n > 60:
                 self.prepend()
-            elif n > 50:
+            elif n > 55:
                 self.append()
+            elif n > 45:
+                self.delete()
             elif n > 30:
                 self.set()
             else:
                 self.get()
+            num -= 1
 
 
 def test_memcache_synthetic():
     s = MemcacheSynthetic()
+    random.seed(time.time())
     s.run(10000)
