@@ -48,11 +48,12 @@ struct moduleAttr AppRamcloudAttr = {
     NULL, 0
 };
 
-uint64_t table_id = 1234;
-
 struct ramcloudGlobal {
     struct rc_client *client;
+    struct dict *tables;
 } global;
+
+static char hostname[256];
 
 struct ramcloudData {
     struct array *retrievals;
@@ -63,7 +64,39 @@ struct ramcloudData {
     struct slice storage_response;
     wstr retrieval_response;
     uint64_t retrieval_len;
+    uint64_t table_id;
 };
+
+static int getTableId(int owner, uint64_t *table_id)
+{
+    struct dictEntry *entry = dictFind(global.tables, (void*)(intptr_t)owner);
+    if (entry) {
+        *table_id = dictGetUnsignedIntegerVal(entry);
+        return WHEAT_OK;
+    } else {
+        char name[256];
+        int l = sprintf(name, "%s_%d", hostname, owner);
+        name[l] = '\0';
+        Status s = rc_getTableId(global.client, name, table_id);
+        if (s != STATUS_OK) {
+            if (s == STATUS_TABLE_DOESNT_EXIST) {
+                wheatLog(WHEAT_DEBUG, "%s table %s not exists, create it, s", __func__, name);
+                s = rc_createTable(global.client, name, 1);
+                if (s != STATUS_OK) {
+                    wheatLog(WHEAT_WARNING, "%s failed to create table %s: %s", __func__, name, statusToString(s));
+                    return WHEAT_WRONG;
+                }
+                s = rc_getTableId(global.client, name, table_id);
+            }
+            if (s != STATUS_OK) {
+                wheatLog(WHEAT_WARNING, "%s failed to get table %s: %s", __func__, name, statusToString(s));
+                return WHEAT_WRONG;
+            }
+        }
+        dictAdd(global.tables, name, (void*)(intptr_t)(*table_id));
+        return WHEAT_OK;
+    }
+}
 
 static void buildRetrievalResponse(struct ramcloudData *d, int cas)
 {
@@ -110,7 +143,7 @@ static void ramcloudRead(void *item, void *data)
 
     wheatLog(WHEAT_DEBUG, "%s read key %s", __func__, i);
     wstr val = wstrNewLen(NULL, len);
-    Status s = rc_read(global.client, table_id, i, wstrlen(i), NULL, &version, val, len, &actual_len);
+    Status s = rc_read(global.client, d->table_id, i, wstrlen(i), NULL, &version, val, len, &actual_len);
     if (s != STATUS_OK) {
         if (s != STATUS_OBJECT_DOESNT_EXIST) {
             wheatLog(WHEAT_WARNING, " failed to read %s: %s", i, statusToString(s));
@@ -128,7 +161,7 @@ static void ramcloudRead(void *item, void *data)
             return ;
         }
 
-        s = rc_read(global.client, table_id, i, wstrlen(i), NULL, &version, val, len, &actual_len);
+        s = rc_read(global.client, d->table_id, i, wstrlen(i), NULL, &version, val, len, &actual_len);
         if (s != STATUS_OK) {
             if (s != STATUS_OBJECT_DOESNT_EXIST) {
                 wheatLog(WHEAT_WARNING, " failed to read %s: %s", i, statusToString(s));
@@ -153,7 +186,7 @@ static void ramcloudDelete(struct ramcloudData* d, wstr key, struct RejectRules 
 {
     wheatLog(WHEAT_DEBUG, "%s delete key %s", __func__, key);
     uint64_t version;
-    Status s = rc_remove(global.client, table_id, key, wstrlen(key), rule, &version);
+    Status s = rc_remove(global.client, d->table_id, key, wstrlen(key), rule, &version);
     if (s != STATUS_OK) {
         if (s == STATUS_OBJECT_DOESNT_EXIST) {
             sliceTo(&d->storage_response, (uint8_t*)NOT_FOUND, sizeof(NOT_FOUND)-1);
@@ -180,7 +213,7 @@ static void ramcloudSet(struct ramcloudData *d, wstr key, struct array *vals, ui
     }
     val = wstrCatLen(val, (char*)&flag, FLAG_SIZE);
 
-    Status s = rc_write(global.client, table_id, key, wstrlen(key), val, wstrlen(val),
+    Status s = rc_write(global.client, d->table_id, key, wstrlen(key), val, wstrlen(val),
                         rule, &version);
     wstrFree(val);
     if (s != STATUS_OK) {
@@ -218,7 +251,7 @@ static void ramcloudIncr(struct ramcloudData *d, wstr key, uint64_t num, int pos
 
 again:
     wheatLog(WHEAT_DEBUG, "%s incr key %s %ld", __func__, key, num);
-    Status s = rc_read(global.client, table_id, key, wstrlen(key), NULL, &version, value, max_len, &actual_len);
+    Status s = rc_read(global.client, d->table_id, key, wstrlen(key), NULL, &version, value, max_len, &actual_len);
     if (s != STATUS_OK) {
         if (s != STATUS_OBJECT_DOESNT_EXIST) {
             wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
@@ -258,7 +291,7 @@ again:
     rule.doesntExist = 1;
     rule.versionNeGiven = 1;
     rule.givenVersion = version;
-    s = rc_write(global.client, table_id, key, wstrlen(key), value, l+FLAG_SIZE,
+    s = rc_write(global.client, d->table_id, key, wstrlen(key), value, l+FLAG_SIZE,
                  &rule, &version);
     if (s != STATUS_OK) {
         if (s == STATUS_WRONG_VERSION) {
@@ -290,7 +323,7 @@ again:
 
     wstr origin_val = wstrNewLen(NULL, len);
     wstr val;
-    Status s = rc_read(global.client, table_id, key, wstrlen(key), NULL, &version, origin_val, len, &actual_len);
+    Status s = rc_read(global.client, d->table_id, key, wstrlen(key), NULL, &version, origin_val, len, &actual_len);
     if (s != STATUS_OK) {
         if (s != STATUS_OBJECT_DOESNT_EXIST) {
             wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
@@ -312,7 +345,7 @@ again:
             return ;
         }
 
-        s = rc_read(global.client, table_id, key, wstrlen(key), NULL, &version, origin_val, len, &actual_len);
+        s = rc_read(global.client, d->table_id, key, wstrlen(key), NULL, &version, origin_val, len, &actual_len);
         if (s != STATUS_OK) {
             if (s != STATUS_OBJECT_DOESNT_EXIST) {
                 wheatLog(WHEAT_WARNING, " failed to read %s: %s", key, statusToString(s));
@@ -353,7 +386,7 @@ again:
     rule.doesntExist = 1;
     rule.versionNeGiven = 1;
     rule.givenVersion = version;
-    s = rc_write(global.client, table_id, key, wstrlen(key), val, wstrlen(val),
+    s = rc_write(global.client, d->table_id, key, wstrlen(key), val, wstrlen(val),
                         &rule, NULL);
     wstrFree(val);
     if (s != STATUS_OK) {
@@ -376,6 +409,15 @@ int callRamcloud(struct conn *c, void *arg)
     enum memcacheCommand command = getMemcacheCommand(c->protocol_data);
     struct RejectRules rule;
     struct ramcloudData *d = c->app_private_data;
+    int owner = c->client->owner;
+    uint64_t table_id;
+    ASSERT(owner);
+    if (getTableId(owner, &table_id) < 0) {
+        sliceTo(&d->storage_response, (uint8_t*)SERVER_ERROR, sizeof(SERVER_ERROR)-1);
+        sendMemcacheResponse(c, &d->storage_response);
+        return WHEAT_OK;
+    }
+    d->table_id = table_id;
     memset(&rule, 0, sizeof(rule));
     switch (command) {
         case REQ_MC_GET:
@@ -466,9 +508,9 @@ int initRamcloud(struct protocol *p)
         wheatLog(WHEAT_WARNING, "%s connect to %s: %s", __func__, locator, statusToString(s));
         goto err;
     }
-    rc_createTable(global.client, "1234", 1);
-    rc_getTableId(global.client, "1234", &table_id);
-
+    global.tables = dictCreate(&intDictType);
+    ASSERT(gethostname(hostname, 255));
+    wheatLog(WHEAT_NOTICE, "%s hostname is %s", __func__, hostname);
     return WHEAT_OK;
 
  err:
@@ -477,6 +519,7 @@ int initRamcloud(struct protocol *p)
 
 void deallocRamcloud()
 {
+    dictRelease(global.tables);
     rc_disconnect(global.client);
 }
 

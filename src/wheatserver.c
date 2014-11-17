@@ -174,7 +174,7 @@ static void initMainListen()
         }
     }
     int i, j;
-    for (i = Server.port_range_start, j = 0; i < Server.port_range_end; i++, j++) {
+    for (i = Server.port_range_start, j = 0; i <= Server.port_range_end; i++, j++) {
         Server.ipfd[j] = wheatTcpServer(Server.neterr, Server.bind_addr, i);
         if (Server.ipfd[j] == NET_WRONG || Server.ipfd[j] < 0) {
             wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", i, Server.neterr);
@@ -372,7 +372,7 @@ void stopWorkers(int graceful)
 {
     int sig;
     int i;
-    for (i = 0; i < Server.port_range_end - Server.port_range_start; i++)
+    for (i = 0; i <= Server.port_range_end - Server.port_range_start; i++)
         close(Server.ipfd[i]);
 
     if (graceful)
@@ -624,7 +624,7 @@ void reload()
             strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
             old_port_start != Server.port_range_start ||
             old_port_end != Server.port_range_end) {
-        for (i = 0; i < Server.port_range_end - Server.port_range_start; i++)
+        for (i = 0; i <= Server.port_range_end - Server.port_range_start; i++)
             close(Server.ipfd[i]);
         initMainListen();
     }

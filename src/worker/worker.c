@@ -86,7 +86,7 @@ static void clientsCron()
     }
 }
 
-struct client *createClient(int fd, char *ip, int port, struct protocol *p)
+static struct client *createClient(int fd, char *ip, int port, struct protocol *p, int owner)
 {
     struct client *c;
     struct listNode *node;
@@ -104,6 +104,7 @@ struct client *createClient(int fd, char *ip, int port, struct protocol *p)
     c->clifd = fd;
     c->ip = wstrNew(ip);
     c->port = port;
+    c->owner = owner;
     c->protocol = p;
     c->conns = createList();
     listSetFree(c->conns, (void (*)(void*))connDealloc);
@@ -372,7 +373,7 @@ struct client *buildConn(char *ip, int port, struct protocol *p)
         wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", fd, Server.neterr);
         return NULL;
     }
-    c = createClient(fd, ip, port, p);
+    c = createClient(fd, ip, port, p, 0);
     if (!c) {
         close(fd);
         return NULL;
@@ -455,7 +456,7 @@ static void acceptClient(struct evcenter *center, int fd, void *data, int mask)
     wheatNonBlock(Server.neterr, cfd);
     wheatCloseOnExec(Server.neterr, cfd);
 
-    c = createClient(cfd, ip, cport, WorkerProcess->protocol);
+    c = createClient(cfd, ip, cport, WorkerProcess->protocol, fd+Server.port_range_start);
 }
 
 // ==================================================================
@@ -482,12 +483,13 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     worker->stats = NULL;
     initWorkerSignals();
 
+    conf = getConfiguration("max-client-limits");
     worker->center = eventcenterInit(conf->target.val+Server.port_range_end-Server.port_range_start);
     if (!worker->center) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
         halt(1);
     }
-    for (i = 0; i < Server.port_range_end - Server.port_range_start; i++) {
+    for (i = 0; i <= Server.port_range_end - Server.port_range_start; i++) {
         if (createEvent(worker->center, Server.ipfd[i], EVENT_READABLE, acceptClient,  NULL) == WHEAT_WRONG) {
             wheatLog(WHEAT_WARNING, "createEvent failed");
             halt(1);

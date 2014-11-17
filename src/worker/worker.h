@@ -192,6 +192,8 @@ struct conn {
 // and manage it. When conn is finished(call finishConn), client will traverse
 // `conns` fields and send packets in ordering.
 //
+// `owner`: port is used to as separator of multi-tenants, if 0 means no
+// explicit owner port
 // `last_io`: the last send or receive time
 // `name`: the client name, it always used by application to debug or show
 // information attach client
@@ -216,6 +218,7 @@ struct client {
     int clifd;
     wstr ip;
     int port;
+    int owner;
     struct timeval last_io;
     wstr name;
     struct protocol *protocol;
@@ -244,7 +247,7 @@ void workerProcessCron(void (*fake_func)(void *data), void *data);
 //========================== Client operation ======================
 //==================================================================
 
-struct client *createClient(int fd, char *ip, int port, struct protocol *p);
+static struct client *createClient(int fd, char *ip, int port, struct protocol *p, int owner);
 void freeClient(struct client *);
 void tryFreeClient(struct client *c);
 int sendClientFile(struct conn *c, int fd, off_t len);

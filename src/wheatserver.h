@@ -116,7 +116,6 @@ struct globalServer {
     char *bind_addr;
     int port_range_start;
     int port_range_end;
-    char *port_ranges;
     int worker_number;
     char *worker_type;
     char configfile_path[WHEATSERVER_PATH_LEN];
