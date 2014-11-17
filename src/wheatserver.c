@@ -119,8 +119,8 @@ static void collectModules(struct array *stats,
 void initGlobalServerConfig()
 {
     Server.bind_addr = NULL;
-    Server.port = WHEAT_SERVERPORT;
-    Server.ipfd = 0;
+    Server.port_range_start = Server.port_range_end = 10828;
+    memset(Server.ipfd, 0, sizeof(Server.ipfd));
     Server.stat_fd = 0;
     Server.master_center = NULL;
     Server.logfile = NULL;
@@ -160,16 +160,32 @@ void initGlobalServerConfig()
 
 static void initMainListen()
 {
-    Server.ipfd = wheatTcpServer(Server.neterr, Server.bind_addr, Server.port);
-    if (Server.ipfd == NET_WRONG || Server.ipfd < 0) {
-        wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", Server.port, Server.neterr);
-        halt(1);
+    if (Server.port_range_start != 0 && Server.port_range_end != 0) {
+        if (Server.port_range_end < Server.port_range_start ||
+            Server.port_range_end - Server.port_range_start > WHEATSERVER_MAX_PORT_RANGE ||
+            Server.port_range_end >= UINT16_MAX) {
+            wheatLog(WHEAT_WARNING, "port_range_end %d < port_range_start %d: bad config value", Server.port_range_end, Server.port_range_start);
+            halt(1);
+        }
+    } else {
+        if (!Server.port_range_start && !Server.port_range_end) {
+            wheatLog(WHEAT_WARNING, "port_range_end %d and port_range_start %d must both be zero or nonzero", Server.port_range_end, Server.port_range_start);
+            halt(1);
+        }
     }
-    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-        halt(1);
+    int i, j;
+    for (i = Server.port_range_start, j = 0; i < Server.port_range_end; i++, j++) {
+        Server.ipfd[j] = wheatTcpServer(Server.neterr, Server.bind_addr, i);
+        if (Server.ipfd[j] == NET_WRONG || Server.ipfd[j] < 0) {
+            wheatLog(WHEAT_WARNING, "Setup tcp server failed port: %d wrong: %s", i, Server.neterr);
+            halt(1);
+        }
+        if (wheatNonBlock(Server.neterr, Server.ipfd[j]) == NET_WRONG) {
+            wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd[j], Server.neterr);
+            halt(1);
+        }
+        wheatLog(WHEAT_NOTICE, "Server is listen port %d", i);
     }
-    wheatLog(WHEAT_NOTICE, "Server is listen port %d", Server.port);
 }
 
 void wakeUp()
@@ -182,7 +198,7 @@ void wakeUp()
         wheatLog(WHEAT_WARNING, "wakeUp() can't write 1 byte to pipe: %s", strerror(errno));
         halt(1);
     }
-    assert(n == 1);
+    ASSERT(n == 1);
 }
 
 static void handlePipe(struct evcenter *center, int fd, void *client_data, int mask)
@@ -355,7 +371,9 @@ void halt(int graceful)
 void stopWorkers(int graceful)
 {
     int sig;
-    close(Server.ipfd);
+    int i;
+    for (i = 0; i < Server.port_range_end - Server.port_range_start; i++)
+        close(Server.ipfd[i]);
 
     if (graceful)
         sig = SIGQUIT;
@@ -597,12 +615,17 @@ void initStatListen()
 void reload()
 {
     char *old_addr = Server.bind_addr, *old_stat_addr = Server.stat_addr;
-    int old_port = Server.port, old_stat_port = Server.stat_port;
+    int old_port_start = Server.port_range_start;
+    int old_port_end = Server.port_range_end;
+    int old_stat_port = Server.stat_port;
+    int i;
     loadConfigFile(Server.configfile_path, NULL, 0);
     if (strlen(Server.bind_addr) != strlen(old_addr) ||
             strncmp(Server.bind_addr, old_addr, strlen(old_addr)) ||
-            old_port != Server.port) {
-        close(Server.ipfd);
+            old_port_start != Server.port_range_start ||
+            old_port_end != Server.port_range_end) {
+        for (i = 0; i < Server.port_range_end - Server.port_range_start; i++)
+            close(Server.ipfd[i]);
         initMainListen();
     }
 
@@ -615,7 +638,6 @@ void reload()
     }
     logRedirect();
 
-    int i;
     for (i = 0; i < Server.worker_number; i++) {
         spawnWorker(Server.worker_type);
     }

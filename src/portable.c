@@ -35,7 +35,7 @@ ssize_t portable_sendfile(int out_fd, int in_fd, off_t off, off_t len) {
 
 void setProctitle(const char *title)
 {
-    setproctitle("wheatserver: %s %s:%d", title,
+    setproctitle("wheatserver: %s %s:%d-%d", title,
             Server.bind_addr ? Server.bind_addr : "*",
-            Server.port);
+            Server.port_range_start, Server.port_range_end);
 }

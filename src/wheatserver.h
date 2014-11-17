@@ -47,6 +47,7 @@
 #define WHEATSERVER_CONFIGLINE_MAX      1024
 #define WHEATSERVER_MAX_LOG_LEN         1024
 #define WHEATSERVER_MAX_NAMELEN         1024
+#define WHEATSERVER_MAX_PORT_RANGE      20480
 #define WHEATSERVER_PATH_LEN            1024
 #define WHEATSERVER_GRACEFUL_TIME       5
 #define WHEATSERVER_IDLE_TIME           1
@@ -59,6 +60,7 @@
 #define WHEAT_MBUF_SIZE                 (16*1024)
 #define WHEAT_PROTOCOL_DEFAULT          "Http"
 #define WHEAT_CRON_HZ                   10
+#define WHEAT_CLIENT_MAX                4096
 
 // Statistic Configuration
 #define WHEAT_STATS_PORT       10829
@@ -97,9 +99,10 @@
 
 // globalServer is only one for Wheatserver instance.
 //
+// `port_ranges`: A range of ports needed to be bind
 // `worker_type`: Worker module name
 // `graceful_timeout`: interval for worker process exit gracefully
-// `worker_time`: interval for worker process timeout trigger
+// `worker_timeout`: interval for worker process timeout trigger
 // `pipe_readfd`, `pipe_writefd`: used to wake up master process, it's relevant
 // for signal handler
 // `workers`: alive worker process list
@@ -111,7 +114,9 @@
 // `stats`: the collection of statistic items in modules
 struct globalServer {
     char *bind_addr;
-    int port;
+    int port_range_start;
+    int port_range_end;
+    char *port_ranges;
     int worker_number;
     char *worker_type;
     char configfile_path[WHEATSERVER_PATH_LEN];
@@ -129,7 +134,7 @@ struct globalServer {
 
     // status
     char master_name[WHEATSERVER_MAX_NAMELEN];
-    int ipfd;
+    int ipfd[WHEATSERVER_MAX_PORT_RANGE];
     struct evcenter *master_center;
     int stat_fd;
     struct timeval cron_time;

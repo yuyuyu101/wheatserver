@@ -9,7 +9,7 @@
 
 struct workerProcess *WorkerProcess = NULL;
 
-#define WHEAT_CLIENT_MAX      1000
+#define WHEAT_CLIENT_MAX      10240
 
 // ========= Statistic Cache ===============
 // Cache below stat field avoid too much query on StatItems
@@ -481,21 +481,23 @@ void initWorkerProcess(struct workerProcess *worker, char *worker_name)
     ASSERT(worker->worker);
     worker->stats = NULL;
     initWorkerSignals();
-    worker->center = eventcenterInit(WHEAT_CLIENT_MAX);
+
+    worker->center = eventcenterInit(conf->target.val+Server.port_range_end-Server.port_range_start);
     if (!worker->center) {
         wheatLog(WHEAT_WARNING, "eventcenter_init failed");
         halt(1);
     }
-    if (createEvent(worker->center, Server.ipfd, EVENT_READABLE, acceptClient,  NULL) == WHEAT_WRONG)
-    {
-        wheatLog(WHEAT_WARNING, "createEvent failed");
-        halt(1);
-    }
+    for (i = 0; i < Server.port_range_end - Server.port_range_start; i++) {
+        if (createEvent(worker->center, Server.ipfd[i], EVENT_READABLE, acceptClient,  NULL) == WHEAT_WRONG) {
+            wheatLog(WHEAT_WARNING, "createEvent failed");
+            halt(1);
+        }
 
-    // It may nonblock after fork???
-    if (wheatNonBlock(Server.neterr, Server.ipfd) == NET_WRONG) {
-        wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd, Server.neterr);
-        halt(1);
+        // It may nonblock after fork???
+        if (wheatNonBlock(Server.neterr, Server.ipfd[i]) == NET_WRONG) {
+            wheatLog(WHEAT_WARNING, "Set nonblock %d failed: %s", Server.ipfd[i], Server.neterr);
+            halt(1);
+        }
     }
 
     module = NULL;
@@ -604,7 +606,9 @@ void workerProcessCron(void (*fake_func)(void *data), void *data)
     }
 
     // Stop accept new client
-    deleteEvent(WorkerProcess->center, Server.ipfd, EVENT_READABLE|EVENT_WRITABLE);
+    int i;
+    for (i = 0; i < Server.port_range_end - Server.port_range_start; i++)
+        deleteEvent(WorkerProcess->center, Server.ipfd[i], EVENT_READABLE|EVENT_WRITABLE);
     WorkerProcess->refresh_time = Server.cron_time.tv_sec;
     while (Server.cron_time.tv_sec - WorkerProcess->refresh_time < Server.graceful_timeout) {
         processEvents(WorkerProcess->center, WHEATSERVER_CRON_MILLLISECONDS);

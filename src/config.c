@@ -61,6 +61,12 @@ struct configuration configTable[] = {
         (void *)300,            INT_FORMAT},
     {"mbuf-size",         2, unsignedIntValidator, {.val=WHEAT_MBUF_SIZE},
         (void *)WHEAT_BUFLIMIT, INT_FORMAT},
+    {"port-range-start",  2, unsignedIntValidator, {.val=0},
+        NULL,                   INT_FORMAT},
+    {"port-range-end",    2, unsignedIntValidator, {.val=0},
+        NULL,                   INT_FORMAT},
+    {"max-client-limits", 2, unsignedIntValidator, {.val=WHEAT_CLIENT_MAX},
+        NULL,                   INT_FORMAT},
 };
 
 // fillServerConfig is used to fill configTable values to global variable
@@ -74,7 +80,7 @@ void fillServerConfig()
 
     Server.bind_addr = conf->target.ptr;
     conf++;
-    Server.port = conf->target.val;
+    Server.port_range_start = Server.port_range_end = conf->target.val;
     conf++;
     Server.worker_number = conf->target.val;
     conf++;
@@ -101,6 +107,12 @@ void fillServerConfig()
     Server.worker_timeout = conf->target.val;
     conf++;
     Server.mbuf_size = conf->target.val;
+    conf++;
+    if (conf->target.val)
+        Server.port_range_start = conf->target.val;
+    conf++;
+    if (conf->target.val)
+        Server.port_range_end = conf->target.val;
 }
 
 /* ========== Configuration Validator/Print Area ========== */
@@ -197,7 +209,7 @@ int boolValidator(struct configuration *conf, const char *key, const char *val)
 static void extraValidator()
 {
     ASSERT(Server.stat_refresh_seconds < Server.worker_timeout);
-    ASSERT(Server.port && Server.stat_port);
+    ASSERT(Server.port_range_start && Server.port_range_end && Server.stat_port);
 }
 
 /* ================ Handle Configuration ================ */
